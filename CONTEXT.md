@@ -192,7 +192,6 @@ created_at timestamptz
 | `custom` | `instruction_text` | `completed, notes` |
 
 ---
-sogxm60xBUvd5eaegxxnr5QoYGgpwLc2pGgEABFz4xwHeUbRPn6MUAK4
 ## 6. SQL Migrations (run in order in Supabase SQL Editor)
 
 | File | Purpose | Status |
