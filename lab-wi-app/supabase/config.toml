@@ -1,0 +1,14 @@
+project_id = "txjqoynbucpjhrkjedeo"
+
+# Webhook endpoints called by Power Automate / D365. These authenticate with a
+# shared secret (x-webhook-secret), NOT a Supabase JWT, so the gateway must not
+# enforce JWT verification. Keep these false; otherwise the gateway rejects the
+# request before the function's own auth check runs.
+[functions.ingest-d365-prod-order]
+verify_jwt = false
+
+# Other functions not listed here keep the default (verify_jwt = true).
+# If create-d365-transfer-order is also called by Power Automate with a shared
+# secret, uncomment the block below:
+# [functions.create-d365-transfer-order]
+# verify_jwt = false

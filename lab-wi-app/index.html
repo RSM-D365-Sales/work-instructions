@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lab-wi-app</title>
+    <script>
+      // SPA fallback receiver for GitHub Pages (see public/404.html).
+      (function () {
+        var q = window.location.search;
+        if (q && q.indexOf('?p=/') === 0) {
+          var parts = q.slice(3).split('&q=');
+          var path = parts[0].replace(/~and~/g, '&');
+          var search = parts[1] ? '?' + parts[1].replace(/~and~/g, '&') : '';
+          window.history.replaceState(null, '', window.location.pathname.replace(/\/$/, '') + path + search + window.location.hash);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

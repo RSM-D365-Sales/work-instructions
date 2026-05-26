@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('scripts',{}\\), indent=2\\)\\)\")",
+      "Bash(npx tsc *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(ls -la supabase/)",
+      "Bash(ls supabase/migrations/)",
+      "Bash(cat supabase/.temp/linked-project.json)",
+      "Bash(cat \"lab-wi-app/supabase/.temp/linked-project.json\")"
+    ]
+  }
+}
