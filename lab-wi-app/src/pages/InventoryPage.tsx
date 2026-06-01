@@ -308,7 +308,7 @@ export default function InventoryPage() {
                   <th className="text-left px-4 py-3 font-medium whitespace-nowrap">Item #</th>
                   <th className="text-left px-4 py-3 font-medium">Product Name</th>
                   <th className="text-left px-4 py-3 font-medium">Type</th>
-                  <th className="text-left px-4 py-3 font-medium whitespace-nowrap">Reagent Lab</th>
+                  <th className="text-left px-4 py-3 font-medium whitespace-nowrap">Lab</th>
                   <th className="text-right px-4 py-3 font-medium whitespace-nowrap">Physical</th>
                   <th className="text-right px-4 py-3 font-medium whitespace-nowrap">Reserved</th>
                   <th className="text-right px-4 py-3 font-medium whitespace-nowrap">Ordered In</th>
