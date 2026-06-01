@@ -5,7 +5,11 @@
       "Bash(Select-Object FullName)",
       "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\e059591\\\\OneDrive - RSM\\\\ClientWork\\\\Presales\\\\VIBE\\\\ARUP-Work-Instructions\\\\lab-wi-app\" -Recurse -Depth 2 | Select-Object -First 100 | ForEach-Object { $_.FullName })",
       "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\e059591\\\\OneDrive - RSM\\\\ClientWork\\\\Presales\\\\VIBE\\\\ARUP-Work-Instructions\\\\lab-wi-app\\\\src\" -Recurse | ForEach-Object { $_.FullName.Replace\\(\"C:\\\\Users\\\\e059591\\\\OneDrive - RSM\\\\ClientWork\\\\Presales\\\\VIBE\\\\ARUP-Work-Instructions\\\\lab-wi-app\\\\\", \"\"\\) })",
-      "Bash(awk '{print $NF}')"
+      "Bash(awk '{print $NF}')",
+      "Bash(git -C \"c:\\\\Users\\\\e059591\\\\OneDrive - RSM\\\\ClientWork\\\\Presales\\\\VIBE\\\\ARUP-Work-Instructions\" ls-files)",
+      "Bash(node -e \"console.log\\('recharts', require\\('./node_modules/recharts/package.json'\\).version\\); console.log\\('react', require\\('./node_modules/react/package.json'\\).version\\)\")",
+      "Bash(npm run *)",
+      "Bash(node -e \"const ok=\\(\\)=>{try{require.resolve\\('jsdom'\\);return true}catch{return false}}; console.log\\('jsdom installed:', ok\\(\\)\\)\")"
     ]
   }
 }
