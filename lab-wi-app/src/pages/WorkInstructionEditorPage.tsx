@@ -456,21 +456,21 @@ function StepParamEditor({
       return (
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">From Vessel</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">From</label>
             <input
               value={(params.from_vessel as string) ?? ''}
               onChange={e => set('from_vessel', e.target.value)}
               className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-              placeholder="e.g. Beaker A"
+              placeholder="e.g. Beaker A or Lab Bench"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">To Vessel</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">To</label>
             <input
               value={(params.to_vessel as string) ?? ''}
               onChange={e => set('to_vessel', e.target.value)}
               className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-              placeholder="e.g. Volumetric Flask"
+              placeholder="e.g. Volumetric Flask or QC area"
             />
           </div>
         </div>
