@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './context/AuthContext';
@@ -13,7 +14,6 @@ import ProductionOrdersListPage from './pages/ProductionOrdersListPage';
 import ProductionOrderNewPage from './pages/ProductionOrderNewPage';
 import ProductionOrderExecutionPage from './pages/ProductionOrderExecutionPage';
 import ProductionOrderCertificatePage from './pages/ProductionOrderCertificatePage';
-import QualityTrendsPage from './pages/QualityTrendsPage';
 import ReagentItemsPage from './pages/ReagentItemsPage';
 import ScalesPage from './pages/ScalesPage';
 import UsersPage from './pages/UsersPage';
@@ -21,6 +21,10 @@ import LabsPage from './pages/LabsPage';
 import ReagentOrdersListPage from './pages/ReagentOrdersListPage';
 import ReagentOrderNewPage from './pages/ReagentOrderNewPage';
 import UnscheduledOrdersPage from './pages/UnscheduledOrdersPage';
+
+// Charts (recharts) are heavy and only used here — load this route lazily so a
+// failure or the library's weight can't take down the rest of the app on boot.
+const QualityTrendsPage = lazy(() => import('./pages/QualityTrendsPage'));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 1000 * 30 } },
@@ -49,7 +53,11 @@ export default function App() {
                 <Route path="/production-orders/new" element={<ProductionOrderNewPage />} />
                 <Route path="/production-orders/:id" element={<ProductionOrderExecutionPage />} />
                 <Route path="/production-orders/:id/certificate" element={<ProductionOrderCertificatePage />} />
-                <Route path="/quality-trends" element={<QualityTrendsPage />} />
+                <Route path="/quality-trends" element={
+                  <Suspense fallback={<div className="text-center py-12 text-gray-400">Loading…</div>}>
+                    <QualityTrendsPage />
+                  </Suspense>
+                } />
                 <Route path="/reagent-orders" element={<ReagentOrdersListPage />} />
                 <Route path="/reagent-orders/new" element={<ReagentOrderNewPage />} />
                 <Route element={<ProtectedRoute allowedRoles={['admin', 'author']} />}>
