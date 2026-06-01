@@ -77,7 +77,7 @@ export default function AppLayout() {
           </div>
 
           {visibleSetup.length > 0 && (
-            <div className="mt-auto pt-4">
+            <div className="pt-4">
               <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
                 Setup
               </p>

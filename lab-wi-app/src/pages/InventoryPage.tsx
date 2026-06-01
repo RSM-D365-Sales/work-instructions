@@ -22,7 +22,7 @@ type TypeFilter = 'ALL' | ItemType;
 type GroupMode = 'lab' | 'item';
 
 const num = (n: number) =>
-  n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  Math.round(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
 
 // A flattened, display-ready inventory line.
 interface Line {

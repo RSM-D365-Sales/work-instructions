@@ -107,7 +107,7 @@ WITH combos AS (
   SELECT
     ri.id  AS reagent_item_id,
     l.id   AS lab_id,
-    round((random() * 900 + 40)::numeric, 2) AS phys
+    round(random() * 900 + 40) AS phys                                                   -- whole-number qty
   FROM public.reagent_items ri
   CROSS JOIN public.labs l
   WHERE ri.is_active
@@ -120,9 +120,21 @@ SELECT
   reagent_item_id,
   lab_id,
   phys,
-  round((phys * random() * 0.4)::numeric, 2),                                            -- reserved ≤ 40% of physical
-  CASE WHEN random() < 0.40 THEN round((random() * 300)::numeric, 2) ELSE 0 END,         -- ordered in
-  CASE WHEN random() < 0.30 THEN round((random() * 500)::numeric, 2) ELSE 0 END,         -- on order
-  now() - (random() * interval '6 hours')                                                -- "last sync" within today
+  round(phys * random() * 0.4),                                            -- reserved ≤ 40% of physical
+  CASE WHEN random() < 0.40 THEN round(random() * 300) ELSE 0 END,         -- ordered in
+  CASE WHEN random() < 0.30 THEN round(random() * 500) ELSE 0 END,         -- on order
+  now() - (random() * interval '6 hours')                                  -- "last sync" within today
 FROM combos
 ON CONFLICT (reagent_item_id, lab_id) DO NOTHING;
+
+-- Round any rows seeded by an earlier run of this migration so re-running cleans
+-- up the original two-decimal demo data.
+UPDATE public.inventory_on_hand SET
+  physical_inventory = round(physical_inventory),
+  physical_reserved  = round(physical_reserved),
+  ordered_in         = round(ordered_in),
+  on_order           = round(on_order)
+WHERE physical_inventory <> round(physical_inventory)
+   OR physical_reserved  <> round(physical_reserved)
+   OR ordered_in         <> round(ordered_in)
+   OR on_order           <> round(on_order);
