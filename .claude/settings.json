@@ -9,7 +9,18 @@
       "Bash(git -C \"c:\\\\Users\\\\e059591\\\\OneDrive - RSM\\\\ClientWork\\\\Presales\\\\VIBE\\\\ARUP-Work-Instructions\" ls-files)",
       "Bash(node -e \"console.log\\('recharts', require\\('./node_modules/recharts/package.json'\\).version\\); console.log\\('react', require\\('./node_modules/react/package.json'\\).version\\)\")",
       "Bash(npm run *)",
-      "Bash(node -e \"const ok=\\(\\)=>{try{require.resolve\\('jsdom'\\);return true}catch{return false}}; console.log\\('jsdom installed:', ok\\(\\)\\)\")"
+      "Bash(node -e \"const ok=\\(\\)=>{try{require.resolve\\('jsdom'\\);return true}catch{return false}}; console.log\\('jsdom installed:', ok\\(\\)\\)\")",
+      "Bash(VITE_SOURCEMAP=1 npx vite build --sourcemap)",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/es-toolkit/package.json'\\).version\\)\")",
+      "Bash(sed -n '1,40p' node_modules/recharts/es6/util/round.js)",
+      "Bash(sed -n '1,15p' node_modules/es-toolkit/dist/compat/object/get.js)",
+      "Bash(node -e \"const p=require\\('./node_modules/es-toolkit/package.json'\\); console.log\\(JSON.stringify\\(p.exports['./compat'],null,2\\)\\); console.log\\('type:',p.type\\)\")",
+      "Bash(node -e \"const e=require\\('./node_modules/es-toolkit/package.json'\\).exports; for\\(const k of Object.keys\\(e\\)\\) if\\(k.includes\\('compat'\\)\\) console.log\\(k, '=>', JSON.stringify\\(e[k]\\)\\)\")",
+      "Bash(npm view *)",
+      "Read(//c/Users/e059591/AppData/Local/Temp/claude/tmp.620YtSECGC/vite7probe_1654/**)",
+      "Bash(node dist/out.mjs)",
+      "Bash(node -e \"console.log\\('vite', require\\('vite/package.json'\\).version\\); console.log\\('plugin-react', require\\('@vitejs/plugin-react/package.json'\\).version\\)\")"
     ]
   }
 }
