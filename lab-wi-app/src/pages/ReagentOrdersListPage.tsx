@@ -52,6 +52,7 @@ export default function ReagentOrdersListPage() {
           reagent_item:reagent_items(id, item_number, product_name, unit_of_measure),
           items:reagent_order_items(
             id, line_number, quantity, unit,
+            delivered_quantity, from_location, to_location, lot_number, delivered_at,
             reagent_item:reagent_items(id, item_number, product_name, unit_of_measure)
           ),
           lab:labs(id, name, warehouse_id),
@@ -267,14 +268,32 @@ export default function ReagentOrdersListPage() {
                   {orderLines.length === 0 ? (
                     <span className="text-xs text-gray-400">—</span>
                   ) : (
-                    <ul className="space-y-1">
+                    <ul className="space-y-1.5">
                       {orderLines.map(li => (
-                        <li key={li.id} className="flex items-baseline gap-2">
-                          <span className="text-gray-900 font-medium">{li.reagent_item?.product_name ?? '—'}</span>
-                          <span className="text-xs text-gray-500 font-mono">{li.reagent_item?.item_number}</span>
-                          <span className="ml-auto text-xs text-gray-700 whitespace-nowrap">
-                            {li.quantity} <span className="text-gray-500">{li.unit}</span>
-                          </span>
+                        <li key={li.id}>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-gray-900 font-medium">{li.reagent_item?.product_name ?? '—'}</span>
+                            <span className="text-xs text-gray-500 font-mono">{li.reagent_item?.item_number}</span>
+                            <span className="ml-auto text-xs text-gray-700 whitespace-nowrap">
+                              {li.quantity} <span className="text-gray-500">{li.unit}</span>
+                            </span>
+                          </div>
+                          {li.delivered_at && (
+                            <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-emerald-700">
+                              <Truck size={11} className="shrink-0" />
+                              <span>Delivered {li.delivered_quantity ?? li.quantity} {li.unit}</span>
+                              <span className="text-emerald-400">·</span>
+                              <span className="font-mono">{li.from_location || '—'}</span>
+                              <span className="text-emerald-400">→</span>
+                              <span className="font-mono">{li.to_location || '—'}</span>
+                              {li.lot_number && (
+                                <>
+                                  <span className="text-emerald-400">·</span>
+                                  <span>LOT <span className="font-mono">{li.lot_number}</span></span>
+                                </>
+                              )}
+                            </div>
+                          )}
                         </li>
                       ))}
                     </ul>

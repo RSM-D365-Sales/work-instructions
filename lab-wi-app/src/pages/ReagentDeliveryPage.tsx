@@ -376,7 +376,7 @@ export default function ReagentDeliveryPage() {
                                 type="text"
                                 value={st.fromLocation}
                                 onChange={e => setLine(li, { fromLocation: e.target.value })}
-                                placeholder="Scan source bin"
+                                placeholder="Scan or type source bin"
                                 className="w-full border border-gray-300 rounded-lg pl-7 pr-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                               />
                             </div>
@@ -388,7 +388,7 @@ export default function ReagentDeliveryPage() {
                                 type="text"
                                 value={st.toLocation}
                                 onChange={e => setLine(li, { toLocation: e.target.value })}
-                                placeholder="Scan destination bin"
+                                placeholder="Scan or type destination bin"
                                 className="w-full border border-gray-300 rounded-lg pl-7 pr-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                               />
                             </div>
