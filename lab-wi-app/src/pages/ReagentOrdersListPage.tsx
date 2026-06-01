@@ -9,7 +9,6 @@ import { formatDate, cn } from '../lib/utils';
 
 const STATUS_STYLES: Record<ReagentOrderStatus, string> = {
   pending:     'bg-yellow-100 text-yellow-800',
-  approved:    'bg-blue-100 text-blue-800',
   in_progress: 'bg-indigo-100 text-indigo-800',
   fulfilled:   'bg-green-100 text-green-800',
   cancelled:   'bg-gray-100 text-gray-600',
@@ -17,19 +16,31 @@ const STATUS_STYLES: Record<ReagentOrderStatus, string> = {
 
 const STATUS_LABELS: Record<ReagentOrderStatus, string> = {
   pending:     'Pending',
-  approved:    'Approved',
   in_progress: 'In Progress',
   fulfilled:   'Fulfilled',
   cancelled:   'Cancelled',
 };
+
+// Orders that can still be delivered.
+const DELIVERABLE: ReagentOrderStatus[] = ['pending', 'in_progress'];
 
 export default function ReagentOrdersListPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const [statusFilter, setStatusFilter] = useState<ReagentOrderStatus | 'all'>('all');
   const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const isLab = profile?.role === 'lab';
+  const canDeliver = !isLab;  // central-lab staff (admin/author/approver/operator) deliver to labs
+
+  function toggleSelect(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   const { data: orders = [], isLoading } = useQuery<ReagentOrder[]>({
     queryKey: ['reagent-orders'],
@@ -94,6 +105,34 @@ export default function ReagentOrdersListPage() {
     return c;
   }, [orders]);
 
+  // Selection works against the currently visible, still-deliverable orders.
+  const deliverableFiltered = useMemo(
+    () => filtered.filter(o => DELIVERABLE.includes(o.status)),
+    [filtered]
+  );
+  const selectedDeliverable = useMemo(
+    () => deliverableFiltered.filter(o => selected.has(o.id)),
+    [deliverableFiltered, selected]
+  );
+  const allDeliverableSelected =
+    deliverableFiltered.length > 0 && deliverableFiltered.every(o => selected.has(o.id));
+
+  function toggleSelectAll() {
+    setSelected(prev => {
+      if (deliverableFiltered.every(o => prev.has(o.id))) {
+        const next = new Set(prev);
+        deliverableFiltered.forEach(o => next.delete(o.id));
+        return next;
+      }
+      return new Set([...prev, ...deliverableFiltered.map(o => o.id)]);
+    });
+  }
+
+  function startDelivery() {
+    if (selectedDeliverable.length === 0) return;
+    navigate(`/reagent-orders/deliver?orders=${selectedDeliverable.map(o => o.id).join(',')}`);
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -110,18 +149,29 @@ export default function ReagentOrdersListPage() {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => navigate('/reagent-orders/new')}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
-        >
-          <Plus size={16} />
-          New Order
-        </button>
+        <div className="flex items-center gap-2">
+          {canDeliver && selectedDeliverable.length > 0 && (
+            <button
+              onClick={startDelivery}
+              className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700"
+            >
+              <Truck size={16} />
+              Deliver Selected ({selectedDeliverable.length})
+            </button>
+          )}
+          <button
+            onClick={() => navigate('/reagent-orders/new')}
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
+          >
+            <Plus size={16} />
+            New Order
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
-        {(['all', 'pending', 'approved', 'in_progress', 'fulfilled', 'cancelled'] as const).map(s => (
+        {(['all', 'pending', 'in_progress', 'fulfilled', 'cancelled'] as const).map(s => (
           <button
             key={s}
             onClick={() => setStatusFilter(s)}
@@ -157,6 +207,18 @@ export default function ReagentOrdersListPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-xs uppercase text-gray-500">
             <tr>
+              {canDeliver && (
+                <th className="px-4 py-2.5 w-10">
+                  <input
+                    type="checkbox"
+                    checked={allDeliverableSelected}
+                    onChange={toggleSelectAll}
+                    disabled={deliverableFiltered.length === 0}
+                    title="Select all deliverable orders"
+                    className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-30"
+                  />
+                </th>
+              )}
               <th className="text-left px-4 py-2.5 font-medium">Order #</th>
               <th className="text-left px-4 py-2.5 font-medium">Items</th>
               <th className="text-left px-4 py-2.5 font-medium">Lab</th>
@@ -169,15 +231,28 @@ export default function ReagentOrdersListPage() {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {isLoading ? (
-              <tr><td colSpan={8} className="text-center py-8 text-gray-400">Loading…</td></tr>
+              <tr><td colSpan={canDeliver ? 9 : 8} className="text-center py-8 text-gray-400">Loading…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={8} className="text-center py-10 text-gray-400">
+              <tr><td colSpan={canDeliver ? 9 : 8} className="text-center py-10 text-gray-400">
                 No reagent orders found.
               </td></tr>
             ) : filtered.map(o => {
               const orderLines = linesOf(o);
+              const deliverable = DELIVERABLE.includes(o.status);
               return (
-              <tr key={o.id} className="hover:bg-gray-50 align-top">
+              <tr key={o.id} className={cn('hover:bg-gray-50 align-top', selected.has(o.id) && 'bg-emerald-50/50')}>
+                {canDeliver && (
+                  <td className="px-4 py-3">
+                    {deliverable && (
+                      <input
+                        type="checkbox"
+                        checked={selected.has(o.id)}
+                        onChange={() => toggleSelect(o.id)}
+                        className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                    )}
+                  </td>
+                )}
                 <td className="px-4 py-3 font-mono text-xs">
                   <div className="flex items-center gap-2">
                     {o.high_priority && (

@@ -21,6 +21,7 @@ import UsersPage from './pages/UsersPage';
 import LabsPage from './pages/LabsPage';
 import ReagentOrdersListPage from './pages/ReagentOrdersListPage';
 import ReagentOrderNewPage from './pages/ReagentOrderNewPage';
+import ReagentDeliveryPage from './pages/ReagentDeliveryPage';
 import UnscheduledOrdersPage from './pages/UnscheduledOrdersPage';
 
 // Charts (recharts) are heavy and only used here — load this route lazily so a
@@ -64,6 +65,9 @@ export default function App() {
                 </Route>
                 <Route path="/reagent-orders" element={<ReagentOrdersListPage />} />
                 <Route path="/reagent-orders/new" element={<ReagentOrderNewPage />} />
+                <Route element={<ProtectedRoute allowedRoles={['author', 'approver', 'operator']} />}>
+                  <Route path="/reagent-orders/deliver" element={<ReagentDeliveryPage />} />
+                </Route>
                 <Route element={<ProtectedRoute allowedRoles={['admin', 'author']} />}>
                   <Route path="/reagents" element={<ReagentItemsPage />} />
                 </Route>

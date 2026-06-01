@@ -2,7 +2,7 @@
 
 export type UserRole = 'admin' | 'author' | 'approver' | 'operator' | 'lab';
 
-export type ReagentOrderStatus = 'pending' | 'approved' | 'in_progress' | 'fulfilled' | 'cancelled';
+export type ReagentOrderStatus = 'pending' | 'in_progress' | 'fulfilled' | 'cancelled';
 export type TransferOrderStatus = 'pending' | 'created' | 'failed' | 'skipped';
 
 export interface ReagentOrderItem {
@@ -12,6 +12,11 @@ export interface ReagentOrderItem {
   reagent_item_id: string;
   quantity: number;
   unit: string;
+  // Delivery details — populated when the line is delivered to the requesting lab.
+  delivered_quantity?: number | null;
+  delivered_location?: string | null;
+  lot_number?: string | null;
+  delivered_at?: string | null;
   created_at: string;
   reagent_item?: ReagentItem;
 }
