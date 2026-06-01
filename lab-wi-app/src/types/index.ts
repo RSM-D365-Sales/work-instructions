@@ -195,11 +195,15 @@ export interface ProductionOrder {
   assignee?: Profile;
 }
 
+/** D365 product classification: finished good, raw material, packaging. */
+export type ItemType = 'FG' | 'RM' | 'PKG';
+
 export interface ReagentItem {
   id: string;
   item_number: string;
   d365_product_id?: string;
   d365_synced_at?: string;
+  item_type: ItemType;
   product_name: string;
   cas_number?: string;
   molecular_formula?: string;
@@ -219,6 +223,22 @@ export interface ReagentItem {
   updated_at: string;
   created_by?: string;
   updated_by?: string;
+}
+
+// ── On-hand inventory (D365 Finance & Supply Chain style) ───
+export interface InventoryOnHand {
+  id: string;
+  reagent_item_id: string;
+  lab_id: string;
+  physical_inventory: number;
+  physical_reserved: number;
+  ordered_in: number;
+  on_order: number;
+  d365_synced_at: string;
+  created_at: string;
+  updated_at: string;
+  reagent_item?: ReagentItem;
+  lab?: Lab;
 }
 
 export type POStepStatus = 'pending' | 'in_progress' | 'completed' | 'skipped';

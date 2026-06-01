@@ -92,12 +92,25 @@ const HAZARD_OPTIONS = [
 
 const UOM_OPTIONS = ['g', 'kg', 'mg', 'mL', 'L', 'µL', 'mol', 'mmol', 'units', 'each'];
 
+const ITEM_TYPE_OPTIONS: { value: 'FG' | 'RM' | 'PKG'; label: string }[] = [
+  { value: 'RM', label: 'RM · Raw Material' },
+  { value: 'FG', label: 'FG · Finished Good' },
+  { value: 'PKG', label: 'PKG · Packaging' },
+];
+
+const ITEM_TYPE_BADGE: Record<string, string> = {
+  FG: 'bg-emerald-100 text-emerald-800',
+  RM: 'bg-amber-100 text-amber-800',
+  PKG: 'bg-purple-100 text-purple-800',
+};
+
 const GHS_ALL = Object.keys(GHS_LABELS);
 
 // ─── Empty form state ─────────────────────────────────────────────────────────
 function emptyForm(): Partial<ReagentItem> {
   return {
     item_number: '',
+    item_type: 'RM',
     product_name: '',
     cas_number: '',
     molecular_formula: '',
@@ -180,6 +193,19 @@ function ReagentItemModal({
                   placeholder="Optional distinct product ID"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Item Type <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={form.item_type ?? 'RM'}
+                  onChange={e => set('item_type', e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  {ITEM_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Drives FG / RM / PKG filtering on the Inventory screen</p>
               </div>
             </div>
           </fieldset>
@@ -714,6 +740,11 @@ function ReagentRow({
             <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-teal-100 text-teal-700 uppercase tracking-wide">LOT</span>
           )}
         </td>
+        <td className="px-4 py-3">
+          <span className={cn('px-2 py-0.5 rounded-full text-xs font-semibold', ITEM_TYPE_BADGE[item.item_type] ?? 'bg-gray-100 text-gray-600')}>
+            {item.item_type}
+          </span>
+        </td>
         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{item.cas_number ?? '—'}</td>
         <td className="px-4 py-3 text-sm text-gray-600 font-mono">{item.molecular_formula ?? '—'}</td>
         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
@@ -767,7 +798,7 @@ function ReagentRow({
 
       {expanded && (
         <tr className="bg-blue-50/30 border-b border-blue-100">
-          <td colSpan={8} className="px-6 py-4">
+          <td colSpan={9} className="px-6 py-4">
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
               {item.vendor && (
                 <div>
@@ -1185,6 +1216,7 @@ export default function ReagentItemsPage() {
       const payload = {
         item_number: form.item_number,
         d365_product_id: form.d365_product_id || null,
+        item_type: form.item_type ?? 'RM',
         product_name: form.product_name,
         cas_number: form.cas_number || null,
         molecular_formula: form.molecular_formula || null,
@@ -1405,6 +1437,7 @@ export default function ReagentItemsPage() {
               <tr className="border-b border-gray-100 bg-gray-50">
                 <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">Item #</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Product Name</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Type</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">CAS Number</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Formula</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">Mol. Weight</th>

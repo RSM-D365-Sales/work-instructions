@@ -1,7 +1,6 @@
 # Lab Work Instructions System — Session Context
 
 > Drop this file into a Copilot chat at the start of any new session to restore full project context.
-sogxm60xBUvd5eaegxxnr5QoYGgpwLc2pGgEABFz4xwHeUbRPn6MUAK4
 ---
 
 ## 1. What This App Is
