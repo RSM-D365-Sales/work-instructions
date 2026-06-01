@@ -1,15 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import type { ProductionOrder, WIStep, POStep, StepType, Scale, ScaleConnConfig, Profile } from '../types';
+import type { ProductionOrder, WIStep, POStep, StepType, Scale, ScaleConnConfig, Profile, QCTest, QCResult } from '../types';
 import { calculateTolerance, cn } from '../lib/utils';
+import { evaluateQC, formatSpec } from '../lib/qc';
 import {
   ArrowLeft, CheckCircle, Circle, ChevronRight, Scale as ScaleIcon, Timer,
   FlaskConical, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings,
   AlertTriangle, CheckCheck, PlayCircle, Ban, Trash2, Loader2, Wifi, WifiOff,
-  Wrench, Beaker, Printer, UserCog, CalendarClock, Check,
+  Wrench, Beaker, Printer, UserCog, CalendarClock, Check, StickyNote, Milestone,
+  ClipboardCheck, FileText, XCircle,
 } from 'lucide-react';
 
 const STEP_ICONS: Record<StepType, React.ReactNode> = {
@@ -23,6 +25,8 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   heat:             <Thermometer size={16} />,
   cool:             <Snowflake size={16} />,
   observe:          <Eye size={16} />,
+  notes:            <StickyNote size={16} />,
+  production_break: <Milestone size={16} />,
   print_labels:     <Printer size={16} />,
   custom:           <Settings size={16} />,
 };
@@ -352,6 +356,57 @@ function ObserveStepWidget({
   );
 }
 
+function NotesStepWidget({
+  params, values, onChange, locked,
+}: {
+  params: Record<string, unknown>;
+  values: Record<string, unknown>;
+  onChange: (v: Record<string, unknown>) => void;
+  locked: boolean;
+}) {
+  return (
+    <div className="space-y-3">
+      {(params.prompt as string | undefined) && (
+        <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-sm text-amber-800">
+          {params.prompt as string}
+        </div>
+      )}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+        <textarea
+          rows={5}
+          value={(values.notes_content as string) ?? ''}
+          onChange={e => onChange({ ...values, notes_content: e.target.value })}
+          disabled={locked}
+          placeholder="Capture any notes about the order up to this step…"
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+        />
+      </div>
+    </div>
+  );
+}
+
+function ProductionBreakWidget({
+  params,
+}: {
+  params: Record<string, unknown>;
+}) {
+  const label = (params.label as string | undefined)?.trim() || 'New part of the run';
+  const description = (params.description as string | undefined)?.trim();
+  return (
+    <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-start gap-3">
+      <div className="mt-0.5 text-rose-600">
+        <Milestone size={20} />
+      </div>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-rose-500">Production Break</p>
+        <p className="text-sm font-semibold text-rose-900">{label}</p>
+        {description && <p className="text-sm text-rose-700 mt-1">{description}</p>}
+      </div>
+    </div>
+  );
+}
+
 function GatherInputsWidget({
   params, values, onChange, locked,
 }: {
@@ -580,6 +635,35 @@ function GenericStepWidget({
   );
 }
 
+function PhAdjustStepWidget({
+  params, values, onChange, locked,
+}: {
+  params: Record<string, unknown>;
+  values: Record<string, unknown>;
+  onChange: (v: Record<string, unknown>) => void;
+  locked: boolean;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="bg-lime-50 border border-lime-100 rounded-xl p-4 space-y-1">
+        <p className="text-sm text-lime-900">Target pH: {String(params.target_ph)} ± {String(params.tolerance)}</p>
+        <p className="text-sm text-lime-800">Add {String(params.reagent)} dropwise with constant stirring</p>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">pH Adjustment Notes</label>
+        <textarea
+          rows={3}
+          value={(values.ph_notes as string) ?? ''}
+          onChange={e => onChange({ ...values, ph_notes: e.target.value })}
+          disabled={locked}
+          placeholder="e.g. Final pH reading, volume of reagent added, observations…"
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+        />
+      </div>
+    </div>
+  );
+}
+
 // ─── Step execution card ──────────────────────────────────────────────────────
 interface StepCardProps {
   wiStep: WIStep;
@@ -678,6 +762,15 @@ function StepCard({ wiStep, poStep, index, isActive, onActivate, onComplete, onS
           {stepType === 'observe' && (
             <ObserveStepWidget params={params} values={values} onChange={setValues} locked={locked} />
           )}
+          {stepType === 'notes' && (
+            <NotesStepWidget params={params} values={values} onChange={setValues} locked={locked} />
+          )}
+          {stepType === 'production_break' && (
+            <ProductionBreakWidget params={params} />
+          )}
+          {stepType === 'ph_adjust' && (
+            <PhAdjustStepWidget params={params} values={values} onChange={setValues} locked={locked} />
+          )}
           {stepType === 'gather_inputs' && (
             <GatherInputsWidget params={params} values={values} onChange={setValues} locked={locked} />
           )}
@@ -690,7 +783,7 @@ function StepCard({ wiStep, poStep, index, isActive, onActivate, onComplete, onS
           {stepType === 'print_labels' && (
             <PrintLabelsWidget params={params} values={values} onChange={setValues} locked={locked} />
           )}
-          {['heat','cool','ph_adjust','transfer','custom'].includes(stepType) && (
+          {['heat','cool','transfer','custom'].includes(stepType) && (
             <GenericStepWidget params={params} stepType={stepType} />
           )}
 
@@ -745,6 +838,252 @@ function StepCard({ wiStep, poStep, index, isActive, onActivate, onComplete, onS
   );
 }
 
+// ─── Quality Control capture card ─────────────────────────────────────────────
+interface QCInput { num: string; text: string; instrument: string; comment: string }
+
+function QualityControlCard({
+  productionOrderId, reagentItemId, locked, onCertificate,
+}: {
+  productionOrderId: string;
+  reagentItemId: string;
+  locked: boolean;
+  onCertificate: () => void;
+}) {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const [inputs, setInputs] = useState<Record<string, QCInput>>({});
+  const seededFor = useRef<string | null>(null);
+
+  const { data: tests = [], isLoading: testsLoading } = useQuery<QCTest[]>({
+    queryKey: ['qc-tests', reagentItemId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('qc_tests')
+        .select('*')
+        .eq('reagent_item_id', reagentItemId)
+        .eq('is_active', true)
+        .order('test_order');
+      if (error) throw error;
+      return data as QCTest[];
+    },
+  });
+
+  const { data: results = [], isLoading: resultsLoading } = useQuery<QCResult[]>({
+    queryKey: ['qc-results', productionOrderId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('qc_results')
+        .select('*')
+        .eq('production_order_id', productionOrderId)
+        .order('test_order');
+      if (error) throw error;
+      return data as QCResult[];
+    },
+  });
+
+  // Seed editable inputs from saved results once per order (after both load).
+  useEffect(() => {
+    if (seededFor.current === productionOrderId) return;
+    if (testsLoading || resultsLoading) return;
+    const seed: Record<string, QCInput> = {};
+    for (const t of tests) {
+      const r = results.find(x => x.qc_test_id === t.id);
+      seed[t.id] = {
+        num: r?.result_numeric != null ? String(r.result_numeric) : '',
+        text: r?.result_text ?? '',
+        instrument: r?.instrument ?? '',
+        comment: r?.comment ?? '',
+      };
+    }
+    setInputs(seed);
+    seededFor.current = productionOrderId;
+  }, [tests, results, testsLoading, resultsLoading, productionOrderId]);
+
+  function setField(testId: string, patch: Partial<QCInput>) {
+    setInputs(prev => ({ ...prev, [testId]: { ...(prev[testId] ?? { num: '', text: '', instrument: '', comment: '' }), ...patch } }));
+  }
+
+  const liveStatus = (t: QCTest): boolean | null => {
+    const inp = inputs[t.id];
+    if (!inp) return null;
+    const num = inp.num === '' ? null : parseFloat(inp.num);
+    return evaluateQC(t, num, inp.text);
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      for (let i = 0; i < tests.length; i++) {
+        const t = tests[i];
+        const inp = inputs[t.id] ?? { num: '', text: '', instrument: '', comment: '' };
+        const num = inp.num === '' ? null : parseFloat(inp.num);
+        const passed = evaluateQC(t, num, inp.text);
+        const hasValue = (t.result_type === 'numeric' ? num != null : !!inp.text.trim());
+        const payload = {
+          production_order_id: productionOrderId,
+          qc_test_id: t.id,
+          test_order: i,
+          name: t.name,
+          unit: t.unit ?? null,
+          result_type: t.result_type,
+          lower_limit: t.lower_limit ?? null,
+          upper_limit: t.upper_limit ?? null,
+          target: t.target ?? null,
+          expected_text: t.expected_text ?? null,
+          method: t.method ?? null,
+          result_numeric: t.result_type === 'numeric' ? num : null,
+          result_text: t.result_type === 'text' ? (inp.text.trim() || null) : null,
+          passed,
+          instrument: inp.instrument.trim() || null,
+          comment: inp.comment.trim() || null,
+          tested_by: hasValue ? profile!.id : null,
+          tested_at: hasValue ? new Date().toISOString() : null,
+        };
+        const existing = results.find(r => r.qc_test_id === t.id);
+        if (existing) {
+          const { error } = await supabase.from('qc_results').update(payload).eq('id', existing.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from('qc_results').insert(payload);
+          if (error) throw error;
+        }
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['qc-results', productionOrderId] }),
+  });
+
+  if (testsLoading) return null;
+  if (tests.length === 0) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-center gap-2 text-gray-700">
+          <ClipboardCheck size={18} className="text-emerald-600" />
+          <h2 className="font-semibold">Quality Control</h2>
+        </div>
+        <p className="text-sm text-gray-400 mt-2">
+          No QC specifications are defined for this product. Add them on the Reagent Items page to capture release testing here.
+        </p>
+      </div>
+    );
+  }
+
+  const evaluated = tests.map(liveStatus);
+  const anyFail = evaluated.some(s => s === false);
+  const allMeasured = tests.every(t => {
+    const inp = inputs[t.id];
+    return inp && (t.result_type === 'numeric' ? inp.num !== '' : inp.text.trim() !== '');
+  });
+  const allPass = allMeasured && evaluated.every(s => s !== false);
+  const hasSavedResults = results.some(r => r.result_numeric != null || (r.result_text ?? '') !== '');
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 bg-gray-50">
+        <div className="flex items-center gap-2 text-gray-800">
+          <ClipboardCheck size={18} className="text-emerald-600" />
+          <h2 className="font-semibold">Quality Control</h2>
+        </div>
+        {allMeasured && (
+          <span className={cn(
+            'flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full',
+            anyFail ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+          )}>
+            {anyFail ? <><XCircle size={13} /> Out of spec</> : <><CheckCircle size={13} /> All in spec</>}
+          </span>
+        )}
+      </div>
+
+      <div className="divide-y divide-gray-50">
+        {tests.map(t => {
+          const inp = inputs[t.id] ?? { num: '', text: '', instrument: '', comment: '' };
+          const status = liveStatus(t);
+          return (
+            <div key={t.id} className="px-5 py-3">
+              <div className="flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-900">{t.name}</span>
+                    {t.method && <span className="text-xs text-gray-400">· {t.method}</span>}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">Spec: {formatSpec(t)}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {t.result_type === 'numeric' ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number" step="any" inputMode="decimal"
+                        value={inp.num}
+                        disabled={locked}
+                        onChange={e => setField(t.id, { num: e.target.value })}
+                        placeholder="value"
+                        className="w-24 border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                      />
+                      {t.unit && <span className="text-xs text-gray-400 w-14">{t.unit}</span>}
+                    </div>
+                  ) : (
+                    <input
+                      value={inp.text}
+                      disabled={locked}
+                      onChange={e => setField(t.id, { text: e.target.value })}
+                      placeholder={t.expected_text ?? 'observation'}
+                      className="w-44 border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                    />
+                  )}
+                  <span className="w-16 text-right">
+                    {status === true && <span className="text-xs font-semibold text-green-600">PASS</span>}
+                    {status === false && <span className="text-xs font-semibold text-red-600">FAIL</span>}
+                    {status === null && <span className="text-xs text-gray-300">—</span>}
+                  </span>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-2">
+                <input
+                  value={inp.instrument}
+                  disabled={locked}
+                  onChange={e => setField(t.id, { instrument: e.target.value })}
+                  placeholder="Instrument / equipment ID (optional)"
+                  className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
+                />
+                <input
+                  value={inp.comment}
+                  disabled={locked}
+                  onChange={e => setField(t.id, { comment: e.target.value })}
+                  placeholder="Comment (optional)"
+                  className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-t border-gray-100 bg-gray-50">
+        <p className="text-xs text-gray-400">
+          {allPass ? 'All results within specification.' : anyFail ? 'One or more results are out of specification.' : 'Enter measured values to evaluate against spec.'}
+        </p>
+        <div className="flex items-center gap-2">
+          {!locked && (
+            <button
+              onClick={() => saveMutation.mutate()}
+              disabled={saveMutation.isPending}
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saveMutation.isPending ? 'Saving…' : 'Save QC Results'}
+            </button>
+          )}
+          <button
+            onClick={onCertificate}
+            disabled={!hasSavedResults}
+            title={hasSavedResults ? 'Open certificate' : 'Save QC results first'}
+            className="flex items-center gap-1.5 px-4 py-2 border border-emerald-300 text-emerald-700 bg-emerald-50 text-sm rounded-lg font-medium hover:bg-emerald-100 disabled:opacity-50"
+          >
+            <FileText size={15} /> Certificate
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function ProductionOrderExecutionPage() {
   const { id } = useParams<{ id: string }>();
@@ -758,7 +1097,7 @@ export default function ProductionOrderExecutionPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('production_orders')
-        .select('*, work_instruction:work_instructions(title, product_name, target_molarity, version), assignee:profiles!assigned_to(full_name, email)')
+        .select('*, work_instruction:work_instructions(title, product_name, target_molarity, version, reagent_item_id, reagent_item:reagent_items(id, item_number, product_name, unit_of_measure)), assignee:profiles!assigned_to(full_name, email)')
         .eq('id', id!)
         .single();
       if (error) throw error;
@@ -1067,6 +1406,16 @@ export default function ProductionOrderExecutionPage() {
             );
           })}
         </div>
+      )}
+
+      {/* Quality Control capture */}
+      {isStarted && wi?.reagent_item_id && (
+        <QualityControlCard
+          productionOrderId={id!}
+          reagentItemId={wi.reagent_item_id}
+          locked={order?.status === 'cancelled'}
+          onCertificate={() => navigate(`/production-orders/${id}/certificate`)}
+        />
       )}
 
       {/* Non-started steps preview */}

@@ -7,7 +7,7 @@ import type { StepTemplate, WIStep, WorkInstruction, StepType, Scale } from '../
 import {
   Plus, Trash2, GripVertical, Save, Send, ChevronDown, ChevronUp, ArrowLeft,
   FlaskConical, Scale as ScaleIcon, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings,
-  Wrench, Beaker, Printer,
+  Wrench, Beaker, Printer, StickyNote, Milestone,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -23,6 +23,8 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   heat:             <Thermometer size={15} />,
   cool:             <Snowflake size={15} />,
   observe:          <Eye size={15} />,
+  notes:            <StickyNote size={15} />,
+  production_break: <Milestone size={15} />,
   print_labels:     <Printer size={15} />,
   custom:           <Settings size={15} />,
 };
@@ -413,6 +415,43 @@ function StepParamEditor({
         </div>
       );
 
+    case 'notes':
+      return (
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Notes Prompt (optional)</label>
+          <input
+            value={(params.prompt as string) ?? ''}
+            onChange={e => set('prompt', e.target.value)}
+            className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+            placeholder="e.g. Capture any notes about the order so far"
+          />
+        </div>
+      );
+
+    case 'production_break':
+      return (
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Next Part Label</label>
+            <input
+              value={(params.label as string) ?? ''}
+              onChange={e => set('label', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="e.g. Part 2 — Fill tubes with buffer"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Description (optional)</label>
+            <input
+              value={(params.description as string) ?? ''}
+              onChange={e => set('description', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="What separates this part from the previous one"
+            />
+          </div>
+        </div>
+      );
+
     case 'transfer':
       return (
         <div className="grid grid-cols-2 gap-3">
@@ -591,7 +630,9 @@ function StepRow({ step, index, total, canDrag, isDragging, isDropTarget, gather
                 className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
               >
                 {Object.entries(STEP_ICONS).map(([type]) => (
-                  <option key={type} value={type}>{type.replace('_', ' ')}</option>
+                  <option key={type} value={type}>
+                    {type === 'ph_adjust' ? 'pH adjust' : type.replace('_', ' ')}
+                  </option>
                 ))}
               </select>
             </div>
@@ -756,6 +797,8 @@ export default function WorkInstructionEditorPage() {
       case 'cool': return { target_temp_c: 20 };
       case 'ph_adjust': return { target_ph: 7, tolerance: 0.1, reagent: '' };
       case 'observe': return { prompt: '' };
+      case 'notes': return { prompt: '' };
+      case 'production_break': return { label: '', description: '' };
       case 'transfer': return { from_vessel: '', to_vessel: '' };
       default: return { instruction_text: '' };
     }

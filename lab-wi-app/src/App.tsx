@@ -12,6 +12,8 @@ import WorkInstructionDetailPage from './pages/WorkInstructionDetailPage';
 import ProductionOrdersListPage from './pages/ProductionOrdersListPage';
 import ProductionOrderNewPage from './pages/ProductionOrderNewPage';
 import ProductionOrderExecutionPage from './pages/ProductionOrderExecutionPage';
+import ProductionOrderCertificatePage from './pages/ProductionOrderCertificatePage';
+import QualityTrendsPage from './pages/QualityTrendsPage';
 import ReagentItemsPage from './pages/ReagentItemsPage';
 import ScalesPage from './pages/ScalesPage';
 import UsersPage from './pages/UsersPage';
@@ -46,6 +48,8 @@ export default function App() {
                 <Route path="/production-orders" element={<ProductionOrdersListPage />} />
                 <Route path="/production-orders/new" element={<ProductionOrderNewPage />} />
                 <Route path="/production-orders/:id" element={<ProductionOrderExecutionPage />} />
+                <Route path="/production-orders/:id/certificate" element={<ProductionOrderCertificatePage />} />
+                <Route path="/quality-trends" element={<QualityTrendsPage />} />
                 <Route path="/reagent-orders" element={<ReagentOrdersListPage />} />
                 <Route path="/reagent-orders/new" element={<ReagentOrderNewPage />} />
                 <Route element={<ProtectedRoute allowedRoles={['admin', 'author']} />}>

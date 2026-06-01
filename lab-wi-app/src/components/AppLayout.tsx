@@ -2,7 +2,7 @@ import { Link, useLocation, Outlet } from 'react-router-dom';
 import {
   FlaskConical, LayoutDashboard, BookOpen, ClipboardList,
   PlayCircle, LogOut, ChevronRight, Beaker, Scale, Users, Building2,
-  ShoppingCart, CalendarClock,
+  ShoppingCart, CalendarClock, TrendingUp,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
@@ -12,6 +12,7 @@ const mainNav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'author', 'approver', 'operator', 'lab'] },
   { to: '/work-instructions', label: 'Work Instructions', icon: ClipboardList, roles: ['admin', 'author', 'approver', 'operator'] },
   { to: '/production-orders', label: 'Production Orders', icon: PlayCircle, roles: ['admin', 'author', 'approver', 'operator'] },
+  { to: '/quality-trends', label: 'Quality Trends', icon: TrendingUp, roles: ['admin', 'author', 'approver', 'operator'] },
   { to: '/unscheduled-orders', label: 'Unscheduled Orders', icon: CalendarClock, roles: ['admin'] },
   { to: '/reagent-orders', label: 'Reagent Orders', icon: ShoppingCart, roles: ['admin', 'author', 'approver', 'operator', 'lab'] },
 ];

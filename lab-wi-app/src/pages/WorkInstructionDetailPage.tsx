@@ -7,7 +7,7 @@ import type { WorkInstruction, WIStep, WIApproval, StepType } from '../types';
 import {
   ArrowLeft, Pencil, CheckCircle, XCircle, RotateCcw, PlayCircle, GitBranch,
   FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, Trash2,
-  Wrench, Beaker, Printer,
+  Wrench, Beaker, Printer, StickyNote, Milestone,
 } from 'lucide-react';
 import { formatDate } from '../lib/utils';
 
@@ -22,6 +22,8 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   heat:             <Thermometer size={15} />,
   cool:             <Snowflake size={15} />,
   observe:       <Eye size={15} />,  print_labels:     <Printer size={15} />,  custom:        <Settings size={15} />,
+  notes:            <StickyNote size={15} />,
+  production_break: <Milestone size={15} />,
 };
 
 const STATUS_STYLES: Record<string, string> = {

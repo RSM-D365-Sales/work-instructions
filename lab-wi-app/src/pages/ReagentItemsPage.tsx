@@ -2,12 +2,13 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import type { ReagentItem } from '../types';
+import type { ReagentItem, QCTest, QCResultType } from '../types';
 import { cn } from '../lib/utils';
+import { QC_PRESETS, formatSpec } from '../lib/qc';
 import {
   FlaskConical, Plus, Search, Pencil, Trash2, RefreshCw,
   X, ExternalLink, ChevronDown, ChevronUp, Info, Settings2,
-  CheckCircle, AlertTriangle, Loader, Eye, EyeOff,
+  CheckCircle, AlertTriangle, Loader, Eye, EyeOff, ClipboardCheck,
 } from 'lucide-react';
 
 // ─── GHS pictogram labels ─────────────────────────────────────────────────────
@@ -402,17 +403,293 @@ function ReagentItemModal({
   );
 }
 
+// ─── QC specification editor ──────────────────────────────────────────────────
+type QCRow = Partial<QCTest> & { _key: string };
+
+let qcKeySeq = 0;
+const newKey = () => `qc-${Date.now()}-${qcKeySeq++}`;
+
+function QCSpecModal({
+  item, canManage, onClose,
+}: {
+  item: ReagentItem;
+  canManage: boolean;
+  onClose: () => void;
+}) {
+  const { profile } = useAuth();
+  const qc = useQueryClient();
+  const [rows, setRows] = useState<QCRow[] | null>(null);
+  const [error, setError] = useState('');
+
+  const { data: tests = [], isLoading } = useQuery<QCTest[]>({
+    queryKey: ['qc-tests', item.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('qc_tests')
+        .select('*')
+        .eq('reagent_item_id', item.id)
+        .order('test_order');
+      if (error) throw error;
+      return data as QCTest[];
+    },
+  });
+
+  // initialise editable rows once the query resolves
+  const editRows = rows ?? tests.map(t => ({ ...t, _key: t.id }));
+
+  function update(key: string, patch: Partial<QCTest>) {
+    setRows(editRows.map(r => r._key === key ? { ...r, ...patch } : r));
+  }
+  function remove(key: string) {
+    setRows(editRows.filter(r => r._key !== key));
+  }
+  function addBlank() {
+    setRows([...editRows, { _key: newKey(), name: '', unit: '', result_type: 'numeric', is_active: true }]);
+  }
+  function addPreset(name: string) {
+    const preset = QC_PRESETS.find(p => p.name === name);
+    if (!preset) return;
+    setRows([...editRows, {
+      _key: newKey(),
+      name: preset.name,
+      unit: preset.unit,
+      result_type: preset.result_type,
+      lower_limit: preset.lower_limit ?? null,
+      upper_limit: preset.upper_limit ?? null,
+      expected_text: preset.expected_text ?? null,
+      method: preset.method ?? null,
+      is_active: true,
+    }]);
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const current = editRows.filter(r => (r.name ?? '').trim());
+      const existingIds = new Set(tests.map(t => t.id));
+      const keptIds = new Set(current.filter(r => r.id).map(r => r.id as string));
+      const toDelete = [...existingIds].filter(id => !keptIds.has(id));
+
+      if (toDelete.length) {
+        const { error } = await supabase.from('qc_tests').delete().in('id', toDelete);
+        if (error) throw error;
+      }
+
+      for (let i = 0; i < current.length; i++) {
+        const r = current[i];
+        const isText = r.result_type === 'text';
+        const payload = {
+          reagent_item_id: item.id,
+          test_order: i,
+          name: (r.name ?? '').trim(),
+          unit: r.unit?.toString().trim() || null,
+          result_type: r.result_type ?? 'numeric',
+          lower_limit: isText ? null : (r.lower_limit ?? null),
+          upper_limit: isText ? null : (r.upper_limit ?? null),
+          target: isText ? null : (r.target ?? null),
+          expected_text: isText ? (r.expected_text?.trim() || null) : null,
+          method: r.method?.toString().trim() || null,
+          is_active: r.is_active ?? true,
+        };
+        if (r.id) {
+          const { error } = await supabase.from('qc_tests').update(payload).eq('id', r.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from('qc_tests').insert({ ...payload, created_by: profile!.id });
+          if (error) throw error;
+        }
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['qc-tests', item.id] });
+      onClose();
+    },
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : 'Save failed'),
+  });
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-5 border-b border-gray-200 sticky top-0 bg-white z-10">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <ClipboardCheck size={18} className="text-emerald-600" />
+              QC Specifications
+            </h2>
+            <p className="text-sm text-gray-500 mt-0.5">{item.item_number} · {item.product_name}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={20} /></button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
+
+          <p className="text-sm text-gray-500">
+            Define the quality tests run on every lot of this product. Limits are used to judge pass/fail
+            during production and printed on the Certificate of Analysis.
+          </p>
+
+          {isLoading ? (
+            <div className="text-center py-8 text-gray-400">Loading…</div>
+          ) : editRows.length === 0 ? (
+            <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-200 text-gray-500 text-sm">
+              No QC tests defined yet.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-gray-400 border-b border-gray-100">
+                    <th className="py-2 pr-2 font-medium">Test</th>
+                    <th className="py-2 px-2 font-medium">Type</th>
+                    <th className="py-2 px-2 font-medium">Lower</th>
+                    <th className="py-2 px-2 font-medium">Upper</th>
+                    <th className="py-2 px-2 font-medium">Unit</th>
+                    <th className="py-2 px-2 font-medium">Expected (text)</th>
+                    <th className="py-2 px-2 font-medium">Method</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {editRows.map(r => {
+                    const isText = r.result_type === 'text';
+                    return (
+                      <tr key={r._key}>
+                        <td className="py-1.5 pr-2">
+                          <input
+                            value={r.name ?? ''}
+                            disabled={!canManage}
+                            onChange={e => update(r._key, { name: e.target.value })}
+                            placeholder="e.g. pH"
+                            className="w-32 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
+                          />
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <select
+                            value={r.result_type ?? 'numeric'}
+                            disabled={!canManage}
+                            onChange={e => update(r._key, { result_type: e.target.value as QCResultType })}
+                            className="border border-gray-200 rounded px-1.5 py-1 text-sm bg-white disabled:bg-gray-50"
+                          >
+                            <option value="numeric">numeric</option>
+                            <option value="text">text</option>
+                          </select>
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <input
+                            type="number" step="any"
+                            value={r.lower_limit ?? ''}
+                            disabled={!canManage || isText}
+                            onChange={e => update(r._key, { lower_limit: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                            className="w-20 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
+                          />
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <input
+                            type="number" step="any"
+                            value={r.upper_limit ?? ''}
+                            disabled={!canManage || isText}
+                            onChange={e => update(r._key, { upper_limit: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                            className="w-20 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
+                          />
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <input
+                            value={r.unit ?? ''}
+                            disabled={!canManage || isText}
+                            onChange={e => update(r._key, { unit: e.target.value })}
+                            placeholder="mOsm/kg"
+                            className="w-24 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
+                          />
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <input
+                            value={r.expected_text ?? ''}
+                            disabled={!canManage || !isText}
+                            onChange={e => update(r._key, { expected_text: e.target.value })}
+                            placeholder="Clear, colorless"
+                            className="w-36 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
+                          />
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <input
+                            value={r.method ?? ''}
+                            disabled={!canManage}
+                            onChange={e => update(r._key, { method: e.target.value })}
+                            placeholder="USP <791>"
+                            className="w-28 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
+                          />
+                        </td>
+                        <td className="py-1.5 pl-2 text-right">
+                          {canManage && (
+                            <button onClick={() => remove(r._key)} className="text-gray-300 hover:text-red-600">
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {canManage && (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                onClick={addBlank}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700"
+              >
+                <Plus size={14} /> Add test
+              </button>
+              <select
+                value=""
+                onChange={e => { if (e.target.value) addPreset(e.target.value); e.target.value = ''; }}
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white text-gray-600"
+              >
+                <option value="">+ Add from common tests…</option>
+                {QC_PRESETS.map(p => (
+                  <option key={p.name} value={p.name}>
+                    {p.name}{p.unit ? ` (${p.unit})` : ''} — {formatSpec(p)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-3 px-5 py-4 border-t border-gray-200 sticky bottom-0 bg-white">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+            {canManage ? 'Cancel' : 'Close'}
+          </button>
+          {canManage && (
+            <button
+              onClick={() => { setError(''); saveMutation.mutate(); }}
+              disabled={saveMutation.isPending}
+              className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saveMutation.isPending ? 'Saving…' : 'Save QC Panel'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Row detail expand ────────────────────────────────────────────────────────
 function ReagentRow({
   item,
   isAdmin,
   onEdit,
   onDelete,
+  onManageQC,
 }: {
   item: ReagentItem;
   isAdmin: boolean;
   onEdit: (item: ReagentItem) => void;
   onDelete: (id: string) => void;
+  onManageQC: (item: ReagentItem) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -452,6 +729,13 @@ function ReagentRow({
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center gap-1 justify-end" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => onManageQC(item)}
+              className="p-1 text-gray-400 hover:text-emerald-600 transition-colors"
+              title="QC specifications"
+            >
+              <ClipboardCheck size={14} />
+            </button>
             {isAdmin && (
               <>
                 <button
@@ -854,7 +1138,9 @@ export default function ReagentItemsPage() {
   const [search, setSearch] = useState('');
   const [showInactive, setShowInactive] = useState(false);
   const [modalItem, setModalItem] = useState<Partial<ReagentItem> | null>(null);
+  const [qcItem, setQcItem] = useState<ReagentItem | null>(null);
   const [syncResult, setSyncResult] = useState<{ success: boolean; message?: string; error?: string; synced?: number; debug_query_url?: string } | null>(null);
+  const canManageQC = profile?.role === 'admin' || profile?.role === 'author' || profile?.role === 'approver';
 
   const { data: items = [], isLoading } = useQuery<ReagentItem[]>({
     queryKey: ['reagent-items'],
@@ -1135,6 +1421,7 @@ export default function ReagentItemsPage() {
                   isAdmin={isAdmin}
                   onEdit={setModalItem}
                   onDelete={handleDelete}
+                  onManageQC={setQcItem}
                 />
               ))}
             </tbody>
@@ -1149,6 +1436,15 @@ export default function ReagentItemsPage() {
           onClose={() => setModalItem(null)}
           onSave={form => saveMutation.mutate(form)}
           isSaving={saveMutation.isPending}
+        />
+      )}
+
+      {/* QC specification modal */}
+      {qcItem && (
+        <QCSpecModal
+          item={qcItem}
+          canManage={canManageQC}
+          onClose={() => setQcItem(null)}
         />
       )}
     </div>

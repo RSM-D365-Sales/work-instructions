@@ -89,6 +89,8 @@ export type StepType =
   | 'heat'
   | 'cool'
   | 'observe'
+  | 'notes'             // free-text notes about the order up to this step
+  | 'production_break'  // divider marking the boundary between parts of a run
   | 'print_labels'
   | 'custom';
 
@@ -276,4 +278,68 @@ export interface POStep {
   completed_at?: string;
   created_at: string;
   wi_step?: WIStep;
+}
+
+// ── Quality Control ─────────────────────────────────────────
+export type QCResultType = 'numeric' | 'text';
+
+/** A QC test specification defined on a reagent item (the panel that
+ *  every production order of that item is tested against). */
+export interface QCTest {
+  id: string;
+  reagent_item_id: string;
+  test_order: number;
+  name: string;
+  unit?: string | null;
+  result_type: QCResultType;
+  lower_limit?: number | null;
+  upper_limit?: number | null;
+  target?: number | null;
+  expected_text?: string | null;
+  method?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by?: string | null;
+}
+
+/** A measured QC value captured against a production order. The spec
+ *  limits are snapshotted here so certificates and trends stay stable. */
+export interface QCResult {
+  id: string;
+  production_order_id: string;
+  qc_test_id?: string | null;
+  test_order: number;
+  name: string;
+  unit?: string | null;
+  result_type: QCResultType;
+  lower_limit?: number | null;
+  upper_limit?: number | null;
+  target?: number | null;
+  expected_text?: string | null;
+  method?: string | null;
+  result_numeric?: number | null;
+  result_text?: string | null;
+  passed?: boolean | null;
+  instrument?: string | null;
+  comment?: string | null;
+  tested_by?: string | null;
+  tested_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  tester?: Profile;
+}
+
+export type CertType = 'COA' | 'COQ';
+
+export interface QCCertificate {
+  id: string;
+  production_order_id: string;
+  certificate_number: string;
+  cert_type: CertType;
+  issued_by?: string | null;
+  issued_at: string;
+  notes?: string | null;
+  created_at: string;
+  issuer?: Profile;
 }
