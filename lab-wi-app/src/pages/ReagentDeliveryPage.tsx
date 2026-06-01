@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import type { ReagentOrder, ReagentOrderItem } from '../types';
 import { cn } from '../lib/utils';
 import {
-  ArrowLeft, Truck, Building2, CheckCircle, Loader2, AlertTriangle, PackageCheck,
+  ArrowLeft, Truck, Building2, CheckCircle, Loader2, AlertTriangle, PackageCheck, ScanLine,
 } from 'lucide-react';
 
 const SOURCE_WAREHOUSE = 'REAGENT';
@@ -29,9 +29,12 @@ interface DeliveryLine {
   orderedQty: number;
   // editable
   qty: string;
-  location: string;
+  fromLocation: string;
+  toLocation: string;
   lot: string;
 }
+
+type LineEdit = { qty: string; fromLocation: string; toLocation: string; lot: string };
 
 // Fallback to a synthetic single line for legacy orders without line-item rows.
 function linesOf(o: ReagentOrder): ReagentOrderItem[] {
@@ -60,7 +63,7 @@ export default function ReagentDeliveryPage() {
   );
 
   const [deliveryDate, setDeliveryDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [linesState, setLinesState] = useState<Record<string, { qty: string; location: string; lot: string }>>({});
+  const [linesState, setLinesState] = useState<Record<string, LineEdit>>({});
   const [error, setError] = useState('');
   const [done, setDone] = useState<{ transferNumbers: string[]; labCount: number; lineCount: number } | null>(null);
 
@@ -101,14 +104,14 @@ export default function ReagentDeliveryPage() {
     return [...map.values()];
   }, [orders]);
 
-  // Default editable state for a line (ordered qty, blank location/lot).
-  function defaultFor(li: ReagentOrderItem) {
-    return { qty: String(li.quantity ?? ''), location: '', lot: '' };
+  // Default editable state for a line (ordered qty, blank locations/lot).
+  function defaultFor(li: ReagentOrderItem): LineEdit {
+    return { qty: String(li.quantity ?? ''), fromLocation: '', toLocation: '', lot: '' };
   }
-  function lineState(li: ReagentOrderItem) {
+  function lineState(li: ReagentOrderItem): LineEdit {
     return linesState[li.id] ?? defaultFor(li);
   }
-  function setLine(li: ReagentOrderItem, patch: Partial<{ qty: string; location: string; lot: string }>) {
+  function setLine(li: ReagentOrderItem, patch: Partial<LineEdit>) {
     setLinesState(prev => ({ ...prev, [li.id]: { ...(prev[li.id] ?? defaultFor(li)), ...patch } }));
   }
 
@@ -129,7 +132,8 @@ export default function ReagentDeliveryPage() {
           lotControlled: ri?.lot_controlled ?? false,
           orderedQty: li.quantity,
           qty: st.qty,
-          location: st.location,
+          fromLocation: st.fromLocation,
+          toLocation: st.toLocation,
           lot: st.lot,
         });
       }
@@ -148,8 +152,11 @@ export default function ReagentDeliveryPage() {
         if (!l.qty || isNaN(q) || q <= 0) {
           throw new Error(`${l.productName}: delivery quantity must be greater than 0.`);
         }
-        if (!l.location.trim()) {
-          throw new Error(`${l.productName}: a destination location is required.`);
+        if (!l.fromLocation.trim()) {
+          throw new Error(`${l.productName}: scan the From location (source bin at the REAGENT lab).`);
+        }
+        if (!l.toLocation.trim()) {
+          throw new Error(`${l.productName}: scan the To location (bin at the destination lab).`);
         }
         if (l.lotControlled && !l.lot.trim()) {
           throw new Error(`${l.productName} is lot-controlled — a LOT number is required.`);
@@ -173,7 +180,8 @@ export default function ReagentDeliveryPage() {
               .from('reagent_order_items')
               .update({
                 delivered_quantity: parseFloat(st.qty),
-                delivered_location: st.location.trim(),
+                from_location: st.fromLocation.trim(),
+                to_location: st.toLocation.trim(),
                 lot_number: (li.reagent_item?.lot_controlled ? st.lot.trim() : null) || null,
                 delivered_at: now,
               })
@@ -320,7 +328,8 @@ export default function ReagentDeliveryPage() {
                     <th className="px-4 py-2 font-medium">Product</th>
                     <th className="px-4 py-2 font-medium text-right">Ordered</th>
                     <th className="px-4 py-2 font-medium">Deliver Qty</th>
-                    <th className="px-4 py-2 font-medium">Location</th>
+                    <th className="px-4 py-2 font-medium">From Location</th>
+                    <th className="px-4 py-2 font-medium">To Location</th>
                     <th className="px-4 py-2 font-medium">LOT</th>
                   </tr>
                 </thead>
@@ -361,13 +370,28 @@ export default function ReagentDeliveryPage() {
                             </div>
                           </td>
                           <td className="px-4 py-2.5 align-top">
-                            <input
-                              type="text"
-                              value={st.location}
-                              onChange={e => setLine(li, { location: e.target.value })}
-                              placeholder="e.g. Cold Room A / Shelf 3"
-                              className="w-44 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
+                            <div className="relative w-44">
+                              <ScanLine size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                              <input
+                                type="text"
+                                value={st.fromLocation}
+                                onChange={e => setLine(li, { fromLocation: e.target.value })}
+                                placeholder="Scan source bin"
+                                className="w-full border border-gray-300 rounded-lg pl-7 pr-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5 align-top">
+                            <div className="relative w-44">
+                              <ScanLine size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                              <input
+                                type="text"
+                                value={st.toLocation}
+                                onChange={e => setLine(li, { toLocation: e.target.value })}
+                                placeholder="Scan destination bin"
+                                className="w-full border border-gray-300 rounded-lg pl-7 pr-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
                           </td>
                           <td className="px-4 py-2.5 align-top">
                             {lotControlled ? (

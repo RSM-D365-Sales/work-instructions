@@ -14,7 +14,8 @@ export interface ReagentOrderItem {
   unit: string;
   // Delivery details — populated when the line is delivered to the requesting lab.
   delivered_quantity?: number | null;
-  delivered_location?: string | null;
+  from_location?: string | null;   // scanned source bin at the REAGENT lab
+  to_location?: string | null;     // scanned bin at the destination lab
   lot_number?: string | null;
   delivered_at?: string | null;
   created_at: string;
