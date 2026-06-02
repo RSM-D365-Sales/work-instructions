@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS public.qc_tests (
   name              text NOT NULL,                       -- e.g. "pH", "Osmolality"
   unit              text,                                -- e.g. "mOsm/kg", "mS/cm"
   result_type       text NOT NULL DEFAULT 'numeric'
-                      CHECK (result_type IN ('numeric','text')),
+                      CHECK (result_type IN ('numeric','text','passfail')),
   lower_limit       numeric,                             -- numeric spec lower bound
   upper_limit       numeric,                             -- numeric spec upper bound
   target            numeric,                             -- optional target value
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS public.qc_results (
   name                 text NOT NULL,
   unit                 text,
   result_type          text NOT NULL DEFAULT 'numeric'
-                         CHECK (result_type IN ('numeric','text')),
+                         CHECK (result_type IN ('numeric','text','passfail')),
   lower_limit          numeric,
   upper_limit          numeric,
   target               numeric,

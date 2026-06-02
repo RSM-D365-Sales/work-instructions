@@ -34,7 +34,7 @@ BEGIN
       (v_wi, 5, 'Mix to Dissolve', 'Stir until fully dissolved', '{"_step_type":"mix","duration_minutes":10,"speed":"medium"}'::jsonb),
       (v_wi, 6, 'pH Adjust to 7.4', 'Adjust with 1M HCl', '{"_step_type":"ph_adjust","target_ph":7.4,"tolerance":0.05,"reagent":"1M HCl"}'::jsonb),
       (v_wi, 7, 'Bring to Volume', 'Top up to 1 L with DI water', '{"_step_type":"transfer","from_vessel":"Mixing Vessel 1","to_vessel":"1 L Volumetric Flask"}'::jsonb),
-      (v_wi, 8, 'Final Inspection', 'Confirm clarity', '{"_step_type":"observe","prompt":"Confirm the solution is clear and colourless with no particulates."}'::jsonb),
+      (v_wi, 8, 'Final Inspection', 'Confirm clarity', '{"_step_type":"observe","prompt":"Confirm the solution is clear and colorless with no particulates."}'::jsonb),
       (v_wi, 9, 'Print Labels', 'Product and lot labels', '{"_step_type":"print_labels","label_template":"Product Label","quantity":1,"notes":"Include lot number and expiry date."}'::jsonb);
   END IF;
 
@@ -71,7 +71,7 @@ BEGIN
       (v_wi, 5, 'Equilibrate to 25 C', 'Allow solution to reach 25 C before pH', '{"_step_type":"cool","target_temp_c":25}'::jsonb),
       (v_wi, 6, 'pH Adjust to 8.0', 'Adjust with 6M HCl', '{"_step_type":"ph_adjust","target_ph":8.0,"tolerance":0.05,"reagent":"6M HCl"}'::jsonb),
       (v_wi, 7, 'Bring to Volume', 'Top up to 1 L with DI water', '{"_step_type":"transfer","from_vessel":"Mixing Vessel 1","to_vessel":"1 L Volumetric Flask"}'::jsonb),
-      (v_wi, 8, 'Final Inspection', 'Confirm clarity', '{"_step_type":"observe","prompt":"Confirm the buffer is clear and colourless."}'::jsonb),
+      (v_wi, 8, 'Final Inspection', 'Confirm clarity', '{"_step_type":"observe","prompt":"Confirm the buffer is clear and colorless."}'::jsonb),
       (v_wi, 9, 'Print Labels', 'Product and lot labels', '{"_step_type":"print_labels","label_template":"Product Label","quantity":1,"notes":"Include lot number and expiry date."}'::jsonb);
   END IF;
 
@@ -123,7 +123,7 @@ BEGIN
       (v_wi, 4, 'Mix to Dissolve', 'Stir until dissolved', '{"_step_type":"mix","duration_minutes":10,"speed":"medium"}'::jsonb),
       (v_wi, 5, 'pH Adjust to 5.2', 'Adjust with glacial acetic acid', '{"_step_type":"ph_adjust","target_ph":5.2,"tolerance":0.05,"reagent":"Glacial Acetic Acid"}'::jsonb),
       (v_wi, 6, 'Bring to Volume', 'Top up to 1 L with DI water', '{"_step_type":"transfer","from_vessel":"Mixing Vessel 1","to_vessel":"1 L Volumetric Flask"}'::jsonb),
-      (v_wi, 7, 'Final Inspection', 'Confirm clarity', '{"_step_type":"observe","prompt":"Confirm the solution is clear and colourless."}'::jsonb),
+      (v_wi, 7, 'Final Inspection', 'Confirm clarity', '{"_step_type":"observe","prompt":"Confirm the solution is clear and colorless."}'::jsonb),
       (v_wi, 8, 'Print Labels', 'Product and lot labels', '{"_step_type":"print_labels","label_template":"Product Label","quantity":1,"notes":"Include lot number and expiry date."}'::jsonb);
   END IF;
 

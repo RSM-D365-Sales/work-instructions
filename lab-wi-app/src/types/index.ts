@@ -313,7 +313,7 @@ export interface POStep {
 }
 
 // ── Quality Control ─────────────────────────────────────────
-export type QCResultType = 'numeric' | 'text';
+export type QCResultType = 'numeric' | 'text' | 'passfail';
 
 /** A QC test specification defined on a reagent item (the panel that
  *  every production order of that item is tested against). */

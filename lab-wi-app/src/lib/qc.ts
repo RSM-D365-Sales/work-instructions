@@ -18,6 +18,14 @@ export function evaluateQC(
   resultNumeric: number | null | undefined,
   resultText: string | null | undefined,
 ): boolean | null {
+  if (spec.result_type === 'passfail') {
+    // qualitative check captured as a Pass/Fail determination
+    const v = (resultText ?? '').trim().toLowerCase();
+    if (v === 'pass') return true;
+    if (v === 'fail') return false;
+    return null; // not yet assessed
+  }
+
   if (spec.result_type === 'text') {
     const expected = (spec.expected_text ?? '').trim().toLowerCase();
     const actual = (resultText ?? '').trim().toLowerCase();
@@ -44,6 +52,10 @@ const fmt = (n: number): string => {
 /** Human-readable specification, e.g. "7.2 – 7.6 mOsm/kg", "≤ 0.5", "Clear, colorless". */
 export function formatSpec(spec: QCSpec): string {
   const unit = spec.unit ? ` ${spec.unit}` : '';
+  if (spec.result_type === 'passfail') {
+    // the acceptance criteria text (if any) is the spec; the operator just checks Pass/Fail
+    return spec.expected_text?.trim() || 'Pass / Fail';
+  }
   if (spec.result_type === 'text') {
     return spec.expected_text?.trim() || '—';
   }
@@ -63,7 +75,7 @@ export function formatResultValue(
   resultText: string | null | undefined,
   unit?: string | null,
 ): string {
-  if (result_type === 'text') return resultText?.trim() || '—';
+  if (result_type === 'text' || result_type === 'passfail') return resultText?.trim() || '—';
   if (resultNumeric == null || Number.isNaN(resultNumeric)) return '—';
   return `${fmt(resultNumeric)}${unit ? ` ${unit}` : ''}`;
 }
@@ -83,7 +95,7 @@ export const QC_PRESETS: QCPreset[] = [
   { name: 'pH', unit: '', result_type: 'numeric', lower_limit: 7.2, upper_limit: 7.6, method: 'USP <791>' },
   { name: 'Osmolality', unit: 'mOsm/kg', result_type: 'numeric', lower_limit: 280, upper_limit: 300, method: 'Freezing-point depression' },
   { name: 'Conductivity', unit: 'mS/cm', result_type: 'numeric', lower_limit: 12, upper_limit: 16, method: 'USP <645>' },
-  { name: 'Appearance', unit: '', result_type: 'text', expected_text: 'Clear, colorless', method: 'Visual' },
+  { name: 'Appearance / Color', unit: '', result_type: 'passfail', expected_text: 'Clear, colorless solution; free from visible particulates', method: 'Visual' },
   { name: 'Density', unit: 'g/mL', result_type: 'numeric', lower_limit: 1.000, upper_limit: 1.010, method: 'Densitometer' },
   { name: 'Specific Gravity', unit: '', result_type: 'numeric', lower_limit: 1.000, upper_limit: 1.010 },
   { name: 'Bioburden', unit: 'CFU/mL', result_type: 'numeric', upper_limit: 10, method: 'USP <61>' },

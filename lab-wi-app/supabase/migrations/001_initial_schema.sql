@@ -276,7 +276,7 @@ values
    true),
 
   ('Observe & Record',
-   'Record an observation (colour, clarity, odour, etc.) about the solution.',
+   'Record an observation (color, clarity, odor, etc.) about the solution.',
    'observe',
    '{
      "prompt": { "type": "string", "label": "Observation Prompt" }

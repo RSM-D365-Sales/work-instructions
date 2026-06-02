@@ -844,7 +844,7 @@ function StepCard({ wiStep, poStep, index, isActive, onActivate, onComplete, onS
 }
 
 // ─── Quality Control capture card ─────────────────────────────────────────────
-interface QCInput { num: string; text: string; instrument: string; comment: string }
+interface QCInput { num: string; text: string; pass: '' | 'Pass' | 'Fail'; instrument: string; comment: string }
 
 function QualityControlCard({
   productionOrderId, reagentItemId, locked, onCertificate,
@@ -893,9 +893,15 @@ function QualityControlCard({
     const seed: Record<string, QCInput> = {};
     for (const t of tests) {
       const r = results.find(x => x.qc_test_id === t.id);
+      let pass: '' | 'Pass' | 'Fail' = '';
+      if (t.result_type === 'passfail' && r) {
+        pass = r.result_text === 'Fail' || r.passed === false ? 'Fail'
+             : r.result_text === 'Pass' || r.passed === true ? 'Pass' : '';
+      }
       seed[t.id] = {
         num: r?.result_numeric != null ? String(r.result_numeric) : '',
         text: r?.result_text ?? '',
+        pass,
         instrument: r?.instrument ?? '',
         comment: r?.comment ?? '',
       };
@@ -905,24 +911,30 @@ function QualityControlCard({
   }, [tests, results, testsLoading, resultsLoading, productionOrderId]);
 
   function setField(testId: string, patch: Partial<QCInput>) {
-    setInputs(prev => ({ ...prev, [testId]: { ...(prev[testId] ?? { num: '', text: '', instrument: '', comment: '' }), ...patch } }));
+    setInputs(prev => ({ ...prev, [testId]: { ...(prev[testId] ?? { num: '', text: '', pass: '', instrument: '', comment: '' }), ...patch } }));
   }
 
   const liveStatus = (t: QCTest): boolean | null => {
     const inp = inputs[t.id];
     if (!inp) return null;
     const num = inp.num === '' ? null : parseFloat(inp.num);
-    return evaluateQC(t, num, inp.text);
+    const textVal = t.result_type === 'passfail' ? inp.pass : inp.text;
+    return evaluateQC(t, num, textVal);
   };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       for (let i = 0; i < tests.length; i++) {
         const t = tests[i];
-        const inp = inputs[t.id] ?? { num: '', text: '', instrument: '', comment: '' };
+        const inp = inputs[t.id] ?? { num: '', text: '', pass: '' as const, instrument: '', comment: '' };
         const num = inp.num === '' ? null : parseFloat(inp.num);
-        const passed = evaluateQC(t, num, inp.text);
-        const hasValue = (t.result_type === 'numeric' ? num != null : !!inp.text.trim());
+        const textVal = t.result_type === 'passfail' ? inp.pass : inp.text;
+        const passed = evaluateQC(t, num, textVal);
+        const hasValue = (
+          t.result_type === 'numeric' ? num != null
+          : t.result_type === 'passfail' ? !!inp.pass
+          : !!inp.text.trim()
+        );
         const payload = {
           production_order_id: productionOrderId,
           qc_test_id: t.id,
@@ -936,7 +948,9 @@ function QualityControlCard({
           expected_text: t.expected_text ?? null,
           method: t.method ?? null,
           result_numeric: t.result_type === 'numeric' ? num : null,
-          result_text: t.result_type === 'text' ? (inp.text.trim() || null) : null,
+          result_text: t.result_type === 'passfail' ? (inp.pass || null)
+                     : t.result_type === 'text' ? (inp.text.trim() || null)
+                     : null,
           passed,
           instrument: inp.instrument.trim() || null,
           comment: inp.comment.trim() || null,
@@ -975,7 +989,10 @@ function QualityControlCard({
   const anyFail = evaluated.some(s => s === false);
   const allMeasured = tests.every(t => {
     const inp = inputs[t.id];
-    return inp && (t.result_type === 'numeric' ? inp.num !== '' : inp.text.trim() !== '');
+    if (!inp) return false;
+    if (t.result_type === 'numeric') return inp.num !== '';
+    if (t.result_type === 'passfail') return inp.pass !== '';
+    return inp.text.trim() !== '';
   });
   const allPass = allMeasured && evaluated.every(s => s !== false);
   const hasSavedResults = results.some(r => r.result_numeric != null || (r.result_text ?? '') !== '');
@@ -999,7 +1016,7 @@ function QualityControlCard({
 
       <div className="divide-y divide-gray-50">
         {tests.map(t => {
-          const inp = inputs[t.id] ?? { num: '', text: '', instrument: '', comment: '' };
+          const inp = inputs[t.id] ?? { num: '', text: '', pass: '' as const, instrument: '', comment: '' };
           const status = liveStatus(t);
           return (
             <div key={t.id} className="px-5 py-3">
@@ -1024,6 +1041,19 @@ function QualityControlCard({
                       />
                       {t.unit && <span className="text-xs text-gray-400 w-14">{t.unit}</span>}
                     </div>
+                  ) : t.result_type === 'passfail' ? (
+                    <label className="flex items-center gap-2 w-44 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={inp.pass === 'Pass'}
+                        disabled={locked}
+                        onChange={e => setField(t.id, { pass: e.target.checked ? 'Pass' : 'Fail' })}
+                        className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-50"
+                      />
+                      <span className="text-sm text-gray-600">
+                        {inp.pass === 'Pass' ? 'Pass — conforms' : inp.pass === 'Fail' ? 'Fail — does not conform' : 'Mark Pass'}
+                      </span>
+                    </label>
                   ) : (
                     <input
                       value={inp.text}

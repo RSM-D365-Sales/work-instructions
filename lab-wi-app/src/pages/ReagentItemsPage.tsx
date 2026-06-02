@@ -516,17 +516,17 @@ function QCSpecModal({
 
       for (let i = 0; i < current.length; i++) {
         const r = current[i];
-        const isText = r.result_type === 'text';
+        const isQual = r.result_type === 'text' || r.result_type === 'passfail';
         const payload = {
           reagent_item_id: item.id,
           test_order: i,
           name: (r.name ?? '').trim(),
           unit: r.unit?.toString().trim() || null,
           result_type: r.result_type ?? 'numeric',
-          lower_limit: isText ? null : (r.lower_limit ?? null),
-          upper_limit: isText ? null : (r.upper_limit ?? null),
-          target: isText ? null : (r.target ?? null),
-          expected_text: isText ? (r.expected_text?.trim() || null) : null,
+          lower_limit: isQual ? null : (r.lower_limit ?? null),
+          upper_limit: isQual ? null : (r.upper_limit ?? null),
+          target: isQual ? null : (r.target ?? null),
+          expected_text: isQual ? (r.expected_text?.trim() || null) : null,
           method: r.method?.toString().trim() || null,
           is_active: r.is_active ?? true,
         };
@@ -591,7 +591,7 @@ function QCSpecModal({
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {editRows.map(r => {
-                    const isText = r.result_type === 'text';
+                    const isQual = r.result_type === 'text' || r.result_type === 'passfail';
                     return (
                       <tr key={r._key}>
                         <td className="py-1.5 pr-2">
@@ -612,13 +612,14 @@ function QCSpecModal({
                           >
                             <option value="numeric">numeric</option>
                             <option value="text">text</option>
+                            <option value="passfail">pass/fail</option>
                           </select>
                         </td>
                         <td className="py-1.5 px-2">
                           <input
                             type="number" step="any"
                             value={r.lower_limit ?? ''}
-                            disabled={!canManage || isText}
+                            disabled={!canManage || isQual}
                             onChange={e => update(r._key, { lower_limit: e.target.value === '' ? null : parseFloat(e.target.value) })}
                             className="w-20 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
                           />
@@ -627,7 +628,7 @@ function QCSpecModal({
                           <input
                             type="number" step="any"
                             value={r.upper_limit ?? ''}
-                            disabled={!canManage || isText}
+                            disabled={!canManage || isQual}
                             onChange={e => update(r._key, { upper_limit: e.target.value === '' ? null : parseFloat(e.target.value) })}
                             className="w-20 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
                           />
@@ -635,7 +636,7 @@ function QCSpecModal({
                         <td className="py-1.5 px-2">
                           <input
                             value={r.unit ?? ''}
-                            disabled={!canManage || isText}
+                            disabled={!canManage || isQual}
                             onChange={e => update(r._key, { unit: e.target.value })}
                             placeholder="mOsm/kg"
                             className="w-24 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
@@ -644,9 +645,9 @@ function QCSpecModal({
                         <td className="py-1.5 px-2">
                           <input
                             value={r.expected_text ?? ''}
-                            disabled={!canManage || !isText}
+                            disabled={!canManage || !isQual}
                             onChange={e => update(r._key, { expected_text: e.target.value })}
-                            placeholder="Clear, colorless"
+                            placeholder="Clear, colorless solution"
                             className="w-36 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
                           />
                         </td>

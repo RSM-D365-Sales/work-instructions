@@ -386,7 +386,7 @@ function StepParamEditor({
             value={(params.prompt as string) ?? ''}
             onChange={e => set('prompt', e.target.value)}
             className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-            placeholder="e.g. Describe the colour and clarity of the solution"
+            placeholder="e.g. Describe the color and clarity of the solution"
           />
         </div>
       );
