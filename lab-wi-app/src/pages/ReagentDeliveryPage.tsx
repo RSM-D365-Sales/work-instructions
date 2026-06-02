@@ -34,7 +34,7 @@ interface DeliveryLine {
   lot: string;
 }
 
-type LineEdit = { qty: string; fromLocation: string; toLocation: string; lot: string };
+type LineEdit = { qty: string; fromLocation: string; toLocation: string; lot: string; comment: string };
 
 // Fallback to a synthetic single line for legacy orders without line-item rows.
 function linesOf(o: ReagentOrder): ReagentOrderItem[] {
@@ -64,6 +64,7 @@ export default function ReagentDeliveryPage() {
 
   const [deliveryDate, setDeliveryDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [linesState, setLinesState] = useState<Record<string, LineEdit>>({});
+  const [labComments, setLabComments] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [done, setDone] = useState<{ transferNumbers: string[]; labCount: number; lineCount: number } | null>(null);
 
@@ -106,7 +107,11 @@ export default function ReagentDeliveryPage() {
 
   // Default editable state for a line (ordered qty, blank locations/lot).
   function defaultFor(li: ReagentOrderItem): LineEdit {
-    return { qty: String(li.quantity ?? ''), fromLocation: '', toLocation: '', lot: '' };
+    return {
+      qty: String(li.quantity ?? ''),
+      fromLocation: '', toLocation: '', lot: '',
+      comment: li.delivery_comment ?? '',
+    };
   }
   function lineState(li: ReagentOrderItem): LineEdit {
     return linesState[li.id] ?? defaultFor(li);
@@ -183,13 +188,15 @@ export default function ReagentDeliveryPage() {
                 from_location: st.fromLocation.trim(),
                 to_location: st.toLocation.trim(),
                 lot_number: (li.reagent_item?.lot_controlled ? st.lot.trim() : null) || null,
+                delivery_comment: st.comment.trim() || null,
                 delivered_at: now,
               })
               .eq('id', li.id);
             if (liErr) throw liErr;
           }
 
-          // Mark the order delivered + stamp the transfer order.
+          // Mark the order delivered + stamp the transfer order. The lab-level
+          // comment is applied to every order in this destination-lab group.
           const { error: oErr } = await supabase
             .from('reagent_orders')
             .update({
@@ -197,6 +204,7 @@ export default function ReagentDeliveryPage() {
               transfer_order_number: toNum,
               transfer_order_status: 'created',
               transfer_order_created_at: now,
+              delivery_comment: (labComments[g.labId] ?? '').trim() || null,
             })
             .eq('id', o.id);
           if (oErr) throw oErr;
@@ -320,6 +328,21 @@ export default function ReagentDeliveryPage() {
               </span>
             </div>
 
+            {/* Lab-level delivery comment — saved on every order in this group */}
+            <div className="px-5 py-3 border-b border-gray-100 bg-emerald-50/30">
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Comment for all {g.labName} orders
+                <span className="text-gray-400 font-normal"> (saved on this transfer)</span>
+              </label>
+              <textarea
+                rows={2}
+                value={labComments[g.labId] ?? ''}
+                onChange={e => setLabComments(prev => ({ ...prev, [g.labId]: e.target.value }))}
+                placeholder="e.g. Delivered to receiving dock B; lab manager notified of partial fill."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -331,6 +354,7 @@ export default function ReagentDeliveryPage() {
                     <th className="px-4 py-2 font-medium">From Location</th>
                     <th className="px-4 py-2 font-medium">To Location</th>
                     <th className="px-4 py-2 font-medium">LOT</th>
+                    <th className="px-4 py-2 font-medium">Comment</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -410,6 +434,15 @@ export default function ReagentDeliveryPage() {
                             ) : (
                               <span className="text-xs text-gray-400">— n/a —</span>
                             )}
+                          </td>
+                          <td className="px-4 py-2.5 align-top">
+                            <input
+                              type="text"
+                              value={st.comment}
+                              onChange={e => setLine(li, { comment: e.target.value })}
+                              placeholder="Optional note"
+                              className="w-44 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
                           </td>
                         </tr>
                       );

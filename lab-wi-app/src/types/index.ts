@@ -18,6 +18,7 @@ export interface ReagentOrderItem {
   to_location?: string | null;     // scanned bin at the destination lab
   lot_number?: string | null;
   delivered_at?: string | null;
+  delivery_comment?: string | null;   // note specific to this line
   created_at: string;
   reagent_item?: ReagentItem;
 }
@@ -43,6 +44,7 @@ export interface ReagentOrder {
   transfer_order_status?: TransferOrderStatus | null;
   transfer_order_error?: string | null;
   transfer_order_created_at?: string | null;
+  delivery_comment?: string | null;   // note applied to all of a lab's delivered orders
   reagent_item?: ReagentItem;
   lab?: Lab;
   creator?: Profile;
