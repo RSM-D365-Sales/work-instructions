@@ -88,22 +88,23 @@ export default function AppLayout() {
               </div>
             </div>
           )}
-        </nav>
 
-        <div className="p-4 border-t border-gray-200">
-          <DefaultLabSelector />
-          <div className="mb-3">
-            <p className="text-sm font-medium text-gray-900 truncate">{profile?.full_name || 'User'}</p>
-            <p className="text-xs text-gray-500 capitalize">{profile?.role}</p>
+          {/* Default lab + account — sits just below the nav, not pinned to the bottom */}
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <DefaultLabSelector />
+            <div className="mb-3">
+              <p className="text-sm font-medium text-gray-900 truncate">{profile?.full_name || 'User'}</p>
+              <p className="text-xs text-gray-500 capitalize">{profile?.role}</p>
+            </div>
+            <button
+              onClick={signOut}
+              className="flex items-center gap-2 text-sm text-gray-600 hover:text-red-600 transition-colors w-full"
+            >
+              <LogOut size={16} />
+              Sign Out
+            </button>
           </div>
-          <button
-            onClick={signOut}
-            className="flex items-center gap-2 text-sm text-gray-600 hover:text-red-600 transition-colors w-full"
-          >
-            <LogOut size={16} />
-            Sign Out
-          </button>
-        </div>
+        </nav>
       </aside>
 
       {/* Main content */}
