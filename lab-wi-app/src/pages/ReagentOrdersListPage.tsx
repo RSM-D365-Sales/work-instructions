@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import type { ReagentOrder, ReagentOrderStatus } from '../types';
 import { ShoppingCart, Plus, Search, CircleAlert, Calendar, Building2, Truck, Paperclip, MessageSquare } from 'lucide-react';
 import { formatDate, cn } from '../lib/utils';
+import ListFilters, { toOptions, inDateRange } from '../components/ListFilters';
 
 const STATUS_STYLES: Record<ReagentOrderStatus, string> = {
   pending:     'bg-yellow-100 text-yellow-800',
@@ -56,6 +57,10 @@ export default function ReagentOrdersListPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [hiddenStatuses, setHiddenStatuses] = useState<Set<ReagentOrderStatus>>(loadHiddenStatuses);
   const [groupBy, setGroupBy] = useState<GroupBy>(loadGroupBy);
+  const [filterLab, setFilterLab] = useState('');
+  const [filterItem, setFilterItem] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const isLab = profile?.role === 'lab';
   const canDeliver = !isLab;  // central-lab staff (admin/author/approver/operator) deliver to labs
@@ -127,9 +132,24 @@ export default function ReagentOrdersListPage() {
     return [];
   }
 
+  // Dropdown option sources (built from the loaded orders).
+  const labOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const o of orders) if (o.lab?.id) m.set(o.lab.id, o.lab.name);
+    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([value, label]) => ({ value, label }));
+  }, [orders]);
+  const itemOptions = useMemo(
+    () => toOptions(orders.flatMap(o => linesOf(o).map(li => li.reagent_item?.product_name))),
+    [orders]
+  );
+  const filtersActive = !!(filterLab || filterItem || dateFrom || dateTo);
+
   const filtered = useMemo(() => {
     return orders.filter(o => {
       if (hiddenStatuses.has(o.status)) return false;
+      if (filterLab && (o.lab?.id ?? '') !== filterLab) return false;
+      if (filterItem && !linesOf(o).some(li => (li.reagent_item?.product_name ?? '') === filterItem)) return false;
+      if (!inDateRange(o.requested_for_date, dateFrom, dateTo)) return false;
       if (search.trim()) {
         const s = search.toLowerCase();
         const lineHay = linesOf(o)
@@ -140,7 +160,7 @@ export default function ReagentOrdersListPage() {
       }
       return true;
     });
-  }, [orders, hiddenStatuses, search]);
+  }, [orders, hiddenStatuses, search, filterLab, filterItem, dateFrom, dateTo]);
 
   // Build groups when grouping is active.
   const groups = useMemo(() => {
@@ -411,6 +431,23 @@ export default function ReagentOrdersListPage() {
           />
         </div>
       </div>
+
+      {/* Filters: lab / item / needed-by date range */}
+      <ListFilters
+        labOptions={labOptions}
+        lab={filterLab}
+        onLab={setFilterLab}
+        itemOptions={itemOptions}
+        item={filterItem}
+        onItem={setFilterItem}
+        dateLabel="Needed"
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onDateFrom={setDateFrom}
+        onDateTo={setDateTo}
+        active={filtersActive}
+        onClear={() => { setFilterLab(''); setFilterItem(''); setDateFrom(''); setDateTo(''); }}
+      />
 
       {/* Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

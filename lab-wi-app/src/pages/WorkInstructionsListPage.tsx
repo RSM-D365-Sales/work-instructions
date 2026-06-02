@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import type { WorkInstruction } from '../types';
 import { Plus, ChevronRight, Trash2 } from 'lucide-react';
 import { formatDate } from '../lib/utils';
+import ListFilters, { toOptions, inDateRange } from '../components/ListFilters';
 
 const STATUS_STYLES: Record<string, string> = {
   draft:          'bg-gray-100 text-gray-600',
@@ -18,6 +19,9 @@ export default function WorkInstructionsListPage() {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const [deleteTarget, setDeleteTarget] = useState<WorkInstruction | null>(null);
+  const [filterItem, setFilterItem] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -42,6 +46,16 @@ export default function WorkInstructionsListPage() {
     },
   });
 
+  const itemOptions = useMemo(() => toOptions(wis.map(w => w.product_name)), [wis]);
+  const filtersActive = !!(filterItem || dateFrom || dateTo);
+  const filteredWis = useMemo(
+    () => wis.filter(w =>
+      (!filterItem || (w.product_name ?? '') === filterItem) &&
+      inDateRange(w.updated_at, dateFrom, dateTo)
+    ),
+    [wis, filterItem, dateFrom, dateTo]
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -60,6 +74,21 @@ export default function WorkInstructionsListPage() {
         )}
       </div>
 
+      {!isLoading && wis.length > 0 && (
+        <ListFilters
+          itemOptions={itemOptions}
+          item={filterItem}
+          onItem={setFilterItem}
+          dateLabel="Updated"
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onDateFrom={setDateFrom}
+          onDateTo={setDateTo}
+          active={filtersActive}
+          onClear={() => { setFilterItem(''); setDateFrom(''); setDateTo(''); }}
+        />
+      )}
+
       {isLoading ? (
         <div className="text-center py-12 text-gray-400">Loading…</div>
       ) : wis.length === 0 ? (
@@ -70,6 +99,10 @@ export default function WorkInstructionsListPage() {
               Create the first one
             </Link>
           )}
+        </div>
+      ) : filteredWis.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
+          <p className="text-gray-500">No work instructions match the current filters.</p>
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -87,7 +120,7 @@ export default function WorkInstructionsListPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {wis.map(wi => (
+              {filteredWis.map(wi => (
                 <tr key={wi.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3 font-medium text-gray-900">{wi.title}</td>
                   <td className="px-4 py-3">

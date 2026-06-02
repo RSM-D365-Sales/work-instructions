@@ -7,6 +7,7 @@ import type { ProductionOrder, Profile } from '../types';
 import { Plus, ChevronRight, Ban, Trash2, Check } from 'lucide-react';
 import { formatDate } from '../lib/utils';
 import { cn } from '../lib/utils';
+import ListFilters, { toOptions, inDateRange } from '../components/ListFilters';
 
 /* ── Date helpers ─────────────────────────────────────────────── */
 
@@ -79,6 +80,9 @@ function byRequiredBy(a: any, b: any): number {
 export default function ProductionOrdersListPage() {
   const [hiddenStatuses, setHiddenStatuses] = useState<Set<string>>(new Set(['completed', 'cancelled']));
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
+  const [filterItem, setFilterItem] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const { profile } = useAuth();
   const qc = useQueryClient();
 
@@ -114,12 +118,25 @@ export default function ProductionOrdersListPage() {
     },
   });
 
-  const filtered = orders.filter((o: any) => !hiddenStatuses.has(o.status));
+  const itemOptions = useMemo(
+    () => toOptions(orders.map((o: any) => o.work_instruction?.product_name)),
+    [orders]
+  );
+  const filtersActive = !!(filterItem || dateFrom || dateTo);
+
+  function matchesFilters(o: any): boolean {
+    if (hiddenStatuses.has(o.status)) return false;
+    if (filterItem && (o.work_instruction?.product_name ?? '') !== filterItem) return false;
+    if (!inDateRange(o.required_by, dateFrom, dateTo)) return false;
+    return true;
+  }
+
+  const filtered = orders.filter(matchesFilters);
 
   /** Visible orders sorted by required-by, then split into the chosen groups.
    *  groupBy='none' yields a single unlabelled group (a plain sorted list). */
   const groups = useMemo(() => {
-    const vis = orders.filter((o: any) => !hiddenStatuses.has(o.status)).sort(byRequiredBy);
+    const vis = orders.filter(matchesFilters).sort(byRequiredBy);
     if (groupBy === 'none') return [{ key: 'all', label: '', rows: vis }];
 
     const map = new Map<string, any[]>();
@@ -148,7 +165,8 @@ export default function ProductionOrdersListPage() {
                                (key || 'No product'),
       rows,
     }));
-  }, [orders, hiddenStatuses, groupBy]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders, hiddenStatuses, groupBy, filterItem, dateFrom, dateTo]);
 
   const cancelMutation = useMutation({
     mutationFn: async (orderId: string) => {
@@ -312,6 +330,20 @@ export default function ProductionOrdersListPage() {
         </div>
         <span className="text-xs text-gray-400 ml-1">· sorted by required date</span>
       </div>
+
+      {/* Filters: item / required-by date range */}
+      <ListFilters
+        itemOptions={itemOptions}
+        item={filterItem}
+        onItem={setFilterItem}
+        dateLabel="Required"
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onDateFrom={setDateFrom}
+        onDateTo={setDateTo}
+        active={filtersActive}
+        onClear={() => { setFilterItem(''); setDateFrom(''); setDateTo(''); }}
+      />
 
       {isLoading ? (
         <div className="text-center py-12 text-gray-400">Loading…</div>

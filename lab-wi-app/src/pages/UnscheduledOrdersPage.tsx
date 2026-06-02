@@ -5,6 +5,7 @@ import { CalendarClock, CheckCircle, ArrowLeft, Wand2, AlertTriangle } from 'luc
 import { supabase } from '../lib/supabase';
 import { cn } from '../lib/utils';
 import { planSchedule, UNASSIGNED_KEY, type SchedulableOrder, type BusyInterval } from '../lib/autoSchedule';
+import ListFilters, { toOptions, inDateRange } from '../components/ListFilters';
 
 /* -------------------------------------------------------------------------- */
 
@@ -40,6 +41,9 @@ export default function UnscheduledOrdersPage() {
   const [pickers, setPickers] = useState<Record<string, string>>({});
   const [savedFlash, setSavedFlash] = useState<Record<string, boolean>>({});
   const [autoResult, setAutoResult] = useState<{ count: number; late: number } | null>(null);
+  const [filterItem, setFilterItem] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const { data: orders = [], isLoading } = useQuery<UnscheduledOrderRow[]>({
     queryKey: ['unscheduled-orders'],
@@ -60,6 +64,20 @@ export default function UnscheduledOrdersPage() {
       return (data ?? []) as unknown as UnscheduledOrderRow[];
     },
   });
+
+  // Item filter options + the visible (filtered) set everything else works on.
+  const itemOptions = useMemo(
+    () => toOptions(orders.map(o => o.work_instruction?.product_name)),
+    [orders]
+  );
+  const filtersActive = !!(filterItem || dateFrom || dateTo);
+  const visibleOrders = useMemo(
+    () => orders.filter(o =>
+      (!filterItem || (o.work_instruction?.product_name ?? '') === filterItem) &&
+      inDateRange(o.required_by, dateFrom, dateTo)
+    ),
+    [orders, filterItem, dateFrom, dateTo]
+  );
 
   /* Already-scheduled orders → busy intervals per assignee, so auto-schedule
    * never books a person on top of an existing run. */
@@ -118,7 +136,7 @@ export default function UnscheduledOrdersPage() {
    * existing or just-placed run. */
   const autoScheduleMutation = useMutation({
     mutationFn: async () => {
-      const schedulable: SchedulableOrder[] = orders.map(o => ({
+      const schedulable: SchedulableOrder[] = visibleOrders.map(o => ({
         id: o.id,
         durationMinutes: o.work_instruction?.scheduled_minutes ?? 60,
         resourceKey: o.assigned_to ?? UNASSIGNED_KEY,
@@ -145,9 +163,9 @@ export default function UnscheduledOrdersPage() {
   });
 
   function handleAutoSchedule() {
-    if (orders.length === 0 || autoScheduleMutation.isPending) return;
+    if (visibleOrders.length === 0 || autoScheduleMutation.isPending) return;
     const ok = window.confirm(
-      `Auto-schedule ${orders.length} order${orders.length === 1 ? '' : 's'} into the next available ` +
+      `Auto-schedule ${visibleOrders.length} order${visibleOrders.length === 1 ? '' : 's'} into the next available ` +
       `07:00–18:00 slots, earliest required date first? Existing scheduled runs are not moved.`,
     );
     if (!ok) return;
@@ -158,13 +176,13 @@ export default function UnscheduledOrdersPage() {
   /* Group rows by required-by date so admins can prioritise what's due soonest. */
   const groups = useMemo(() => {
     const map = new Map<string, UnscheduledOrderRow[]>();
-    for (const o of orders) {
+    for (const o of visibleOrders) {
       const key = o.required_by ?? '__none__';
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(o);
     }
     return Array.from(map.entries()); // already sorted by required_by asc, then created_at
-  }, [orders]);
+  }, [visibleOrders]);
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
   function formatRequiredBy(key: string): { label: string; tone: 'overdue' | 'soon' | 'normal' | 'none' } {
@@ -212,18 +230,35 @@ export default function UnscheduledOrdersPage() {
         </div>
         <div className="ml-auto flex items-center gap-3">
           <span className="text-sm text-gray-500">
-            {isLoading ? 'Loading…' : `${orders.length} order${orders.length === 1 ? '' : 's'}`}
+            {isLoading ? 'Loading…'
+              : filtersActive ? `${visibleOrders.length} of ${orders.length} order${orders.length === 1 ? '' : 's'}`
+              : `${orders.length} order${orders.length === 1 ? '' : 's'}`}
           </span>
           <button
             onClick={handleAutoSchedule}
-            disabled={orders.length === 0 || autoScheduleMutation.isPending}
+            disabled={visibleOrders.length === 0 || autoScheduleMutation.isPending}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
             <Wand2 size={15} />
-            {autoScheduleMutation.isPending ? 'Scheduling…' : 'Auto-schedule all'}
+            {autoScheduleMutation.isPending ? 'Scheduling…'
+              : filtersActive ? `Auto-schedule ${visibleOrders.length}` : 'Auto-schedule all'}
           </button>
         </div>
       </div>
+
+      {/* Filters: item / required-by date range */}
+      <ListFilters
+        itemOptions={itemOptions}
+        item={filterItem}
+        onItem={setFilterItem}
+        dateLabel="Required"
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onDateFrom={setDateFrom}
+        onDateTo={setDateTo}
+        active={filtersActive}
+        onClear={() => { setFilterItem(''); setDateFrom(''); setDateTo(''); }}
+      />
 
       {/* Auto-schedule result banner */}
       {autoResult && (
@@ -243,11 +278,20 @@ export default function UnscheduledOrdersPage() {
         </div>
       )}
 
-      {!isLoading && orders.length === 0 && (
+      {!isLoading && visibleOrders.length === 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
           <CheckCircle size={28} className="text-emerald-500 mx-auto mb-3" />
-          <p className="text-sm font-medium text-gray-900">All caught up</p>
-          <p className="text-xs text-gray-500 mt-1">Every active production order has a scheduled start time.</p>
+          {orders.length === 0 ? (
+            <>
+              <p className="text-sm font-medium text-gray-900">All caught up</p>
+              <p className="text-xs text-gray-500 mt-1">Every active production order has a scheduled start time.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-gray-900">No orders match the current filters</p>
+              <p className="text-xs text-gray-500 mt-1">Try clearing the item or date filters.</p>
+            </>
+          )}
         </div>
       )}
 
