@@ -21,6 +21,7 @@ interface D365Config {
   client_id: string;
   buyer_group: string;
   company: string;
+  mes_message_queue: string;
   enabled: boolean;
   last_sync_at?: string;
   last_sync_status?: string;
@@ -894,6 +895,7 @@ function D365ConfigPanel({
       client_id: cfg?.client_id ?? '',
       buyer_group: cfg?.buyer_group ?? '',
       company: cfg?.company ?? '',
+      mes_message_queue: cfg?.mes_message_queue ?? 'JmgMES3P',
       enabled: cfg?.enabled ?? false,
     });
   }
@@ -983,6 +985,10 @@ function D365ConfigPanel({
                   <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide">Company (Legal Entity)</dt>
                   <dd className="text-gray-800 font-mono text-xs mt-0.5">{cfg?.company || <span className="text-gray-400 italic">environment default</span>}</dd>
                 </div>
+                <div>
+                  <dt className="text-xs font-medium text-gray-400 uppercase tracking-wide">MES Message Queue</dt>
+                  <dd className="text-gray-800 font-mono text-xs mt-0.5">{cfg?.mes_message_queue || <span className="text-gray-400 italic">not set</span>}</dd>
+                </div>
               </dl>
               <div className="flex items-center gap-2 pt-1">
                 <button
@@ -1057,7 +1063,18 @@ function D365ConfigPanel({
                     placeholder="e.g. USP2 (blank = environment default)"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  <p className="text-xs text-gray-400 mt-1">D365 legal entity code — sets <code>?company=</code> on the OData request</p>
+                  <p className="text-xs text-gray-400 mt-1">D365 legal entity code — sets <code>?company=</code> on the OData request and <code>_companyId</code> on the MES start message</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">MES Message Queue</label>
+                  <input
+                    type="text"
+                    value={form.mes_message_queue}
+                    onChange={e => setForm(f => f ? { ...f, mes_message_queue: e.target.value } : f)}
+                    placeholder="e.g. JmgMES3P"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">SysMessage queue for the <code>ProdProductionOrderStart</code> message (<code>_messageQueue</code>)</p>
                 </div>
                 <div className="flex items-center">
                   <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">

@@ -11,7 +11,7 @@ import {
   FlaskConical, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings,
   AlertTriangle, CheckCheck, PlayCircle, Ban, Trash2, Loader2, Wifi, WifiOff,
   Wrench, Beaker, Printer, UserCog, CalendarClock, Check, StickyNote, Milestone,
-  ClipboardCheck, FileText, XCircle,
+  ClipboardCheck, FileText, XCircle, Send,
 } from 'lucide-react';
 
 const STEP_ICONS: Record<StepType, React.ReactNode> = {
@@ -1091,6 +1091,49 @@ export default function ProductionOrderExecutionPage() {
   const qc = useQueryClient();
   const { profile } = useAuth();
   const [activeStepIdx, setActiveStepIdx] = useState<number | null>(null);
+  const [d365Start, setD365Start] = useState<
+    | { phase: 'idle' }
+    | { phase: 'sending' }
+    | { phase: 'sent'; queue: string }
+    | { phase: 'failed'; error: string }
+    | { phase: 'skipped'; reason: string }
+  >({ phase: 'idle' });
+
+  // Post a ProdProductionOrderStart message to the D365 SysMessage framework.
+  // Best-effort: the order is already started locally; D365 failure is surfaced
+  // but does not block production.
+  async function sendD365Start(orderId: string) {
+    setD365Start({ phase: 'sending' });
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error('Not authenticated');
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/start-d365-production-order`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+        },
+        body: JSON.stringify({ order_id: orderId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (body?.skipped) {
+        setD365Start({ phase: 'skipped', reason: body?.error ?? 'D365 integration disabled' });
+        return;
+      }
+      if (!res.ok || !body?.success) {
+        setD365Start({ phase: 'failed', error: body?.error ?? `HTTP ${res.status}` });
+        return;
+      }
+      setD365Start({ phase: 'sent', queue: body.message_queue ?? '' });
+    } catch (e) {
+      setD365Start({ phase: 'failed', error: e instanceof Error ? e.message : 'Unknown error' });
+    } finally {
+      qc.invalidateQueries({ queryKey: ['production-order', id] });
+    }
+  }
 
   const { data: order } = useQuery<ProductionOrder>({
     queryKey: ['production-order', id],
@@ -1157,6 +1200,8 @@ export default function ProductionOrderExecutionPage() {
       qc.invalidateQueries({ queryKey: ['production-order', id] });
       qc.invalidateQueries({ queryKey: ['po-steps', id] });
       setActiveStepIdx(0);
+      // Notify D365 to start the production order (non-blocking).
+      void sendD365Start(id!);
     },
   });
 
@@ -1348,6 +1393,40 @@ export default function ProductionOrderExecutionPage() {
               style={{ width: `${progress}%` }}
             />
           </div>
+        </div>
+      )}
+
+      {/* D365 production-order start message status */}
+      {d365Start.phase !== 'idle' && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <Send size={16} className="text-blue-600" />
+            <h2 className="text-sm font-semibold text-gray-900">D365 Production Order Start</h2>
+          </div>
+          {d365Start.phase === 'sending' && (
+            <div className="flex items-center gap-2 text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg p-2.5">
+              <Loader2 size={15} className="animate-spin" />
+              Posting <span className="font-mono">ProdProductionOrderStart</span> to the D365 message queue…
+            </div>
+          )}
+          {d365Start.phase === 'sent' && (
+            <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg p-2.5">
+              <CheckCircle size={15} />
+              Start message sent to D365{d365Start.queue ? <> (queue <span className="font-mono">{d365Start.queue}</span>)</> : ''}.
+            </div>
+          )}
+          {d365Start.phase === 'failed' && (
+            <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">
+              <div className="font-medium mb-0.5">Could not post start message to D365</div>
+              <div className="text-xs whitespace-pre-wrap break-words">{d365Start.error}</div>
+              <p className="text-xs text-gray-500 mt-1">The order was started locally; the D365 message can be retried.</p>
+            </div>
+          )}
+          {d365Start.phase === 'skipped' && (
+            <div className="text-sm text-yellow-800 bg-yellow-50 border border-yellow-200 rounded-lg p-2.5">
+              D365 integration is disabled — start message not sent. ({d365Start.reason})
+            </div>
+          )}
         </div>
       )}
 

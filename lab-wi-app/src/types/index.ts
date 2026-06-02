@@ -195,6 +195,10 @@ export interface ProductionOrder {
   scheduled_end?: string | null;
   started_at?: string;
   completed_at?: string;
+  /** D365 ProdProductionOrderStart message tracking (set when the order is started). */
+  d365_start_status?: 'pending' | 'sent' | 'failed' | 'skipped' | null;
+  d365_start_error?: string | null;
+  d365_start_sent_at?: string | null;
   created_at: string;
   work_instruction?: WorkInstruction;
   creator?: Profile;
