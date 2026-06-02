@@ -113,6 +113,7 @@ function emptyForm(): Partial<ReagentItem> {
     item_number: '',
     item_type: 'RM',
     product_name: '',
+    search_name: '',
     cas_number: '',
     molecular_formula: '',
     molecular_weight: undefined,
@@ -225,6 +226,18 @@ function ReagentItemModal({
                 placeholder="e.g. Sodium Chloride"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+              <p className="text-xs text-gray-400 mt-1">Friendly display name — edit freely.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Search Name</label>
+              <input
+                type="text"
+                value={form.search_name ?? ''}
+                onChange={e => set('search_name', e.target.value)}
+                placeholder="D365 product search name"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-400 mt-1">Raw value from D365 (ProductSearchName).</p>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div>
@@ -734,6 +747,9 @@ function ReagentRow({
         </td>
         <td className="px-4 py-3">
           <p className="text-sm font-medium text-gray-900">{item.product_name}</p>
+          {item.search_name && (
+            <p className="text-xs text-gray-400 font-mono mt-0.5">{item.search_name}</p>
+          )}
           {item.purity_grade && (
             <p className="text-xs text-blue-600 mt-0.5">{item.purity_grade}</p>
           )}
@@ -1220,6 +1236,7 @@ export default function ReagentItemsPage() {
       return (
         item.item_number.toLowerCase().includes(q) ||
         item.product_name.toLowerCase().includes(q) ||
+        (item.search_name ?? '').toLowerCase().includes(q) ||
         (item.cas_number ?? '').toLowerCase().includes(q) ||
         (item.molecular_formula ?? '').toLowerCase().includes(q) ||
         (item.vendor ?? '').toLowerCase().includes(q) ||
@@ -1235,6 +1252,7 @@ export default function ReagentItemsPage() {
         d365_product_id: form.d365_product_id || null,
         item_type: form.item_type ?? 'RM',
         product_name: form.product_name,
+        search_name: form.search_name || null,
         cas_number: form.cas_number || null,
         molecular_formula: form.molecular_formula || null,
         molecular_weight: form.molecular_weight ?? null,

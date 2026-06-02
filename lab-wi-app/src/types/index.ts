@@ -215,6 +215,7 @@ export interface ReagentItem {
   d365_synced_at?: string;
   item_type: ItemType;
   product_name: string;
+  search_name?: string;
   cas_number?: string;
   molecular_formula?: string;
   molecular_weight?: number;
