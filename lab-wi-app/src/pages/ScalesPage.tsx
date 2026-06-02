@@ -30,6 +30,7 @@ const EMPTY_CONFIG: ScaleConnConfig = {};
 
 const BLANK_FORM = {
   name: '',
+  barcode: '',
   model: '',
   manufacturer: '',
   serial_number: '',
@@ -267,6 +268,10 @@ function ScaleModal({
               <input value={form.serial_number} onChange={e => set('serial_number', e.target.value)} placeholder="B123456789" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
             </div>
             <div>
+              <label className="block text-xs text-gray-500 mb-1">Barcode</label>
+              <input value={form.barcode} onChange={e => set('barcode', e.target.value)} placeholder="SCL-A1" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+            <div>
               <label className="block text-xs text-gray-500 mb-1">Location</label>
               <input value={form.location} onChange={e => set('location', e.target.value)} placeholder="Lab B, Bench 3" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
             </div>
@@ -403,6 +408,7 @@ export default function ScalesPage() {
     mutationFn: async (form: FormState) => {
       const payload = {
         name:          form.name.trim(),
+        barcode:       form.barcode.trim() || null,
         model:         form.model.trim() || null,
         manufacturer:  form.manufacturer.trim() || null,
         serial_number: form.serial_number.trim() || null,
@@ -462,6 +468,7 @@ export default function ScalesPage() {
     if (!editTarget) return { ...BLANK_FORM, conn_a_config: {}, conn_b_config: {} };
     return {
       name:           editTarget.name,
+      barcode:        editTarget.barcode ?? '',
       model:          editTarget.model ?? '',
       manufacturer:   editTarget.manufacturer ?? '',
       serial_number:  editTarget.serial_number ?? '',
@@ -585,6 +592,9 @@ export default function ScalesPage() {
                         )}
                         {scale.serial_number && (
                           <p className="mt-1 text-xs text-gray-400">Serial: {scale.serial_number}</p>
+                        )}
+                        {scale.barcode && (
+                          <p className="mt-1 text-xs text-gray-400 font-mono">Barcode: {scale.barcode}</p>
                         )}
                       </td>
                     </tr>

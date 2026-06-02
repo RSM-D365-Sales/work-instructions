@@ -278,6 +278,7 @@ export interface ScaleConnConfig {
 export interface Scale {
   id: string;
   name: string;
+  barcode?: string | null;
   model?: string;
   manufacturer?: string;
   serial_number?: string;

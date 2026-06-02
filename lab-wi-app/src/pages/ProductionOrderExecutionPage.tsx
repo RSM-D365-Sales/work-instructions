@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import type { ProductionOrder, WIStep, POStep, StepType, Scale, ScaleConnConfig, Profile, QCTest, QCResult } from '../types';
+import type { ProductionOrder, WIStep, POStep, StepType, Scale, Profile, QCTest, QCResult } from '../types';
 import { calculateTolerance, cn } from '../lib/utils';
 import { evaluateQC, formatSpec } from '../lib/qc';
 import {
@@ -11,7 +11,7 @@ import {
   FlaskConical, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings,
   AlertTriangle, CheckCheck, PlayCircle, Ban, Trash2, Loader2, Wifi, WifiOff,
   Wrench, Beaker, Printer, UserCog, CalendarClock, Check, StickyNote, Milestone,
-  ClipboardCheck, FileText, XCircle, Send,
+  ClipboardCheck, FileText, XCircle, Send, ScanLine,
 } from 'lucide-react';
 
 const STEP_ICONS: Record<StepType, React.ReactNode> = {
@@ -31,50 +31,16 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   custom:           <Settings size={16} />,
 };
 
-// ─── Scale reading fetch ──────────────────────────────────────────────────────
-async function fetchScaleReading(scale: Scale): Promise<number> {
-  const conn = scale.preferred_conn === 2 && scale.conn_b_type
-    ? { type: scale.conn_b_type, config: scale.conn_b_config }
-    : { type: scale.conn_a_type, config: scale.conn_a_config };
-
-  if (conn.type === 'http_rest') {
-    const cfg = conn.config as ScaleConnConfig;
-    if (!cfg.url) throw new Error('Scale HTTP URL is not configured');
-    const res = await fetch(cfg.url, {
-      headers: cfg.auth_token ? { Authorization: cfg.auth_token } : {},
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) throw new Error(`Scale returned HTTP ${res.status}`);
-    const body = await res.json();
-    // Accept common response shapes: { weight }, { value }, { reading }, or a bare number
-    const raw = body?.weight ?? body?.value ?? body?.reading ?? body?.Weight ?? body?.Value;
-    const n = typeof body === 'number' ? body : parseFloat(raw);
-    if (isNaN(n)) throw new Error('Could not parse weight from scale response');
-    return n;
-  }
-
-  if (conn.type === 'websocket') {
-    const cfg = conn.config as ScaleConnConfig;
-    if (!cfg.url) throw new Error('Scale WebSocket URL is not configured');
-    return new Promise<number>((resolve, reject) => {
-      const ws = new WebSocket(cfg.url!);
-      const timer = setTimeout(() => { ws.close(); reject(new Error('Scale WebSocket timed out')); }, 5000);
-      ws.onmessage = (e) => {
-        clearTimeout(timer);
-        ws.close();
-        try {
-          const body = JSON.parse(e.data);
-          const raw = body?.weight ?? body?.value ?? body?.reading ?? body?.Weight ?? body?.Value;
-          const n = typeof body === 'number' ? body : parseFloat(raw);
-          if (isNaN(n)) reject(new Error('Could not parse weight from WebSocket message'));
-          else resolve(n);
-        } catch { reject(new Error('Invalid JSON from WebSocket')); }
-      };
-      ws.onerror = () => { clearTimeout(timer); reject(new Error('WebSocket connection failed')); };
-    });
-  }
-
-  throw new Error(`${conn.type.toUpperCase()} connections require server-side integration. Please enter the reading manually.`);
+// ─── Scale connect helper ────────────────────────────────────────────────────
+// Demo scales aren't physically wired up. The operator scans the scale's
+// name / barcode / serial to "connect"; the matched value is compared here.
+function scanMatchesScale(scanned: string, scale: Scale | null | undefined): boolean {
+  if (!scale) return false;
+  const v = scanned.trim().toLowerCase();
+  if (!v) return false;
+  return [scale.name, scale.barcode, scale.serial_number]
+    .filter(Boolean)
+    .some(code => code!.toLowerCase() === v);
 }
 
 // ─── Individual step execution widgets ───────────────────────────────────────
@@ -95,8 +61,9 @@ function WeighStepWidget({
   const scaleName = params.scale_name as string | undefined;
   const lotControlled = (params.lot_controlled as boolean) ?? false;
 
-  const [capturing, setCapturing] = useState(false);
-  const [captureError, setCaptureError] = useState('');
+  const [scanInput, setScanInput] = useState('');
+  const [connected, setConnected] = useState(false);
+  const [scanError, setScanError] = useState('');
 
   // Load the assigned scale's full config to get connection details
   const { data: scale } = useQuery<Scale | null>({
@@ -112,24 +79,17 @@ function WeighStepWidget({
   const measured = values.measured_weight as number | undefined;
   const result = measured != null ? calculateTolerance(measured, target, tolerance) : null;
 
-  async function captureWeight() {
-    if (!scale) return;
-    setCapturing(true);
-    setCaptureError('');
-    try {
-      const reading = await fetchScaleReading(scale);
-      const r = calculateTolerance(reading, target, tolerance);
-      onChange({
-        ...values,
-        measured_weight: reading,
-        unit,
-        in_tolerance: r.inTolerance,
-        deviation_pct: r.deviationPct,
-      });
-    } catch (e) {
-      setCaptureError(e instanceof Error ? e.message : 'Failed to read scale');
-    } finally {
-      setCapturing(false);
+  // Weight entry is unlocked when no scale is assigned (manual), or once the
+  // operator has scanned the assigned scale to "connect" it.
+  const canEnter = !scaleId || connected;
+
+  function tryConnect() {
+    if (scanMatchesScale(scanInput, scale)) {
+      setConnected(true);
+      setScanError('');
+    } else {
+      setConnected(false);
+      setScanError(`Scanned code doesn't match the assigned scale (${scaleName ?? 'unknown'}). Scan its name, barcode, or serial.`);
     }
   }
 
@@ -146,56 +106,81 @@ function WeighStepWidget({
         {scaleName && (
           <p className="text-xs text-blue-600 mt-1.5 flex items-center gap-1">
             <ScaleIcon size={12} />
-            Using scale: <strong className="ml-0.5">{scaleName}</strong>
+            Assigned scale: <strong className="ml-0.5">{scaleName}</strong>
           </p>
         )}
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Scale Reading ({unit})
-        </label>
-        <div className="flex gap-2">
-          <input
-            type="number"
-            step="0.001"
-            value={measured ?? ''}
-            onChange={e => {
-              const v = parseFloat(e.target.value);
-              const r = isNaN(v) ? null : calculateTolerance(v, target, tolerance);
-              onChange({
-                ...values,
-                measured_weight: isNaN(v) ? undefined : v,
-                unit,
-                in_tolerance: r?.inTolerance ?? undefined,
-                deviation_pct: r?.deviationPct ?? undefined,
-              });
-            }}
-            disabled={locked}
-            placeholder={`Enter scale reading in ${unit}`}
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
-          />
-          <button
-            onClick={captureWeight}
-            disabled={locked || capturing || !scale}
-            title={!scaleId ? 'No scale assigned to this step' : !scale ? 'Loading scale…' : `Read from ${scaleName}`}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          >
-            {capturing ? <Loader2 size={15} className="animate-spin" /> : scale ? <Wifi size={15} /> : <WifiOff size={15} />}
-            Capture Weight
-          </button>
+      {/* Scan-to-connect (only when a scale is assigned and not yet connected) */}
+      {scaleId && !connected && !locked && (
+        <div className="rounded-xl border border-gray-200 p-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
+            <ScanLine size={14} className="text-gray-500" />
+            Scan the scale to connect
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              autoFocus
+              value={scanInput}
+              onChange={e => setScanInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); tryConnect(); } }}
+              disabled={locked || !scale}
+              placeholder={scale ? `Scan name / barcode (e.g. ${scale.barcode ?? scale.name})` : 'Loading scale…'}
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+            />
+            <button
+              onClick={tryConnect}
+              disabled={locked || !scale || !scanInput.trim()}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              <WifiOff size={15} /> Connect
+            </button>
+          </div>
+          {scanError
+            ? <p className="text-xs text-red-600 mt-1">{scanError}</p>
+            : <p className="text-xs text-gray-400 mt-1">Scan the balance’s barcode or type its name to begin the live capture.</p>}
         </div>
+      )}
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+          {connected ? 'Live Reading' : 'Scale Reading'} ({unit})
+          {connected && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-green-700">
+              <Wifi size={12} />
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+              </span>
+              Connected · {scaleName}
+            </span>
+          )}
+        </label>
+        <input
+          type="number"
+          step="0.001"
+          value={measured ?? ''}
+          onChange={e => {
+            const v = parseFloat(e.target.value);
+            const r = isNaN(v) ? null : calculateTolerance(v, target, tolerance);
+            onChange({
+              ...values,
+              measured_weight: isNaN(v) ? undefined : v,
+              unit,
+              in_tolerance: r?.inTolerance ?? undefined,
+              deviation_pct: r?.deviationPct ?? undefined,
+            });
+          }}
+          disabled={locked || !canEnter}
+          placeholder={canEnter ? `Live weight from ${scaleName ?? 'scale'} (${unit})` : 'Scan the scale to enable live capture'}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+        />
         {!scaleId && (
           <p className="text-xs text-amber-600 mt-1">No scale assigned — enter the reading manually.</p>
         )}
-        {scaleId && !scale && !capturing && (
-          <p className="text-xs text-gray-400 mt-1">Loading scale configuration…</p>
-        )}
-        {captureError && (
-          <p className="text-xs text-red-600 mt-1">{captureError}</p>
-        )}
-        {!captureError && scale && (
-          <p className="text-xs text-gray-400 mt-1">Click "Capture Weight" to read from <strong>{scaleName}</strong>, or enter manually.</p>
+        {connected && (
+          <p className="text-xs text-gray-400 mt-1">Reading streamed from <strong>{scaleName}</strong> in real time.</p>
         )}
       </div>
 
