@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { ReagentOrder, ReagentOrderStatus } from '../types';
-import { ShoppingCart, Plus, Search, AlertTriangle, Calendar, Building2, Truck } from 'lucide-react';
+import { ShoppingCart, Plus, Search, AlertTriangle, Calendar, Building2, Truck, Paperclip } from 'lucide-react';
 import { formatDate, cn } from '../lib/utils';
 
 const STATUS_STYLES: Record<ReagentOrderStatus, string> = {
@@ -217,6 +217,11 @@ export default function ReagentOrdersListPage() {
               </span>
             )}
             {o.order_number}
+            {o.notes?.trim() && (
+              <span title={o.notes} className="inline-flex text-indigo-600 cursor-help" aria-label="Order note">
+                <Paperclip size={13} />
+              </span>
+            )}
           </div>
         </td>
         <td className="px-4 py-3">
