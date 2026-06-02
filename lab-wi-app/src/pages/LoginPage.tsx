@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { FlaskConical, Zap } from 'lucide-react';
 
 const DEMO_ACCOUNTS = [
+  { label: 'Lab Scientist', email: 'lab@demolab.com', role: 'lab', name: 'Demo Lab Scientist', color: 'bg-sky-600 hover:bg-sky-700' },
   { label: 'Author', email: 'author@demolab.com', role: 'author', name: 'Demo Author', color: 'bg-violet-600 hover:bg-violet-700' },
   { label: 'Approver', email: 'approver@demolab.com', role: 'approver', name: 'Demo Approver', color: 'bg-emerald-600 hover:bg-emerald-700' },
   { label: 'Operator', email: 'operator@demolab.com', role: 'operator', name: 'Demo Operator', color: 'bg-amber-600 hover:bg-amber-700' },
@@ -156,7 +157,7 @@ export default function LoginPage() {
             <Zap size={14} className="text-gray-400" />
             <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Demo Mode</span>
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {DEMO_ACCOUNTS.map(account => (
               <button
                 key={account.role}

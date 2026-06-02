@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import {
   ClipboardList, PlayCircle, CheckCircle, Clock,
-  ShoppingCart, Plus, Calendar, Building2, Truck, AlertTriangle, Paperclip,
+  ShoppingCart, Plus, Calendar, Building2, Truck, AlertTriangle, Paperclip, CircleAlert,
 } from 'lucide-react';
 import ProductionGantt from '../components/ProductionGantt';
 import type { ReagentOrder, ReagentOrderStatus } from '../types';
@@ -333,7 +333,7 @@ function LabDashboard() {
                     <tr key={o.id} className="hover:bg-gray-50 align-top">
                       <td className="px-4 py-3 font-mono text-xs">
                         <div className="flex items-center gap-2">
-                          {o.high_priority && <AlertTriangle size={12} className="text-red-600" />}
+                          {o.high_priority && <CircleAlert size={18} strokeWidth={2.5} className="text-red-600" aria-label="High priority" />}
                           {o.order_number}
                           {o.notes?.trim() && (
                             <span title={o.notes} className="inline-flex text-indigo-600 cursor-help" aria-label="Order note">
