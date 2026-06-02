@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, CheckCircle, ArrowLeft } from 'lucide-react';
+import { CalendarClock, CheckCircle, ArrowLeft, Wand2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { cn } from '../lib/utils';
+import { planSchedule, UNASSIGNED_KEY, type SchedulableOrder, type BusyInterval } from '../lib/autoSchedule';
 
 /* -------------------------------------------------------------------------- */
 
@@ -38,6 +39,7 @@ export default function UnscheduledOrdersPage() {
   const qc = useQueryClient();
   const [pickers, setPickers] = useState<Record<string, string>>({});
   const [savedFlash, setSavedFlash] = useState<Record<string, boolean>>({});
+  const [autoResult, setAutoResult] = useState<{ count: number; late: number } | null>(null);
 
   const { data: orders = [], isLoading } = useQuery<UnscheduledOrderRow[]>({
     queryKey: ['unscheduled-orders'],
@@ -58,6 +60,35 @@ export default function UnscheduledOrdersPage() {
       return (data ?? []) as unknown as UnscheduledOrderRow[];
     },
   });
+
+  /* Already-scheduled orders → busy intervals per assignee, so auto-schedule
+   * never books a person on top of an existing run. */
+  const { data: busyRows = [] } = useQuery({
+    queryKey: ['scheduled-busy'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('production_orders')
+        .select('id, assigned_to, scheduled_start, scheduled_end')
+        .not('scheduled_start', 'is', null)
+        .neq('status', 'cancelled');
+      if (error) throw error;
+      return (data ?? []) as { id: string; assigned_to: string | null; scheduled_start: string; scheduled_end: string | null }[];
+    },
+  });
+
+  const busyByResource = useMemo(() => {
+    const m = new Map<string, BusyInterval[]>();
+    for (const r of busyRows) {
+      if (!r.scheduled_start) continue;
+      const start = new Date(r.scheduled_start).getTime();
+      const end = r.scheduled_end ? new Date(r.scheduled_end).getTime() : start + 60 * 60_000;
+      const key = r.assigned_to ?? UNASSIGNED_KEY;
+      const arr = m.get(key);
+      if (arr) arr.push({ start, end });
+      else m.set(key, [{ start, end }]);
+    }
+    return m;
+  }, [busyRows]);
 
   const scheduleMutation = useMutation({
     mutationFn: async (args: { id: string; startIso: string; endIso: string }) => {
@@ -81,6 +112,48 @@ export default function UnscheduledOrdersPage() {
       }, 1500);
     },
   });
+
+  /* Auto-schedule every unscheduled order: earliest required-date first, packed
+   * into the next free 07:00–18:00 slot per assignee, never overlapping an
+   * existing or just-placed run. */
+  const autoScheduleMutation = useMutation({
+    mutationFn: async () => {
+      const schedulable: SchedulableOrder[] = orders.map(o => ({
+        id: o.id,
+        durationMinutes: o.work_instruction?.scheduled_minutes ?? 60,
+        resourceKey: o.assigned_to ?? UNASSIGNED_KEY,
+        requiredBy: o.required_by,
+        createdAt: o.created_at,
+      }));
+      const assignments = planSchedule(schedulable, busyByResource, { from: new Date() });
+      await Promise.all(assignments.map(async a => {
+        const { error } = await supabase
+          .from('production_orders')
+          .update({ scheduled_start: a.start.toISOString(), scheduled_end: a.end.toISOString() })
+          .eq('id', a.id);
+        if (error) throw error;
+      }));
+      return { count: assignments.length, late: assignments.filter(a => a.late).length };
+    },
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['unscheduled-orders'] });
+      qc.invalidateQueries({ queryKey: ['scheduled-busy'] });
+      qc.invalidateQueries({ queryKey: ['gantt-orders'] });
+      qc.invalidateQueries({ queryKey: ['production-orders'] });
+      setAutoResult(res);
+    },
+  });
+
+  function handleAutoSchedule() {
+    if (orders.length === 0 || autoScheduleMutation.isPending) return;
+    const ok = window.confirm(
+      `Auto-schedule ${orders.length} order${orders.length === 1 ? '' : 's'} into the next available ` +
+      `07:00–18:00 slots, earliest required date first? Existing scheduled runs are not moved.`,
+    );
+    if (!ok) return;
+    setAutoResult(null);
+    autoScheduleMutation.mutate();
+  }
 
   /* Group rows by required-by date so admins can prioritise what's due soonest. */
   const groups = useMemo(() => {
@@ -137,10 +210,38 @@ export default function UnscheduledOrdersPage() {
             Production orders waiting for a scheduled start time.
           </p>
         </div>
-        <div className="ml-auto text-sm text-gray-500">
-          {isLoading ? 'Loading…' : `${orders.length} order${orders.length === 1 ? '' : 's'}`}
+        <div className="ml-auto flex items-center gap-3">
+          <span className="text-sm text-gray-500">
+            {isLoading ? 'Loading…' : `${orders.length} order${orders.length === 1 ? '' : 's'}`}
+          </span>
+          <button
+            onClick={handleAutoSchedule}
+            disabled={orders.length === 0 || autoScheduleMutation.isPending}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            <Wand2 size={15} />
+            {autoScheduleMutation.isPending ? 'Scheduling…' : 'Auto-schedule all'}
+          </button>
         </div>
       </div>
+
+      {/* Auto-schedule result banner */}
+      {autoResult && (
+        <div className={cn(
+          'flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm',
+          autoResult.late > 0 ? 'bg-amber-50 border-amber-200 text-amber-800'
+                              : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+        )}>
+          {autoResult.late > 0 ? <AlertTriangle size={16} /> : <CheckCircle size={16} />}
+          <span>
+            Scheduled {autoResult.count} order{autoResult.count === 1 ? '' : 's'} into the next open slots.
+            {autoResult.late > 0 && ` ${autoResult.late} finish after their required date — review these.`}
+          </span>
+          <button onClick={() => setAutoResult(null)} className="ml-auto text-xs underline opacity-70 hover:opacity-100">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {!isLoading && orders.length === 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
