@@ -69,6 +69,15 @@ function fmtDay(d: Date): string {
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
+/** Compact hour label for the 1-day view, e.g. "7a", "12p", "5p". */
+function fmtHour(d: Date): string {
+  let h = d.getHours();
+  const ap = h < 12 ? 'a' : 'p';
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}${ap}`;
+}
+
 function diffDays(a: Date, b: Date): number {
   return (a.getTime() - b.getTime()) / DAY_MS;
 }
@@ -134,6 +143,7 @@ const STATUS_DOT_CLASS: Record<GanttOrderRow['status'], string> = {
 /* -------------------------------------------------------------------------- */
 
 const WINDOW_OPTIONS = [
+  { label: '1 day',   days: 1  },
   { label: '3 days',  days: 3  },
   { label: '7 days',  days: 7  },
   { label: '14 days', days: 14 },
@@ -220,12 +230,25 @@ export default function ProductionGantt() {
     return out;
   }, [orders, rangeStart, rangeEnd]);
 
-  /* ----- Day cells ----- */
+  /* ----- Axis cells ----- */
+  // The 1-day view swaps the day columns for an hourly (24-column) axis so the
+  // intra-day schedule is legible; bars still position by fraction of the range.
+  const isDayView = windowDays === 1;
+
   const dayCells = useMemo(() => {
     const cells: Date[] = [];
     for (let i = 0; i < windowDays; i++) cells.push(addDays(rangeStart, i));
     return cells;
   }, [rangeStart, windowDays]);
+
+  const hourCells = useMemo(() => {
+    const cells: Date[] = [];
+    for (let h = 0; h < 24; h++) cells.push(new Date(rangeStart.getTime() + h * 60 * 60 * 1000));
+    return cells;
+  }, [rangeStart]);
+
+  const axisCells   = isDayView ? hourCells : dayCells;
+  const columnCount = isDayView ? 24 : windowDays;
 
   const totalSpanMs = rangeEnd.getTime() - rangeStart.getTime();
   const todayOffsetPct = (() => {
@@ -398,7 +421,12 @@ export default function ProductionGantt() {
             {WINDOW_OPTIONS.map(opt => (
               <button
                 key={opt.days}
-                onClick={() => setWindowDays(opt.days)}
+                onClick={() => {
+                  setWindowDays(opt.days);
+                  // The 1-day view centres on today (the default anchor is
+                  // today-1, which would otherwise show yesterday).
+                  if (opt.days === 1) setAnchor(startOfDay(new Date()));
+                }}
                 className={cn(
                   'px-2.5 py-1.5 font-medium transition-colors',
                   windowDays === opt.days
@@ -427,30 +455,37 @@ export default function ProductionGantt() {
           </span>
         )}
         <span className="ml-auto text-gray-500">
-          {fmtDay(rangeStart)} – {fmtDay(addDays(rangeEnd, -1))}
+          {isDayView
+            ? rangeStart.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })
+            : `${fmtDay(rangeStart)} – ${fmtDay(addDays(rangeEnd, -1))}`}
         </span>
       </div>
 
       {/* Body */}
       <div className="overflow-x-auto">
-        <div className="min-w-[760px]">
-          {/* Day header */}
+        <div className={isDayView ? 'min-w-[1100px]' : 'min-w-[760px]'}>
+          {/* Day / hour header */}
           <div className="grid border-b border-gray-100 bg-gray-50/60"
-               style={{ gridTemplateColumns: `220px repeat(${windowDays}, minmax(0,1fr))` }}>
+               style={{ gridTemplateColumns: `220px repeat(${columnCount}, minmax(0,1fr))` }}>
             <div className="px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">
               {isAdmin ? 'Technician' : 'Owner'}
             </div>
-            {dayCells.map((d, i) => {
-              const isToday = startOfDay(new Date()).getTime() === d.getTime();
+            {axisCells.map((c, i) => {
+              const now = new Date();
+              const isCurrent = isDayView
+                ? startOfDay(now).getTime() === rangeStart.getTime() && now.getHours() === c.getHours()
+                : startOfDay(now).getTime() === c.getTime();
+              // In the hourly view, label every 2nd hour to avoid clutter.
+              const label = isDayView ? (c.getHours() % 2 === 0 ? fmtHour(c) : '') : fmtDay(c);
               return (
                 <div
                   key={i}
                   className={cn(
                     'px-1 py-2 text-[11px] font-medium text-center border-l border-gray-100',
-                    isToday ? 'text-blue-700 bg-blue-50/60' : 'text-gray-500'
+                    isCurrent ? 'text-blue-700 bg-blue-50/60' : 'text-gray-500'
                   )}
                 >
-                  {fmtDay(d)}
+                  {label}
                 </div>
               );
             })}
@@ -469,7 +504,7 @@ export default function ProductionGantt() {
             <div
               key={row.ownerId}
               className="grid border-b border-gray-50 last:border-b-0"
-              style={{ gridTemplateColumns: `220px repeat(${windowDays}, minmax(0,1fr))` }}
+              style={{ gridTemplateColumns: `220px repeat(${columnCount}, minmax(0,1fr))` }}
             >
               {/* Owner label */}
               <div className="px-3 py-3 flex items-center gap-2 border-r border-gray-100">
@@ -482,17 +517,17 @@ export default function ProductionGantt() {
                 </div>
               </div>
 
-              {/* Lane (spans all day columns) */}
+              {/* Lane (spans all axis columns) */}
               <div
                 className="relative h-14"
-                style={{ gridColumn: `2 / span ${windowDays}` }}
+                style={{ gridColumn: `2 / span ${columnCount}` }}
               >
-                {/* Day grid lines */}
+                {/* Grid lines */}
                 <div
                   className="absolute inset-0 grid pointer-events-none"
-                  style={{ gridTemplateColumns: `repeat(${windowDays}, minmax(0,1fr))` }}
+                  style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0,1fr))` }}
                 >
-                  {dayCells.map((_, i) => (
+                  {axisCells.map((_, i) => (
                     <div key={i} className="border-l border-gray-100 first:border-l-0" />
                   ))}
                 </div>
