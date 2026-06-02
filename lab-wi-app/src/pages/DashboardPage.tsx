@@ -2,10 +2,22 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { ClipboardList, PlayCircle, CheckCircle, Clock } from 'lucide-react';
+import {
+  ClipboardList, PlayCircle, CheckCircle, Clock,
+  ShoppingCart, Plus, Calendar, Building2, Truck, AlertTriangle,
+} from 'lucide-react';
 import ProductionGantt from '../components/ProductionGantt';
+import type { ReagentOrder, ReagentOrderStatus } from '../types';
+import { formatDate, cn } from '../lib/utils';
 
 export default function DashboardPage() {
+  const { profile } = useAuth();
+  // The Lab Scientist gets a focused, order-only dashboard scoped to their lab.
+  if (profile?.role === 'lab') return <LabDashboard />;
+  return <StandardDashboard />;
+}
+
+function StandardDashboard() {
   const { profile } = useAuth();
 
   const { data: wiStats } = useQuery({
@@ -125,7 +137,7 @@ export default function DashboardPage() {
             <Link to="/production-orders" className="text-sm text-blue-600 hover:underline">View all</Link>
           </div>
           <div className="divide-y divide-gray-50">
-            {recentOrders.map((order: any) => (
+            {recentOrders.map(order => (
               <Link
                 key={order.id}
                 to={`/production-orders/${order.id}`}
@@ -169,5 +181,203 @@ function POStatusBadge({ status }: { status: string }) {
     <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${map[status] ?? ''}`}>
       {status.replace('_', ' ')}
     </span>
+  );
+}
+
+// ─── Lab Scientist dashboard ─────────────────────────────────────────────────
+// A focused, order-only view scoped to the user's default lab — no production /
+// authoring / KPI content from the standard dashboard.
+const RO_STATUS_STYLES: Record<ReagentOrderStatus, string> = {
+  pending:     'bg-yellow-100 text-yellow-800',
+  in_progress: 'bg-indigo-100 text-indigo-800',
+  fulfilled:   'bg-green-100 text-green-800',
+  cancelled:   'bg-gray-100 text-gray-600',
+};
+const RO_STATUS_LABELS: Record<ReagentOrderStatus, string> = {
+  pending:     'Pending',
+  in_progress: 'In Progress',
+  fulfilled:   'Fulfilled',
+  cancelled:   'Cancelled',
+};
+
+function LabDashboard() {
+  const { profile } = useAuth();
+  const labId = profile?.default_lab_id ?? null;
+
+  const { data: lab } = useQuery({
+    queryKey: ['lab', labId],
+    enabled: !!labId,
+    queryFn: async () => {
+      const { data } = await supabase.from('labs').select('id, name, warehouse_id').eq('id', labId!).single();
+      return data;
+    },
+  });
+
+  const { data: orders = [], isLoading } = useQuery<ReagentOrder[]>({
+    queryKey: ['lab-reagent-orders', labId],
+    enabled: !!labId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('reagent_orders')
+        .select(`
+          *,
+          items:reagent_order_items(
+            id, line_number, quantity, unit,
+            delivered_quantity, from_location, to_location, lot_number, delivered_at,
+            reagent_item:reagent_items(id, item_number, product_name, unit_of_measure)
+          ),
+          reagent_item:reagent_items(id, item_number, product_name, unit_of_measure),
+          lab:labs(id, name, warehouse_id)
+        `)
+        .eq('lab_id', labId!)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as ReagentOrder[];
+    },
+  });
+
+  function linesOf(o: ReagentOrder) {
+    const items = (o.items ?? []).slice().sort((a, b) => a.line_number - b.line_number);
+    if (items.length > 0) return items;
+    if (o.reagent_item && o.quantity != null) {
+      return [{
+        id: 'legacy', order_id: o.id, line_number: 1,
+        reagent_item_id: o.reagent_item.id, quantity: o.quantity,
+        unit: o.unit ?? o.reagent_item.unit_of_measure,
+        created_at: o.created_at, reagent_item: o.reagent_item,
+      }];
+    }
+    return [];
+  }
+
+  const counts = orders.reduce((acc, o) => {
+    acc[o.status] = (acc[o.status] ?? 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="bg-sky-600 text-white p-2.5 rounded-xl">
+            <ShoppingCart size={22} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">My Reagent Orders</h1>
+            <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1.5">
+              {lab
+                ? <><Building2 size={13} className="text-gray-400" /> {lab.name}{lab.warehouse_id ? ` · ${lab.warehouse_id}` : ''}</>
+                : 'Orders for your lab'}
+            </p>
+          </div>
+        </div>
+        {labId && (
+          <Link
+            to="/reagent-orders/new"
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
+          >
+            <Plus size={16} /> New Order
+          </Link>
+        )}
+      </div>
+
+      {/* No default lab → prompt to set one */}
+      {!labId ? (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-sm text-amber-800 flex items-start gap-2">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <div>
+            <p className="font-medium">No default lab selected</p>
+            <p className="mt-0.5">Choose your lab in the selector at the bottom of the sidebar to see and place reagent orders.</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Status summary */}
+          <div className="flex flex-wrap gap-2">
+            {(['pending', 'in_progress', 'fulfilled'] as ReagentOrderStatus[]).map(s => (
+              <span key={s} className={cn('inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium', RO_STATUS_STYLES[s])}>
+                {RO_STATUS_LABELS[s]}
+                <span className="font-bold">{counts[s] ?? 0}</span>
+              </span>
+            ))}
+          </div>
+
+          {/* Orders list */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                <tr>
+                  <th className="text-left px-4 py-2.5 font-medium">Order #</th>
+                  <th className="text-left px-4 py-2.5 font-medium">Items</th>
+                  <th className="text-left px-4 py-2.5 font-medium">Needed By</th>
+                  <th className="text-left px-4 py-2.5 font-medium">Status</th>
+                  <th className="text-left px-4 py-2.5 font-medium">Delivery</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {isLoading ? (
+                  <tr><td colSpan={5} className="text-center py-8 text-gray-400">Loading…</td></tr>
+                ) : orders.length === 0 ? (
+                  <tr><td colSpan={5} className="text-center py-12 text-gray-400">
+                    <ShoppingCart size={28} className="mx-auto text-gray-300 mb-2" />
+                    No reagent orders yet.
+                    <div className="mt-2">
+                      <Link to="/reagent-orders/new" className="text-blue-600 hover:underline">Place your first order</Link>
+                    </div>
+                  </td></tr>
+                ) : orders.map(o => {
+                  const lines = linesOf(o);
+                  const delivered = lines.some(li => li.delivered_at);
+                  return (
+                    <tr key={o.id} className="hover:bg-gray-50 align-top">
+                      <td className="px-4 py-3 font-mono text-xs">
+                        <div className="flex items-center gap-2">
+                          {o.high_priority && <AlertTriangle size={12} className="text-red-600" />}
+                          {o.order_number}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {lines.length === 0 ? <span className="text-xs text-gray-400">—</span> : (
+                          <ul className="space-y-0.5">
+                            {lines.map(li => (
+                              <li key={li.id} className="flex items-baseline gap-2">
+                                <span className="text-gray-900 font-medium">{li.reagent_item?.product_name ?? '—'}</span>
+                                <span className="text-xs text-gray-500 font-mono">{li.reagent_item?.item_number}</span>
+                                <span className="ml-auto text-xs text-gray-700 whitespace-nowrap">{li.quantity} <span className="text-gray-500">{li.unit}</span></span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="flex items-center gap-1.5 text-gray-700">
+                          <Calendar size={12} className="text-gray-400" />
+                          {formatDate(o.requested_for_date)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', RO_STATUS_STYLES[o.status])}>
+                          {RO_STATUS_LABELS[o.status]}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {delivered ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700">
+                            <Truck size={12} /> Delivered
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
