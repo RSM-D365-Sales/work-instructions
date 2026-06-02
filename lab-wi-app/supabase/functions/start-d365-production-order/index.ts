@@ -36,6 +36,7 @@ const corsHeaders: Record<string, string> = {
 interface ProductionOrderRow {
   id: string;
   production_order_number: string | null;
+  d365_prod_id: string | null;
   status: string;
 }
 
@@ -124,11 +125,21 @@ Deno.serve(async (req: Request) => {
   // Load the production order
   const orderResp = await admin
     .from('production_orders')
-    .select('id, production_order_number, status')
+    .select('id, production_order_number, d365_prod_id, status')
     .eq('id', orderId)
     .single();
   if (orderResp.error || !orderResp.data) return json({ error: 'Production order not found' }, 404);
   const order = orderResp.data as unknown as ProductionOrderRow;
+
+  // Only orders that originated in D365 exist there to be started. Manually
+  // created orders (no d365_prod_id) are skipped — there is nothing to start.
+  if (!order.d365_prod_id?.trim()) {
+    await admin.from('production_orders').update({
+      d365_start_status: 'skipped',
+      d365_start_error: 'Order was created manually (no D365 production order) — start message not sent.',
+    }).eq('id', orderId);
+    return json({ success: false, skipped: true, error: 'Manual order — not started in D365' });
+  }
 
   const prodNumber = order.production_order_number?.trim();
   if (!prodNumber) {

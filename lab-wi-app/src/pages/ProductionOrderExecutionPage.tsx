@@ -1205,8 +1205,9 @@ export default function ProductionOrderExecutionPage() {
       qc.invalidateQueries({ queryKey: ['production-order', id] });
       qc.invalidateQueries({ queryKey: ['po-steps', id] });
       setActiveStepIdx(0);
-      // Notify D365 to start the production order (non-blocking).
-      void sendD365Start(id!);
+      // Notify D365 to start the production order — only for orders that
+      // originated in D365 (manual orders have no D365 order to start).
+      if (order?.d365_prod_id) void sendD365Start(id!);
     },
   });
 
