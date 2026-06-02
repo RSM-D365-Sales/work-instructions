@@ -57,40 +57,43 @@ function WeighStepWidget({
   const unit = params.unit as string ?? 'g';
   const tolerance = params.tolerance_pct as number ?? 2;
   const materialName = params.material_name as string ?? 'Material';
-  const scaleId = params.scale_id as string | undefined;
-  const scaleName = params.scale_name as string | undefined;
   const lotControlled = (params.lot_controlled as boolean) ?? false;
 
   const [scanInput, setScanInput] = useState('');
-  const [connected, setConnected] = useState(false);
   const [scanError, setScanError] = useState('');
 
-  // Load the assigned scale's full config to get connection details
-  const { data: scale } = useQuery<Scale | null>({
-    queryKey: ['scale-detail', scaleId],
-    enabled: !!scaleId,
+  // The operator picks the bench scale at run time — load all active scales.
+  const { data: scales = [] } = useQuery<Scale[]>({
+    queryKey: ['active-scales'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('scales').select('*').eq('id', scaleId!).single();
+      const { data, error } = await supabase
+        .from('scales').select('*').eq('status', 'active').order('name');
       if (error) throw error;
-      return data as Scale;
+      return data as Scale[];
     },
   });
+
+  // The chosen scale is recorded on the step result, so it persists/locks.
+  const connectedScale = scales.find(s => s.id === (values.scale_id as string | undefined)) ?? null;
+  const connected = !!connectedScale;
+  const scaleName = connectedScale?.name ?? (values.scale_name as string | undefined);
+  const canEnter = connected;
 
   const measured = values.measured_weight as number | undefined;
   const result = measured != null ? calculateTolerance(measured, target, tolerance) : null;
 
-  // Weight entry is unlocked when no scale is assigned (manual), or once the
-  // operator has scanned the assigned scale to "connect" it.
-  const canEnter = !scaleId || connected;
-
-  function tryConnect() {
-    if (scanMatchesScale(scanInput, scale)) {
-      setConnected(true);
-      setScanError('');
-    } else {
-      setConnected(false);
-      setScanError(`Scanned code doesn't match the assigned scale (${scaleName ?? 'unknown'}). Scan its name, barcode, or serial.`);
-    }
+  function connectScale(s: Scale) {
+    onChange({ ...values, scale_id: s.id, scale_name: s.name });
+    setScanInput('');
+    setScanError('');
+  }
+  function disconnectScale() {
+    onChange({ ...values, scale_id: undefined, scale_name: undefined });
+  }
+  function tryScan() {
+    const match = scales.find(s => scanMatchesScale(scanInput, s));
+    if (match) connectScale(match);
+    else setScanError('No active scale matches that scan. Try the scale name, barcode, or serial.');
   }
 
   return (
@@ -103,20 +106,20 @@ function WeighStepWidget({
           Target: <strong>{target} {unit}</strong> &plusmn; {tolerance}%
           {' '}(allowed range: <strong>{(target * (1 - tolerance / 100)).toFixed(3)}</strong> – <strong>{(target * (1 + tolerance / 100)).toFixed(3)} {unit}</strong>)
         </p>
-        {scaleName && (
-          <p className="text-xs text-blue-600 mt-1.5 flex items-center gap-1">
-            <ScaleIcon size={12} />
-            Assigned scale: <strong className="ml-0.5">{scaleName}</strong>
-          </p>
-        )}
+        <p className="text-xs text-blue-600 mt-1.5 flex items-center gap-1">
+          <ScaleIcon size={12} />
+          {connected
+            ? <>Weighing on <strong className="ml-0.5">{scaleName}</strong></>
+            : <>Scan or select the scale at your bench to begin.</>}
+        </p>
       </div>
 
-      {/* Scan-to-connect (only when a scale is assigned and not yet connected) */}
-      {scaleId && !connected && !locked && (
-        <div className="rounded-xl border border-gray-200 p-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
+      {/* Select / scan the bench scale (required before entering a weight) */}
+      {!connected && !locked && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 space-y-3">
+          <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
             <ScanLine size={14} className="text-gray-500" />
-            Scan the scale to connect
+            Connect your bench scale
           </label>
           <div className="flex gap-2">
             <input
@@ -124,22 +127,36 @@ function WeighStepWidget({
               autoFocus
               value={scanInput}
               onChange={e => setScanInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); tryConnect(); } }}
-              disabled={locked || !scale}
-              placeholder={scale ? `Scan name / barcode (e.g. ${scale.barcode ?? scale.name})` : 'Loading scale…'}
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); tryScan(); } }}
+              placeholder="Scan scale name / barcode (e.g. SCL-A1)"
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
-              onClick={tryConnect}
-              disabled={locked || !scale || !scanInput.trim()}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              onClick={tryScan}
+              disabled={!scanInput.trim()}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
             >
               <WifiOff size={15} /> Connect
             </button>
           </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">or choose</span>
+            <select
+              value=""
+              onChange={e => { const s = scales.find(x => x.id === e.target.value); if (s) connectScale(s); }}
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select a scale at your bench…</option>
+              {scales.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name}{s.barcode ? ` · ${s.barcode}` : ''}{s.location ? ` — ${s.location}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
           {scanError
-            ? <p className="text-xs text-red-600 mt-1">{scanError}</p>
-            : <p className="text-xs text-gray-400 mt-1">Scan the balance’s barcode or type its name to begin the live capture.</p>}
+            ? <p className="text-xs text-red-600">{scanError}</p>
+            : <p className="text-xs text-gray-500">Scan the balance’s barcode, or pick it from the list, to start the live capture.</p>}
         </div>
       )}
 
@@ -155,6 +172,11 @@ function WeighStepWidget({
               </span>
               Connected · {scaleName}
             </span>
+          )}
+          {connected && !locked && (
+            <button onClick={disconnectScale} className="ml-auto text-[11px] text-gray-400 hover:text-gray-700 underline">
+              change scale
+            </button>
           )}
         </label>
         <input
@@ -173,12 +195,9 @@ function WeighStepWidget({
             });
           }}
           disabled={locked || !canEnter}
-          placeholder={canEnter ? `Live weight from ${scaleName ?? 'scale'} (${unit})` : 'Scan the scale to enable live capture'}
+          placeholder={canEnter ? `Live weight from ${scaleName ?? 'scale'} (${unit})` : 'Connect a scale to enable live capture'}
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
         />
-        {!scaleId && (
-          <p className="text-xs text-amber-600 mt-1">No scale assigned — enter the reading manually.</p>
-        )}
         {connected && (
           <p className="text-xs text-gray-400 mt-1">Reading streamed from <strong>{scaleName}</strong> in real time.</p>
         )}
@@ -674,7 +693,8 @@ function StepCard({ wiStep, poStep, index, isActive, onActivate, onComplete, onS
   function canComplete(): boolean {
     if (stepType === 'weigh') {
       const lotOk = !(params.lot_controlled as boolean) || !!(values.lot_number as string)?.trim();
-      return (values.measured_weight != null) && (values.in_tolerance === true) && lotOk;
+      const scaleOk = !!(values.scale_id as string | undefined);
+      return scaleOk && (values.measured_weight != null) && (values.in_tolerance === true) && lotOk;
     }
     if (stepType === 'gather_inputs') {
       const inputs = params.inputs as { material_name: string }[] ?? [];

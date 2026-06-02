@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import type { StepTemplate, WIStep, WorkInstruction, StepType, Scale } from '../types';
+import type { StepTemplate, WIStep, WorkInstruction, StepType } from '../types';
 import {
   Plus, Trash2, GripVertical, Save, Send, ChevronDown, ChevronUp, ArrowLeft,
   FlaskConical, Scale as ScaleIcon, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings,
@@ -35,14 +35,12 @@ function StepParamEditor({
   params,
   onChange,
   gatheredInputs = [],
-  scales = [],
   reagentItems = [],
 }: {
   stepType: StepType;
   params: Record<string, unknown>;
   onChange: (p: Record<string, unknown>) => void;
   gatheredInputs?: { material_name: string; quantity: number; unit: string; lot_controlled?: boolean }[];
-  scales?: Pick<Scale, 'id' | 'name' | 'conn_a_type' | 'conn_b_type' | 'status'>[];
   reagentItems?: { id: string; item_number: string; product_name: string; unit_of_measure: string; lot_controlled: boolean }[];
 }) {
   function set(key: string, value: unknown) {
@@ -217,7 +215,6 @@ function StepParamEditor({
     case 'weigh': {
       const weighUnits = ['g','kg','mg','mL','L','ea','tube'];
       const hasGatheredInputs = gatheredInputs.length > 0;
-      const activeScales = scales.filter(s => s.status === 'active');
       function selectMaterial(name: string) {
         const found = gatheredInputs.find(i => i.material_name === name);
         onChange({
@@ -225,10 +222,6 @@ function StepParamEditor({
           material_name: name,
           ...(found ? { target_weight: found.quantity, unit: found.unit, lot_controlled: found.lot_controlled ?? false } : {}),
         });
-      }
-      function selectScale(id: string) {
-        const found = scales.find(s => s.id === id);
-        onChange({ ...params, scale_id: id || undefined, scale_name: found?.name ?? undefined });
       }
       return (
         <div className="grid grid-cols-2 gap-3">
@@ -257,23 +250,6 @@ function StepParamEditor({
                 />
                 <p className="text-xs text-amber-600 mt-1">Add a Gather Inputs step first to select from a list</p>
               </>
-            )}
-          </div>
-          <div className="col-span-2">
-            <label className="block text-xs font-medium text-gray-600 mb-1">Scale</label>
-            {activeScales.length > 0 ? (
-              <select
-                value={(params.scale_id as string) ?? ''}
-                onChange={e => selectScale(e.target.value)}
-                className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-              >
-                <option value="">— Select a scale —</option>
-                {activeScales.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            ) : (
-              <p className="text-xs text-amber-600">No active scales configured. Add one in the Scales page first.</p>
             )}
           </div>
           <div>
@@ -535,7 +511,6 @@ interface StepRowProps {
   isDragging: boolean;
   isDropTarget: boolean;
   gatheredInputs: { material_name: string; quantity: number; unit: string; lot_controlled?: boolean }[];
-  scales: Pick<Scale, 'id' | 'name' | 'conn_a_type' | 'conn_b_type' | 'status'>[];
   reagentItems: { id: string; item_number: string; product_name: string; unit_of_measure: string; lot_controlled: boolean }[];
   onMove: (idx: number, dir: 1 | -1) => void;
   onRemove: (localId: string) => void;
@@ -545,7 +520,7 @@ interface StepRowProps {
   onDragEnd: () => void;
 }
 
-function StepRow({ step, index, total, canDrag, isDragging, isDropTarget, gatheredInputs, scales, reagentItems, onMove, onRemove, onChange, onDragStart, onDragEnter, onDragEnd }: StepRowProps) {
+function StepRow({ step, index, total, canDrag, isDragging, isDropTarget, gatheredInputs, reagentItems, onMove, onRemove, onChange, onDragStart, onDragEnter, onDragEnd }: StepRowProps) {
   const [open, setOpen] = useState(true);
   const fromGripRef = useRef(false);
 
@@ -652,7 +627,6 @@ function StepRow({ step, index, total, canDrag, isDragging, isDropTarget, gather
               params={step.parameters ?? {}}
               onChange={p => onChange(step._localId, { parameters: p })}
               gatheredInputs={gatheredInputs}
-              scales={scales}
               reagentItems={reagentItems}
             />
           </div>
@@ -744,14 +718,6 @@ export default function WorkInstructionEditorPage() {
     queryFn: async () => {
       const { data } = await supabase.from('step_templates').select('*').order('is_system', { ascending: false }).order('name');
       return (data ?? []) as StepTemplate[];
-    },
-  });
-
-  const { data: scales = [] } = useQuery({
-    queryKey: ['scales'],
-    queryFn: async () => {
-      const { data } = await supabase.from('scales').select('id, name, conn_a_type, conn_b_type, status').order('name');
-      return (data ?? []) as Pick<Scale, 'id' | 'name' | 'conn_a_type' | 'conn_b_type' | 'status'>[];
     },
   });
 
@@ -1131,7 +1097,6 @@ export default function WorkInstructionEditorPage() {
               isDragging={draggingId === s._localId}
               isDropTarget={dragOverIndex === i && draggingId !== null && draggingId !== s._localId}
               gatheredInputs={gatheredInputs}
-              scales={scales}
               reagentItems={reagentItems}
               onMove={moveStep}
               onRemove={removeStep}
