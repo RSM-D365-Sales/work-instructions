@@ -170,7 +170,7 @@ export interface WIApproval {
   reviewer?: Profile;
 }
 
-export type POStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
+export type POStatus = 'pending' | 'in_progress' | 'awaiting_qc' | 'completed' | 'failed' | 'cancelled';
 
 export interface ProductionOrder {
   id: string;

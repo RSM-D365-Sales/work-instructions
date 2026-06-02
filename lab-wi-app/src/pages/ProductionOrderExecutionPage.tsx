@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import type { ProductionOrder, WIStep, POStep, StepType, Scale, Profile, QCTest, QCResult } from '../types';
+import type { ProductionOrder, WIStep, POStep, StepType, Scale, Profile, QCTest, QCResult, POStatus } from '../types';
 import { calculateTolerance, cn } from '../lib/utils';
 import { evaluateQC, formatSpec } from '../lib/qc';
 import {
@@ -847,12 +847,14 @@ function StepCard({ wiStep, poStep, index, isActive, onActivate, onComplete, onS
 interface QCInput { num: string; text: string; pass: '' | 'Pass' | 'Fail'; instrument: string; comment: string }
 
 function QualityControlCard({
-  productionOrderId, reagentItemId, locked, onCertificate,
+  productionOrderId, reagentItemId, locked, onCertificate, onResultsSaved,
 }: {
   productionOrderId: string;
   reagentItemId: string;
   locked: boolean;
   onCertificate: () => void;
+  /** Fired after QC results are saved, so the parent can advance the order out of "Awaiting QC". */
+  onResultsSaved?: () => void;
 }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
@@ -967,7 +969,10 @@ function QualityControlCard({
         }
       }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['qc-results', productionOrderId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['qc-results', productionOrderId] });
+      onResultsSaved?.();
+    },
   });
 
   if (testsLoading) return null;
@@ -1241,6 +1246,49 @@ export default function ProductionOrderExecutionPage() {
     },
   });
 
+  // When all production steps are finished, decide whether the batch is fully
+  // done ('completed') or still needs release testing ('awaiting_qc'). Returns
+  // null while any production step is still outstanding.
+  async function resolveProductionDoneStatus(): Promise<POStatus | null> {
+    const { data: freshSteps } = await supabase
+      .from('po_steps').select('status').eq('production_order_id', id!);
+    const steps = freshSteps ?? [];
+    if (steps.length === 0 || !steps.every(s => s.status === 'completed' || s.status === 'skipped')) {
+      return null; // production not finished yet
+    }
+    const reagentItemId = (order?.work_instruction as any)?.reagent_item_id as string | undefined;
+    if (reagentItemId) {
+      const { data: qcTests } = await supabase
+        .from('qc_tests').select('id').eq('reagent_item_id', reagentItemId).eq('is_active', true);
+      if (qcTests && qcTests.length > 0) {
+        const { data: qcRes } = await supabase
+          .from('qc_results').select('qc_test_id, result_numeric, result_text')
+          .eq('production_order_id', id!);
+        const savedIds = new Set(
+          (qcRes ?? [])
+            .filter(r => r.result_numeric != null || (r.result_text ?? '') !== '')
+            .map(r => r.qc_test_id),
+        );
+        if (!qcTests.every(t => savedIds.has(t.id))) return 'awaiting_qc';
+      }
+    }
+    return 'completed';
+  }
+
+  // Advance the order to its resolved done-status (no-op while steps remain or
+  // when nothing changes). Used after QC results are saved.
+  const reconcileDoneStatus = useMutation({
+    mutationFn: async () => {
+      const target = await resolveProductionDoneStatus();
+      if (!target || target === order?.status || order?.status === 'cancelled') return;
+      await supabase
+        .from('production_orders')
+        .update({ status: target, completed_at: order?.completed_at ?? new Date().toISOString() })
+        .eq('id', id!);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['production-order', id] }),
+  });
+
   const completeStepMutation = useMutation({
     mutationFn: async ({
       wiStepId, actualValues, notes, skip,
@@ -1275,16 +1323,13 @@ export default function ProductionOrderExecutionPage() {
       });
       setActiveStepIdx(nextIdx >= 0 ? nextIdx : null);
 
-      // Check if all steps done — re-fetch fresh list to include the step just completed
-      const { data: freshSteps } = await supabase
-        .from('po_steps')
-        .select('status')
-        .eq('production_order_id', id!);
-      const allDone = (freshSteps ?? []).every(s => s.status === 'completed' || s.status === 'skipped');
-      if (allDone && (freshSteps ?? []).length > 0) {
+      // Production finished? Resolve to 'completed', or 'awaiting_qc' when QC
+      // release results are still outstanding.
+      const doneStatus = await resolveProductionDoneStatus();
+      if (doneStatus) {
         await supabase
           .from('production_orders')
-          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .update({ status: doneStatus, completed_at: order?.completed_at ?? new Date().toISOString() })
           .eq('id', id!);
         qc.invalidateQueries({ queryKey: ['production-order', id] });
       }
@@ -1339,7 +1384,7 @@ export default function ProductionOrderExecutionPage() {
   });
 
   const wi = order?.work_instruction as any;
-  const isStarted = order?.status === 'in_progress' || order?.status === 'completed';
+  const isStarted = order?.status === 'in_progress' || order?.status === 'awaiting_qc' || order?.status === 'completed';
   const isCompleted = order?.status === 'completed';
   const isAdmin = profile?.role === 'admin';
   const isCreator = order?.created_by === profile?.id;
@@ -1379,10 +1424,11 @@ export default function ProductionOrderExecutionPage() {
         <span className={cn(
           'text-xs font-medium px-2.5 py-1 rounded-full mt-1',
           order?.status === 'completed' ? 'bg-green-100 text-green-700' :
+          order?.status === 'awaiting_qc' ? 'bg-amber-100 text-amber-700' :
           order?.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
           'bg-gray-100 text-gray-600'
         )}>
-          {order?.status?.replace('_', ' ')}
+          {order?.status === 'awaiting_qc' ? 'Awaiting QC' : order?.status?.replace('_', ' ')}
         </span>
       </div>
 
@@ -1530,6 +1576,7 @@ export default function ProductionOrderExecutionPage() {
           reagentItemId={wi.reagent_item_id}
           locked={order?.status === 'cancelled'}
           onCertificate={() => navigate(`/production-orders/${id}/certificate`)}
+          onResultsSaved={() => reconcileDoneStatus.mutate()}
         />
       )}
 

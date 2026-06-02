@@ -34,11 +34,12 @@ function formatDateOnly(dateStr: string | null | undefined): string {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-const ALL_STATUSES = ['pending', 'in_progress', 'completed', 'failed', 'cancelled'] as const;
+const ALL_STATUSES = ['pending', 'in_progress', 'awaiting_qc', 'completed', 'failed', 'cancelled'] as const;
 
 const STATUS_STYLES: Record<string, string> = {
   pending:     'bg-gray-100 text-gray-600',
   in_progress: 'bg-blue-100 text-blue-700',
+  awaiting_qc: 'bg-amber-100 text-amber-700',
   completed:   'bg-green-100 text-green-700',
   failed:      'bg-red-100 text-red-700',
   cancelled:   'bg-gray-100 text-gray-400',
@@ -47,6 +48,7 @@ const STATUS_STYLES: Record<string, string> = {
 const STATUS_LABELS: Record<string, string> = {
   pending:     'Pending',
   in_progress: 'In Progress',
+  awaiting_qc: 'Awaiting QC',
   completed:   'Completed',
   failed:      'Failed',
   cancelled:   'Cancelled',

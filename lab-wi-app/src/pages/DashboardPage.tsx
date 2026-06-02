@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import {
-  ClipboardList, PlayCircle, CheckCircle, Clock,
+  ClipboardList, PlayCircle, CheckCircle, Clock, FlaskConical,
   ShoppingCart, Plus, Calendar, Building2, Truck, AlertTriangle, Paperclip, CircleAlert,
 } from 'lucide-react';
 import ProductionGantt from '../components/ProductionGantt';
@@ -38,7 +38,7 @@ function StandardDashboard() {
       const { data } = await supabase
         .from('production_orders')
         .select('status');
-      const counts = { pending: 0, in_progress: 0, completed: 0, failed: 0 };
+      const counts = { pending: 0, in_progress: 0, awaiting_qc: 0, completed: 0, failed: 0 };
       data?.forEach(po => {
         const k = po.status as keyof typeof counts;
         if (k in counts) counts[k]++;
@@ -69,7 +69,7 @@ function StandardDashboard() {
       </div>
 
       {/* Stats cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           icon={<ClipboardList size={20} className="text-blue-600" />}
           label="Approved WIs"
@@ -87,6 +87,12 @@ function StandardDashboard() {
           label="Active Orders"
           value={poStats?.in_progress ?? 0}
           bg="bg-purple-50"
+        />
+        <StatCard
+          icon={<FlaskConical size={20} className="text-amber-600" />}
+          label="Awaiting QC"
+          value={poStats?.awaiting_qc ?? 0}
+          bg="bg-amber-50"
         />
         <StatCard
           icon={<CheckCircle size={20} className="text-green-600" />}
@@ -173,13 +179,14 @@ function POStatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     pending: 'bg-gray-100 text-gray-600',
     in_progress: 'bg-blue-100 text-blue-700',
+    awaiting_qc: 'bg-amber-100 text-amber-700',
     completed: 'bg-green-100 text-green-700',
     failed: 'bg-red-100 text-red-700',
     cancelled: 'bg-gray-100 text-gray-500',
   };
   return (
     <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${map[status] ?? ''}`}>
-      {status.replace('_', ' ')}
+      {status === 'awaiting_qc' ? 'Awaiting QC' : status.replace('_', ' ')}
     </span>
   );
 }

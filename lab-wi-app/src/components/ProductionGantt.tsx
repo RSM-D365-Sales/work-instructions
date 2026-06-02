@@ -13,7 +13,7 @@ import { cn } from '../lib/utils';
 interface GanttOrderRow {
   id: string;
   lot_number: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'in_progress' | 'awaiting_qc' | 'completed' | 'failed' | 'cancelled';
   batch_size: number | null;
   batch_size_unit: string | null;
   created_at: string;
@@ -114,6 +114,7 @@ function deriveSpan(order: GanttOrderRow): { start: Date; end: Date } {
 const STATUS_BAR_CLASS: Record<GanttOrderRow['status'], string> = {
   pending:     'bg-blue-500   hover:bg-blue-600   ring-blue-300',
   in_progress: 'bg-amber-500  hover:bg-amber-600  ring-amber-300',
+  awaiting_qc: 'bg-violet-500 hover:bg-violet-600 ring-violet-300',
   completed:   'bg-emerald-500 hover:bg-emerald-600 ring-emerald-300',
   failed:      'bg-rose-500   hover:bg-rose-600   ring-rose-300',
   cancelled:   'bg-gray-400   hover:bg-gray-500   ring-gray-300',
@@ -122,6 +123,7 @@ const STATUS_BAR_CLASS: Record<GanttOrderRow['status'], string> = {
 const STATUS_DOT_CLASS: Record<GanttOrderRow['status'], string> = {
   pending:     'bg-blue-500',
   in_progress: 'bg-amber-500',
+  awaiting_qc: 'bg-violet-500',
   completed:   'bg-emerald-500',
   failed:      'bg-rose-500',
   cancelled:   'bg-gray-400',
@@ -415,6 +417,7 @@ export default function ProductionGantt() {
       <div className="px-4 py-2 border-b border-gray-100 flex flex-wrap items-center gap-3 text-xs text-gray-600">
         <LegendDot status="pending"     label="Pending" />
         <LegendDot status="in_progress" label="In progress" />
+        <LegendDot status="awaiting_qc" label="Awaiting QC" />
         <LegendDot status="completed"   label="Completed" />
         <LegendDot status="failed"      label="Failed" />
         <LegendDot status="cancelled"   label="Cancelled" />

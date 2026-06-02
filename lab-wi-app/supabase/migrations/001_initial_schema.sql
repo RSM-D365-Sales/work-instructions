@@ -140,7 +140,7 @@ create table public.production_orders (
   batch_size           numeric,
   batch_size_unit      text default 'L',
   status               text not null default 'pending'
-                         check (status in ('pending','in_progress','completed','failed','cancelled')),
+                         check (status in ('pending','in_progress','awaiting_qc','completed','failed','cancelled')),
   notes                text,
   created_by           uuid not null references public.profiles(id),
   assigned_to          uuid references public.profiles(id),

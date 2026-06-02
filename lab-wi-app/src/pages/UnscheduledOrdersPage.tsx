@@ -10,7 +10,7 @@ import { cn } from '../lib/utils';
 interface UnscheduledOrderRow {
   id: string;
   lot_number: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'in_progress' | 'awaiting_qc' | 'completed' | 'failed' | 'cancelled';
   created_at: string;
   required_by: string | null;
   assigned_to: string | null;
