@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { ReagentOrder, ReagentOrderStatus } from '../types';
-import { ShoppingCart, Plus, Search, CircleAlert, Calendar, Building2, Truck, Paperclip } from 'lucide-react';
+import { ShoppingCart, Plus, Search, CircleAlert, Calendar, Building2, Truck, Paperclip, MessageSquare } from 'lucide-react';
 import { formatDate, cn } from '../lib/utils';
 
 const STATUS_STYLES: Record<ReagentOrderStatus, string> = {
@@ -94,7 +94,7 @@ export default function ReagentOrdersListPage() {
           reagent_item:reagent_items(id, item_number, product_name, unit_of_measure),
           items:reagent_order_items(
             id, line_number, quantity, unit,
-            delivered_quantity, from_location, to_location, lot_number, delivered_at,
+            delivered_quantity, from_location, to_location, lot_number, delivered_at, delivery_comment,
             reagent_item:reagent_items(id, item_number, product_name, unit_of_measure)
           ),
           lab:labs(id, name, warehouse_id),
@@ -216,10 +216,21 @@ export default function ReagentOrdersListPage() {
                 <CircleAlert size={18} strokeWidth={2.5} />
               </span>
             )}
-            {o.order_number}
+            <button
+              onClick={() => navigate(`/reagent-orders/${o.id}`)}
+              className="text-blue-600 hover:underline font-medium"
+              title="View order record"
+            >
+              {o.order_number}
+            </button>
             {o.notes?.trim() && (
-              <span title={o.notes} className="inline-flex text-indigo-600 cursor-help" aria-label="Order note">
+              <span title={`Order note: ${o.notes}`} className="inline-flex text-indigo-600 cursor-help" aria-label="Order note">
                 <Paperclip size={13} />
+              </span>
+            )}
+            {o.delivery_comment?.trim() && (
+              <span title={`Delivery comment: ${o.delivery_comment}`} className="inline-flex text-emerald-600 cursor-help" aria-label="Delivery comment">
+                <MessageSquare size={13} />
               </span>
             )}
           </div>
@@ -252,6 +263,12 @@ export default function ReagentOrdersListPage() {
                           <span>LOT <span className="font-mono">{li.lot_number}</span></span>
                         </>
                       )}
+                    </div>
+                  )}
+                  {li.delivery_comment?.trim() && (
+                    <div className="mt-0.5 flex items-start gap-1 text-[11px] text-gray-500 italic">
+                      <MessageSquare size={11} className="mt-0.5 shrink-0 text-gray-400" />
+                      <span>{li.delivery_comment}</span>
                     </div>
                   )}
                 </li>
