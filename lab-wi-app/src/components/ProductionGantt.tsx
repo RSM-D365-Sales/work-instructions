@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { useMemo, useState, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, Calendar, CalendarPlus, GripHorizontal } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
@@ -46,6 +46,12 @@ interface GanttRow {
 /* -------------------------------------------------------------------------- */
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const QUARTER_MS = 15 * 60 * 1000;
+
+/** Snap a timestamp (ms) to the nearest 15 minutes. */
+function snap15(ms: number): number {
+  return Math.round(ms / QUARTER_MS) * QUARTER_MS;
+}
 
 function startOfDay(d: Date): Date {
   const x = new Date(d);
@@ -126,6 +132,7 @@ const STATUS_DOT_CLASS: Record<GanttOrderRow['status'], string> = {
 /* -------------------------------------------------------------------------- */
 
 const WINDOW_OPTIONS = [
+  { label: '3 days',  days: 3  },
   { label: '7 days',  days: 7  },
   { label: '14 days', days: 14 },
   { label: '30 days', days: 30 },
@@ -133,10 +140,15 @@ const WINDOW_OPTIONS = [
 
 export default function ProductionGantt() {
   const { profile } = useAuth();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
 
   // Window anchor — start date of the visible range. Defaults to 1 day before today.
   const [windowDays, setWindowDays] = useState<number>(7);
   const [anchor, setAnchor] = useState<Date>(() => addDays(startOfDay(new Date()), -1));
+  // Live drag preview ({orderId, dx px}) while an admin drags a bar.
+  const [dragPreview, setDragPreview] = useState<{ orderId: string; dx: number } | null>(null);
+  const suppressClick = useRef(false);
 
   const rangeStart = useMemo(() => startOfDay(anchor), [anchor]);
   const rangeEnd   = useMemo(() => addDays(rangeStart, windowDays), [rangeStart, windowDays]);
@@ -222,6 +234,104 @@ export default function ProductionGantt() {
 
   const isAdmin = profile?.role === 'admin';
 
+  /* ----- Editing: reschedule (drag) + auto-schedule ----- */
+  const rescheduleMutation = useMutation({
+    mutationFn: async (a: { id: string; startIso: string; endIso: string }) => {
+      const { error } = await supabase
+        .from('production_orders')
+        .update({ scheduled_start: a.startIso, scheduled_end: a.endIso })
+        .eq('id', a.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['gantt-orders'] });
+      qc.invalidateQueries({ queryKey: ['production-orders'] });
+      qc.invalidateQueries({ queryKey: ['unscheduled-orders'] });
+    },
+  });
+
+  // Orders that have no explicit schedule yet (candidates for auto-schedule).
+  const unscheduled = useMemo(
+    () => (orders ?? []).filter(o => !o.scheduled_start && o.status !== 'completed' && o.status !== 'cancelled'),
+    [orders]
+  );
+
+  const autoScheduleMutation = useMutation({
+    mutationFn: async () => {
+      // Start after the latest explicitly-scheduled end (or now), snapped to 15 min.
+      let runningEnd = snap15(Date.now());
+      for (const o of orders ?? []) {
+        if (o.scheduled_end) runningEnd = Math.max(runningEnd, new Date(o.scheduled_end).getTime());
+      }
+      // Append each unscheduled order back-to-back, oldest first.
+      const queue = [...unscheduled].sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+      for (const o of queue) {
+        const minutes = o.work_instruction?.scheduled_minutes ?? 60;
+        const startMs = runningEnd;
+        const endMs = startMs + minutes * 60_000;
+        const { error } = await supabase
+          .from('production_orders')
+          .update({ scheduled_start: new Date(startMs).toISOString(), scheduled_end: new Date(endMs).toISOString() })
+          .eq('id', o.id);
+        if (error) throw error;
+        runningEnd = endMs;
+      }
+      return queue.length;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['gantt-orders'] });
+      qc.invalidateQueries({ queryKey: ['production-orders'] });
+      qc.invalidateQueries({ queryKey: ['unscheduled-orders'] });
+    },
+  });
+
+  function canEditBar(o: GanttOrderRow): boolean {
+    return isAdmin && (o.status === 'pending' || o.status === 'in_progress');
+  }
+
+  // Pointer-drag a bar horizontally to reschedule it (admins only).
+  function onBarPointerDown(e: React.PointerEvent<HTMLDivElement>, bar: GanttBar) {
+    if (!canEditBar(bar.order)) return;
+    e.preventDefault();
+    const lane = (e.currentTarget.offsetParent as HTMLElement | null);
+    const laneWidth = lane?.getBoundingClientRect().width ?? 1;
+    const startX = e.clientX;
+    const originStart = bar.start.getTime();
+    const originEnd = bar.end.getTime();
+    let moved = false;
+
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      if (Math.abs(dx) > 3) moved = true;
+      setDragPreview({ orderId: bar.order.id, dx });
+    };
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setDragPreview(null);
+      if (!moved) return;
+      suppressClick.current = true;            // swallow the click that follows a drag
+      const dx = ev.clientX - startX;
+      const deltaDays = (dx / laneWidth) * windowDays;
+      const newStart = snap15(originStart + deltaDays * DAY_MS);
+      const duration = originEnd - originStart;
+      rescheduleMutation.mutate({
+        id: bar.order.id,
+        startIso: new Date(newStart).toISOString(),
+        endIso: new Date(newStart + duration).toISOString(),
+      });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }
+
+  function onBarClick(e: React.MouseEvent, orderId: string) {
+    if (suppressClick.current) { suppressClick.current = false; e.preventDefault(); return; }
+    navigate(`/production-orders/${orderId}`);
+  }
+
   return (
     <div className="bg-white rounded-xl border border-gray-200">
       {/* Header / toolbar */}
@@ -237,6 +347,26 @@ export default function ProductionGantt() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          {/* Auto-schedule (admin) */}
+          {isAdmin && (
+            <button
+              onClick={() => autoScheduleMutation.mutate()}
+              disabled={unscheduled.length === 0 || autoScheduleMutation.isPending}
+              title="Schedule all unscheduled orders back-to-back, starting after the last scheduled order"
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+                unscheduled.length === 0
+                  ? 'bg-gray-50 text-gray-300 border border-gray-200 cursor-not-allowed'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
+              )}
+            >
+              <CalendarPlus size={14} />
+              {autoScheduleMutation.isPending
+                ? 'Scheduling…'
+                : `Auto-schedule${unscheduled.length ? ` (${unscheduled.length})` : ''}`}
+            </button>
+          )}
+
           {/* Range nav */}
           <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden">
             <button
@@ -288,6 +418,11 @@ export default function ProductionGantt() {
         <LegendDot status="completed"   label="Completed" />
         <LegendDot status="failed"      label="Failed" />
         <LegendDot status="cancelled"   label="Cancelled" />
+        {isAdmin && (
+          <span className="inline-flex items-center gap-1 text-gray-400">
+            <GripHorizontal size={13} /> Drag a bar to reschedule
+          </span>
+        )}
         <span className="ml-auto text-gray-500">
           {fmtDay(rangeStart)} – {fmtDay(addDays(rangeEnd, -1))}
         </span>
@@ -377,25 +512,54 @@ export default function ProductionGantt() {
                     (diffDays(clippedEnd, clippedStart) / windowDays) * 100
                   );
                   const o = bar.order;
+                  const editable = canEditBar(o);
+                  const isDragging = dragPreview?.orderId === o.id;
                   const title =
                     `${o.lot_number} · ${o.work_instruction?.product_name ?? ''}\n` +
                     `${o.status.replace('_', ' ')}\n` +
-                    `${bar.start.toLocaleString()} → ${bar.end.toLocaleString()}`;
+                    `${bar.start.toLocaleString()} → ${bar.end.toLocaleString()}` +
+                    (editable ? '\n(drag to reschedule)' : '');
+                  const barClass = cn(
+                    'absolute top-2 bottom-2 rounded-md px-2 flex items-center text-[11px] font-medium text-white shadow-sm ring-1 ring-inset overflow-hidden',
+                    STATUS_BAR_CLASS[o.status],
+                    editable ? 'cursor-grab active:cursor-grabbing touch-none' : 'cursor-pointer',
+                    isDragging ? 'z-10 opacity-95 shadow-lg ring-2 ring-white' : 'transition-all'
+                  );
+                  const barStyle: React.CSSProperties = {
+                    left: `${leftPct}%`,
+                    width: `${widthPct}%`,
+                    transform: isDragging ? `translateX(${dragPreview!.dx}px)` : undefined,
+                  };
+                  const label = (
+                    <span className="truncate">
+                      {o.lot_number}
+                      {o.work_instruction?.product_name ? ` · ${o.work_instruction.product_name}` : ''}
+                    </span>
+                  );
+
+                  if (editable) {
+                    return (
+                      <div
+                        key={o.id + idx}
+                        title={title}
+                        onPointerDown={e => onBarPointerDown(e, bar)}
+                        onClick={e => onBarClick(e, o.id)}
+                        className={barClass}
+                        style={barStyle}
+                      >
+                        {label}
+                      </div>
+                    );
+                  }
                   return (
                     <Link
                       key={o.id + idx}
                       to={`/production-orders/${o.id}`}
                       title={title}
-                      className={cn(
-                        'absolute top-2 bottom-2 rounded-md px-2 flex items-center text-[11px] font-medium text-white shadow-sm ring-1 ring-inset transition-all overflow-hidden',
-                        STATUS_BAR_CLASS[o.status]
-                      )}
-                      style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                      className={barClass}
+                      style={barStyle}
                     >
-                      <span className="truncate">
-                        {o.lot_number}
-                        {o.work_instruction?.product_name ? ` · ${o.work_instruction.product_name}` : ''}
-                      </span>
+                      {label}
                     </Link>
                   );
                 })}
