@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
@@ -54,8 +54,31 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled:   'Cancelled',
 };
 
+type GroupBy = 'none' | 'date' | 'person' | 'item';
+
+const GROUP_OPTIONS: { key: GroupBy; label: string }[] = [
+  { key: 'none',   label: 'None' },
+  { key: 'date',   label: 'Required date' },
+  { key: 'person', label: 'Person' },
+  { key: 'item',   label: 'Item' },
+];
+
+const TABLE_COLS = 11; // keep in sync with the header / row cells (for group spanners)
+
+/** Sort by required_by ascending (orders with a date first, soonest first),
+ *  then most-recently-created as a tiebreaker. */
+function byRequiredBy(a: any, b: any): number {
+  const ra = a.required_by as string | null;
+  const rb = b.required_by as string | null;
+  if (ra && rb) { if (ra !== rb) return ra < rb ? -1 : 1; }
+  else if (ra) return -1;
+  else if (rb) return 1;
+  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+}
+
 export default function ProductionOrdersListPage() {
   const [hiddenStatuses, setHiddenStatuses] = useState<Set<string>>(new Set(['completed', 'cancelled']));
+  const [groupBy, setGroupBy] = useState<GroupBy>('none');
   const { profile } = useAuth();
   const qc = useQueryClient();
 
@@ -92,6 +115,40 @@ export default function ProductionOrdersListPage() {
   });
 
   const filtered = orders.filter((o: any) => !hiddenStatuses.has(o.status));
+
+  /** Visible orders sorted by required-by, then split into the chosen groups.
+   *  groupBy='none' yields a single unlabelled group (a plain sorted list). */
+  const groups = useMemo(() => {
+    const vis = orders.filter((o: any) => !hiddenStatuses.has(o.status)).sort(byRequiredBy);
+    if (groupBy === 'none') return [{ key: 'all', label: '', rows: vis }];
+
+    const map = new Map<string, any[]>();
+    for (const o of vis) {
+      const key =
+        groupBy === 'date'   ? (o.required_by ?? '') :
+        groupBy === 'person' ? (o.assignee?.full_name ?? '') :
+                               (o.work_instruction?.product_name ?? '');
+      const arr = map.get(key);
+      if (arr) arr.push(o); else map.set(key, [o]);
+    }
+
+    const entries = Array.from(map.entries());
+    if (groupBy === 'date') {
+      entries.sort((a, b) => (a[0] && b[0]) ? (a[0] < b[0] ? -1 : 1) : a[0] ? -1 : b[0] ? 1 : 0);
+    } else {
+      // alphabetical, with the empty bucket (Unassigned / No product) last
+      entries.sort((a, b) => (a[0] || '￿').localeCompare(b[0] || '￿'));
+    }
+
+    return entries.map(([key, rows]) => ({
+      key: key || '__none__',
+      label:
+        groupBy === 'date'   ? (key ? formatDateOnly(key) : 'No requirement date') :
+        groupBy === 'person' ? (key || 'Unassigned') :
+                               (key || 'No product'),
+      rows,
+    }));
+  }, [orders, hiddenStatuses, groupBy]);
 
   const cancelMutation = useMutation({
     mutationFn: async (orderId: string) => {
@@ -236,6 +293,26 @@ export default function ProductionOrdersListPage() {
         })}
       </div>
 
+      {/* Group-by control */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-medium text-gray-400 uppercase tracking-wide mr-1">Group by:</span>
+        <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden text-xs">
+          {GROUP_OPTIONS.map(opt => (
+            <button
+              key={opt.key}
+              onClick={() => setGroupBy(opt.key)}
+              className={cn(
+                'px-3 py-1.5 font-medium transition-colors border-l border-gray-200 first:border-l-0',
+                groupBy === opt.key ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-gray-400 ml-1">· sorted by required date</span>
+      </div>
+
       {isLoading ? (
         <div className="text-center py-12 text-gray-400">Loading…</div>
       ) : filtered.length === 0 ? (
@@ -262,7 +339,17 @@ export default function ProductionOrdersListPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtered.map((order: any) => (
+              {groups.map(g => (
+                <Fragment key={g.key}>
+                  {groupBy !== 'none' && (
+                    <tr className="bg-gray-50/70 border-t border-gray-100">
+                      <td colSpan={TABLE_COLS} className="px-4 py-2 text-xs font-semibold text-gray-700">
+                        {g.label}
+                        <span className="ml-2 text-gray-400 font-normal">· {g.rows.length} order{g.rows.length === 1 ? '' : 's'}</span>
+                      </td>
+                    </tr>
+                  )}
+                  {g.rows.map((order: any) => (
                 <tr key={order.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3 font-medium text-gray-900">{order.production_order_number ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-600">{order.lot_number}</td>
@@ -371,6 +458,8 @@ export default function ProductionOrdersListPage() {
                     </div>
                   </td>
                 </tr>
+                  ))}
+                </Fragment>
               ))}
             </tbody>
           </table>

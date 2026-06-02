@@ -6,12 +6,18 @@
 --     reduced activity and nobody is scheduled every single day.
 --   * Operators get ~5 orders per working day. NO orders for the "Lab" role.
 --   * A few orders/working day are sprinkled to admins Ron, Ryan, Andrew.
---   * Dates BEFORE Jun 4  → 'completed' or 'awaiting_qc'
---       (production finished; started_at/completed_at + schedule set).
+--   * Dates BEFORE Jun 4  → finished: mostly 'completed' / 'awaiting_qc', with
+--       a small ~8% 'failed' (one QC test out of spec). started_at/completed_at
+--       + schedule set.
 --   * Dates Jun 4 ONWARD  → 'pending', either SCHEDULED (scheduled_start
 --       set, ~70%) or UNSCHEDULED (scheduled_start NULL → shows in the
 --       Unscheduled Orders queue, ~30%).
---   * Status + dates only — no po_steps / qc_results are generated.
+--   * Awaiting-QC, completed AND failed orders get a fully-completed production
+--     step per WI step (lightly-realistic captured values, timestamps spread
+--     across the run). Completed + failed orders also get a QC result per test
+--     feeding the Quality Trends charts: completed = all in spec + a released
+--     COA; failed = the first numeric test is out of spec (no COA) so a failing
+--     point shows on the trend. Pending (planned) orders stay status+dates only.
 --
 --   Every row is tagged notes = 'DEMO-SEED' and the script DELETES any
 --   prior 'DEMO-SEED' orders first, so it is safe to re-run and easy to
@@ -46,6 +52,8 @@ DECLARE
   wi_ver     int;
   wi_min     int;
   bsize      numeric;
+  v_order_id uuid;     -- id of the order just inserted (for step fan-out)
+  v_item_id  uuid;     -- reagent item behind the WI (for QC results)
 
   v_start    timestamptz;
   v_end      timestamptz;
@@ -103,8 +111,8 @@ BEGIN
 
         -- Pick a (varied) approved WI and read its version/duration.
         wi_id := v_wis[1 + ((seq + i) % array_length(v_wis, 1))];
-        SELECT version, COALESCE(scheduled_minutes, 120)
-          INTO wi_ver, wi_min
+        SELECT version, COALESCE(scheduled_minutes, 120), reagent_item_id
+          INTO wi_ver, wi_min, v_item_id
           FROM public.work_instructions WHERE id = wi_id;
 
         bsize   := v_batches[1 + (seq % array_length(v_batches, 1))];
@@ -113,8 +121,15 @@ BEGIN
         v_end   := v_start + (wi_min * INTERVAL '1 minute');
 
         IF d < cutover THEN
-          -- Finished batches: ~60% completed, ~40% awaiting QC.
-          v_status  := CASE WHEN (seq % 5) < 3 THEN 'completed' ELSE 'awaiting_qc' END;
+          -- Finished batches: a small ~8% failed release (one test out of
+          -- spec), the rest ~60% completed / ~40% awaiting QC.
+          IF (seq % 12) = 0 THEN
+            v_status := 'failed';
+          ELSIF (seq % 5) < 3 THEN
+            v_status := 'completed';
+          ELSE
+            v_status := 'awaiting_qc';
+          END IF;
           v_sched_s := v_start;
           v_sched_e := v_end;
           v_started := v_start;
@@ -147,7 +162,103 @@ BEGIN
            'L' || to_char(d, 'YYMMDD') || '-' || lpad(seq::text, 4, '0'),
            bsize, 'L',
            'DEMO-SEED', v_status, person, person,
-           v_sched_s, v_sched_e, v_started, v_done, v_reqby, v_created);
+           v_sched_s, v_sched_e, v_started, v_done, v_reqby, v_created)
+        RETURNING id INTO v_order_id;
+
+        -- Awaiting-QC, completed and failed orders are all production-done: lay
+        -- down a fully-completed production step for each WI step, with lightly-
+        -- realistic captured values and timestamps spread evenly across the run.
+        IF v_status IN ('awaiting_qc', 'completed', 'failed') THEN
+          INSERT INTO public.po_steps
+            (production_order_id, wi_step_id, step_order, status, actual_values,
+             operator_id, started_at, completed_at)
+          SELECT
+            v_order_id, s.id, s.step_order, 'completed',
+            CASE s.stype
+              WHEN 'weigh' THEN jsonb_build_object(
+                'measured_weight', round((s.target_w * (1 + s.r * s.tol / 100))::numeric, 3),
+                'unit',          s.wunit,
+                'in_tolerance',  true,
+                'deviation_pct', round((s.r * s.tol)::numeric, 2))
+              WHEN 'mix' THEN jsonb_build_object(
+                'actual_duration_minutes', s.mixmin,
+                'completed', true)
+              WHEN 'ph_adjust' THEN jsonb_build_object(
+                'ph_notes', 'Adjusted to pH ' || s.tph || ' with ' || s.reagent || '; stable on retest.')
+              WHEN 'observe' THEN jsonb_build_object(
+                'observation', 'Clear, colorless solution; no visible particulates.')
+              ELSE jsonb_build_object('completed', true)
+            END,
+            person,
+            v_start + (v_end - v_start) * ((s.rn - 1)::float8 / s.cnt),
+            v_start + (v_end - v_start) * (s.rn::float8        / s.cnt)
+          FROM (
+            SELECT
+              ws.id, ws.step_order,
+              row_number() OVER (ORDER BY ws.step_order) AS rn,
+              count(*)     OVER ()                       AS cnt,
+              ws.parameters->>'_step_type'               AS stype,
+              (random() - 0.5)                           AS r,        -- −0.5 … 0.5
+              (ws.parameters->>'target_weight')::numeric AS target_w,
+              COALESCE(ws.parameters->>'unit', 'g')      AS wunit,
+              COALESCE((ws.parameters->>'tolerance_pct')::numeric, 2)   AS tol,
+              COALESCE((ws.parameters->>'duration_minutes')::numeric, 10) AS mixmin,
+              COALESCE(ws.parameters->>'target_ph', '7.0')  AS tph,
+              COALESCE(ws.parameters->>'reagent', 'reagent') AS reagent
+            FROM public.wi_steps ws
+            WHERE ws.work_instruction_id = wi_id
+          ) s;
+        END IF;
+
+        -- Completed and failed orders went through release testing: capture one
+        -- QC result per test (snapshotting the spec). Completed = all in spec
+        -- (+ a released COA); failed = the first numeric test (test_order 1, the
+        -- pH / primary assay) is pushed out of spec with passed = false and no
+        -- certificate — these are the dips you can demo on the Quality Trends.
+        IF v_status IN ('completed', 'failed') AND v_item_id IS NOT NULL THEN
+          INSERT INTO public.qc_results
+            (production_order_id, qc_test_id, test_order, name, unit, result_type,
+             lower_limit, upper_limit, target, expected_text, method,
+             result_numeric, result_text, passed, instrument, tested_by, tested_at)
+          SELECT
+            v_order_id, t.id, t.test_order, t.name, t.unit, t.result_type,
+            t.lower_limit, t.upper_limit, t.target, t.expected_text, t.method,
+            CASE WHEN t.result_type = 'numeric' THEN
+              CASE
+                WHEN v_status = 'failed' AND t.test_order = 1
+                  -- push just past the upper limit so it reads out of spec
+                  THEN round((t.upper_limit
+                              + COALESCE(t.upper_limit - t.lower_limit, t.upper_limit * 0.1)
+                                * (0.1 + random() * 0.1))::numeric, 3)
+                ELSE round((
+                  CASE
+                    WHEN t.lower_limit IS NOT NULL AND t.upper_limit IS NOT NULL
+                      THEN (t.lower_limit + t.upper_limit) / 2
+                           + (random() - 0.5) * (t.upper_limit - t.lower_limit) * 0.6
+                    WHEN t.upper_limit IS NOT NULL THEN t.upper_limit * (0.3 + random() * 0.4)
+                    WHEN t.lower_limit IS NOT NULL THEN t.lower_limit * (1 + random() * 0.05)
+                    WHEN t.target      IS NOT NULL THEN t.target * (1 + (random() - 0.5) * 0.04)
+                    ELSE NULL
+                  END)::numeric, 3)
+              END
+            ELSE NULL END,
+            CASE WHEN t.result_type = 'passfail' THEN 'Pass'
+                 WHEN t.result_type = 'text'     THEN COALESCE(t.expected_text, 'Conforms')
+                 ELSE NULL END,
+            NOT (v_status = 'failed' AND t.test_order = 1),   -- the OOS test fails
+            'INSTR-' || lpad(((seq % 4) + 1)::text, 2, '0'),
+            person,
+            v_end + INTERVAL '25 minutes'
+          FROM public.qc_tests t
+          WHERE t.reagent_item_id = v_item_id AND t.is_active = true;
+
+          -- Released COA (auto-numbered COA-YYYY-####) — passing batches only.
+          IF v_status = 'completed'
+             AND EXISTS (SELECT 1 FROM public.qc_tests WHERE reagent_item_id = v_item_id AND is_active = true) THEN
+            INSERT INTO public.qc_certificates (production_order_id, cert_type, issued_by, issued_at)
+            VALUES (v_order_id, 'COA', person, v_end + INTERVAL '45 minutes');
+          END IF;
+        END IF;
       END LOOP;
     END LOOP;
   END LOOP;
@@ -164,3 +275,29 @@ SELECT status,
  WHERE notes = 'DEMO-SEED'
  GROUP BY status
  ORDER BY status;
+
+-- Confirm every awaiting-QC order has all of its steps completed:
+SELECT count(DISTINCT po.id)                                   AS awaiting_qc_orders,
+       count(ps.id)                                            AS completed_steps,
+       round(count(ps.id)::numeric / NULLIF(count(DISTINCT po.id), 0), 1) AS avg_steps_per_order
+  FROM public.production_orders po
+  LEFT JOIN public.po_steps ps
+         ON ps.production_order_id = po.id AND ps.status = 'completed'
+ WHERE po.notes = 'DEMO-SEED' AND po.status = 'awaiting_qc';
+
+-- Quality-trend feedstock: released (completed + failed) lots with captured QC,
+-- how many numeric points exist to chart, how many are failing (out of spec),
+-- and how many COAs were issued.
+SELECT ri.item_number,
+       count(DISTINCT po.id)                                  AS released_lots,
+       count(qr.id) FILTER (WHERE qr.result_type = 'numeric') AS numeric_points,
+       count(qr.id) FILTER (WHERE qr.passed = false)          AS failing_points,
+       count(DISTINCT cert.id)                                AS certificates
+  FROM public.production_orders po
+  JOIN public.work_instructions wi ON wi.id = po.work_instruction_id
+  JOIN public.reagent_items     ri ON ri.id = wi.reagent_item_id
+  LEFT JOIN public.qc_results       qr   ON qr.production_order_id = po.id
+  LEFT JOIN public.qc_certificates  cert ON cert.production_order_id = po.id
+ WHERE po.notes = 'DEMO-SEED' AND po.status IN ('completed', 'failed')
+ GROUP BY ri.item_number
+ ORDER BY ri.item_number;
