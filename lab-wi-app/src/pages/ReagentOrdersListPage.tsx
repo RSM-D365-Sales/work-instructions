@@ -373,13 +373,15 @@ export default function ReagentOrdersListPage() {
               Deliver Selected ({selectedDeliverable.length})
             </button>
           )}
-          <button
-            onClick={() => navigate('/reagent-orders/new')}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
-          >
-            <Plus size={16} />
-            New Order
-          </button>
+          {profile?.role !== 'operator' && (
+            <button
+              onClick={() => navigate('/reagent-orders/new')}
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
+            >
+              <Plus size={16} />
+              New Order
+            </button>
+          )}
         </div>
       </div>
 

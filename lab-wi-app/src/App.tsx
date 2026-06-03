@@ -53,7 +53,9 @@ export default function App() {
                   <Route path="/work-instructions/:id/edit" element={<WorkInstructionEditorPage />} />
                 </Route>
                 <Route path="/production-orders" element={<ProductionOrdersListPage />} />
-                <Route path="/production-orders/new" element={<ProductionOrderNewPage />} />
+                <Route element={<ProtectedRoute allowedRoles={['author', 'approver']} />}>
+                  <Route path="/production-orders/new" element={<ProductionOrderNewPage />} />
+                </Route>
                 <Route path="/production-orders/:id" element={<ProductionOrderExecutionPage />} />
                 <Route path="/production-orders/:id/certificate" element={<ProductionOrderCertificatePage />} />
                 <Route path="/quality-trends" element={
@@ -65,7 +67,9 @@ export default function App() {
                   <Route path="/inventory" element={<InventoryPage />} />
                 </Route>
                 <Route path="/reagent-orders" element={<ReagentOrdersListPage />} />
-                <Route path="/reagent-orders/new" element={<ReagentOrderNewPage />} />
+                <Route element={<ProtectedRoute allowedRoles={['author', 'approver', 'lab']} />}>
+                  <Route path="/reagent-orders/new" element={<ReagentOrderNewPage />} />
+                </Route>
                 <Route element={<ProtectedRoute allowedRoles={['author', 'approver', 'operator']} />}>
                   <Route path="/reagent-orders/deliver" element={<ReagentDeliveryPage />} />
                 </Route>

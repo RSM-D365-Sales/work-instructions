@@ -142,6 +142,9 @@ const STATUS_DOT_CLASS: Record<GanttOrderRow['status'], string> = {
 /*  Component                                                                 */
 /* -------------------------------------------------------------------------- */
 
+// A person with no saved pattern is treated as working every day.
+const DEFAULT_SCHED: string[] = ['work', 'work', 'work', 'work', 'work', 'work', 'work'];
+
 const WINDOW_OPTIONS = [
   { label: '1 day',   days: 1  },
   { label: '3 days',  days: 3  },
@@ -198,6 +201,26 @@ export default function ProductionGantt() {
       return (data ?? []) as unknown as GanttOrderRow[];
     },
   });
+
+  /* ----- Per-person working pattern (grey out off / PTO days) ----- */
+  const { data: schedRows = [] } = useQuery({
+    queryKey: ['gantt-work-schedules'],
+    enabled: !!profile,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('profiles').select('id, work_schedule');
+      if (error) throw error;
+      return (data ?? []) as { id: string; work_schedule: string[] | null }[];
+    },
+  });
+  const schedMap = useMemo(() => {
+    const m: Record<string, string[] | null> = {};
+    for (const r of schedRows) m[r.id] = r.work_schedule;
+    return m;
+  }, [schedRows]);
+  const schedFor = (ownerId: string): string[] => {
+    const s = schedMap[ownerId];
+    return Array.isArray(s) && s.length === 7 ? s : DEFAULT_SCHED;
+  };
 
   /* ----- Filter to window + group by owner ----- */
   const rows: GanttRow[] = useMemo(() => {
@@ -449,6 +472,12 @@ export default function ProductionGantt() {
         <LegendDot status="completed"   label="Completed" />
         <LegendDot status="failed"      label="Failed" />
         <LegendDot status="cancelled"   label="Cancelled" />
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm bg-gray-200 border border-gray-300" /> Off
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-300" /> Time off
+        </span>
         {isAdmin && (
           <span className="inline-flex items-center gap-1 text-gray-400">
             <GripHorizontal size={13} /> Drag a bar to reschedule
@@ -522,6 +551,24 @@ export default function ProductionGantt() {
                 className="relative h-14"
                 style={{ gridColumn: `2 / span ${columnCount}` }}
               >
+                {/* Off / time-off day shading for this person */}
+                {!isDayView ? (
+                  <div
+                    className="absolute inset-0 grid pointer-events-none"
+                    style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0,1fr))` }}
+                  >
+                    {dayCells.map((c, i) => {
+                      const st = schedFor(row.ownerId)[c.getDay()];
+                      return <div key={i} className={st === 'off' ? 'bg-gray-100/80' : st === 'pto' ? 'bg-emerald-50' : ''} />;
+                    })}
+                  </div>
+                ) : schedFor(row.ownerId)[rangeStart.getDay()] !== 'work' ? (
+                  <div className={cn(
+                    'absolute inset-0 pointer-events-none',
+                    schedFor(row.ownerId)[rangeStart.getDay()] === 'pto' ? 'bg-emerald-50' : 'bg-gray-100/80'
+                  )} />
+                ) : null}
+
                 {/* Grid lines */}
                 <div
                   className="absolute inset-0 grid pointer-events-none"

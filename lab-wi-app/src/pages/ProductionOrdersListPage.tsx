@@ -274,13 +274,15 @@ export default function ProductionOrdersListPage() {
           <h1 className="text-2xl font-bold text-gray-900">Production Orders</h1>
           <p className="text-sm text-gray-500 mt-1">Active and historical production runs</p>
         </div>
-        <Link
-          to="/production-orders/new"
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-        >
-          <Plus size={16} />
-          New Order
-        </Link>
+        {profile?.role !== 'operator' && (
+          <Link
+            to="/production-orders/new"
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            <Plus size={16} />
+            New Order
+          </Link>
+        )}
       </div>
 
       {/* Status filter pills */}

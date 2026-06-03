@@ -108,6 +108,28 @@ export default function UnscheduledOrdersPage() {
     return m;
   }, [busyRows]);
 
+  /* Per-person working pattern → weekdays the auto-scheduler may use (off / PTO
+   * days are skipped). */
+  const { data: schedRows = [] } = useQuery({
+    queryKey: ['user-work-schedules'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('profiles').select('id, work_schedule');
+      if (error) throw error;
+      return (data ?? []) as { id: string; work_schedule: string[] | null }[];
+    },
+  });
+  const workingDays = useMemo(() => {
+    const m = new Map<string, Set<number>>();
+    for (const r of schedRows) {
+      if (Array.isArray(r.work_schedule) && r.work_schedule.length === 7) {
+        const set = new Set<number>();
+        r.work_schedule.forEach((st, dow) => { if (st === 'work') set.add(dow); });
+        m.set(r.id, set);
+      }
+    }
+    return m;
+  }, [schedRows]);
+
   const scheduleMutation = useMutation({
     mutationFn: async (args: { id: string; startIso: string; endIso: string }) => {
       const { error } = await supabase
@@ -143,7 +165,7 @@ export default function UnscheduledOrdersPage() {
         requiredBy: o.required_by,
         createdAt: o.created_at,
       }));
-      const assignments = planSchedule(schedulable, busyByResource, { from: new Date() });
+      const assignments = planSchedule(schedulable, busyByResource, { from: new Date(), workingDays });
       await Promise.all(assignments.map(async a => {
         const { error } = await supabase
           .from('production_orders')

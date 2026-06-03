@@ -35,6 +35,10 @@ export interface ScheduleOptions {
   workEndHour?: number;
   /** Rounding granularity for start times, in minutes (default 15). */
   slotMinutes?: number;
+  /** Per-resource set of weekdays (0=Sun..6=Sat) the resource works. A resource
+   *  with no entry (or an empty set) is treated as available every day. Days a
+   *  person is off / on PTO are skipped when packing their slots. */
+  workingDays?: Map<string, Set<number>>;
 }
 
 export interface Assignment {
@@ -113,6 +117,9 @@ export function planSchedule(
   for (const [resource, group] of groups) {
     // Working copy of this resource's busy windows, kept sorted by start.
     const busy: BusyInterval[] = [...(busyByResource.get(resource) ?? [])].sort((a, b) => a.start - b.start);
+    // Weekdays this resource works (empty/absent = every day).
+    const workDays = opts.workingDays?.get(resource);
+    const hasWorkConstraint = !!workDays && workDays.size > 0;
     let cursor = earliest;
 
     for (const o of group) {
@@ -121,6 +128,12 @@ export function planSchedule(
       // Find the first free, in-hours slot at or after the cursor.
       // Guard bounds the (otherwise impossible) runaway loop.
       for (let guard = 0; guard < 100_000; guard++) {
+        // Skip whole days the resource is off / on PTO.
+        if (hasWorkConstraint && !workDays!.has(new Date(cursor).getDay())) {
+          cursor = nextDayOpen(cursor, startHour);
+          continue;
+        }
+
         const win = workWindow(cursor, startHour, endHour);
         if (cursor < win.open) cursor = win.open;
 

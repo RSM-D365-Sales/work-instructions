@@ -122,18 +122,20 @@ function StandardDashboard() {
             </div>
           </Link>
         )}
-        <Link
-          to="/production-orders/new"
-          className="flex items-center gap-4 p-5 bg-white rounded-xl border border-gray-200 hover:border-green-300 hover:shadow-sm transition-all"
-        >
-          <div className="bg-green-100 p-3 rounded-lg">
-            <PlayCircle size={22} className="text-green-600" />
-          </div>
-          <div>
-            <p className="font-semibold text-gray-900">New Production Order</p>
-            <p className="text-sm text-gray-500">Start a production run</p>
-          </div>
-        </Link>
+        {profile?.role !== 'operator' && (
+          <Link
+            to="/production-orders/new"
+            className="flex items-center gap-4 p-5 bg-white rounded-xl border border-gray-200 hover:border-green-300 hover:shadow-sm transition-all"
+          >
+            <div className="bg-green-100 p-3 rounded-lg">
+              <PlayCircle size={22} className="text-green-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-gray-900">New Production Order</p>
+              <p className="text-sm text-gray-500">Start a production run</p>
+            </div>
+          </Link>
+        )}
       </div>
 
       {/* Recent production orders */}

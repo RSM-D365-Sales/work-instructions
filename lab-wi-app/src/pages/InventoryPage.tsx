@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
 import type { InventoryOnHand, ItemType, Lab } from '../types';
 import { cn } from '../lib/utils';
 import { Boxes, Search, X, RefreshCw, Layers, Building2, Package } from 'lucide-react';
@@ -43,6 +44,11 @@ const availablePhysical = (l: Line) => l.physical - l.reserved;
 const totalAvailable = (l: Line) => availablePhysical(l) + l.orderedIn + l.onOrder;
 
 export default function InventoryPage() {
+  const { profile } = useAuth();
+  // Operators are scoped to their own lab's on-hand only.
+  const isOperator = profile?.role === 'operator';
+  const ownLab = profile?.default_lab_id ?? null;
+
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
   const [labFilter, setLabFilter] = useState<string>('ALL');
   const [group, setGroup] = useState<GroupMode>('lab');
@@ -88,6 +94,7 @@ export default function InventoryPage() {
     return rows.filter(r => {
       const item = r.reagent_item;
       if (!item) return false;
+      if (isOperator && (!ownLab || r.lab_id !== ownLab)) return false;
       if (typeFilter !== 'ALL' && item.item_type !== typeFilter) return false;
       if (labFilter !== 'ALL' && r.lab_id !== labFilter) return false;
       if (q) {
@@ -98,7 +105,7 @@ export default function InventoryPage() {
       }
       return true;
     });
-  }, [rows, typeFilter, labFilter, search]);
+  }, [rows, typeFilter, labFilter, search, isOperator, ownLab]);
 
   // Build display lines, either per item×lab or aggregated per item.
   const lines = useMemo<Line[]>(() => {
@@ -156,6 +163,7 @@ export default function InventoryPage() {
     const base = rows.filter(r => {
       const item = r.reagent_item;
       if (!item) return false;
+      if (isOperator && (!ownLab || r.lab_id !== ownLab)) return false;
       if (labFilter !== 'ALL' && r.lab_id !== labFilter) return false;
       const q = search.toLowerCase().trim();
       if (q && !(item.item_number.toLowerCase().includes(q) || item.product_name.toLowerCase().includes(q)))
@@ -170,7 +178,7 @@ export default function InventoryPage() {
       RM: items(t => t === 'RM'),
       PKG: items(t => t === 'PKG'),
     } as Record<TypeFilter, number>;
-  }, [rows, labFilter, search]);
+  }, [rows, labFilter, search, isOperator, ownLab]);
 
   const distinctItems = useMemo(() => new Set(lines.map(l => l.itemId)).size, [lines]);
 
@@ -248,17 +256,27 @@ export default function InventoryPage() {
           )}
         </div>
 
-        <div className="relative">
-          <Building2 size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-          <select
-            value={labFilter}
-            onChange={e => setLabFilter(e.target.value)}
-            className="pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        {isOperator ? (
+          <span
+            className="inline-flex items-center gap-1.5 pl-3 pr-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-600"
+            title="Operators see on-hand for their own lab only"
           >
-            <option value="ALL">All reagent labs</option>
-            {labs.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </select>
-        </div>
+            <Building2 size={15} className="text-gray-400" />
+            {ownLab ? (labs.find(l => l.id === ownLab)?.name ?? 'Your lab') : 'No default lab set'}
+          </span>
+        ) : (
+          <div className="relative">
+            <Building2 size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <select
+              value={labFilter}
+              onChange={e => setLabFilter(e.target.value)}
+              className="pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="ALL">All reagent labs</option>
+              {labs.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          </div>
+        )}
 
         {/* Group-by toggle */}
         <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
