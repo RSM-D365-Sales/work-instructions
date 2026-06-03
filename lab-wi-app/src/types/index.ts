@@ -52,12 +52,17 @@ export interface ReagentOrder {
   items?: ReagentOrderItem[];
 }
 
+/** One weekday's status in a user's weekly working pattern. */
+export type WorkDayState = 'work' | 'off' | 'pto';
+
 export interface Profile {
   id: string;
   full_name: string;
   email?: string;
   role: UserRole;
   default_lab_id?: string | null;
+  /** 7 entries indexed by weekday (0=Sun..6=Sat); null = all working days. */
+  work_schedule?: WorkDayState[] | null;
   created_at: string;
 }
 
