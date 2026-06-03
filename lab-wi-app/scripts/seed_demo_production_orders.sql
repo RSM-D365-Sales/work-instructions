@@ -28,6 +28,9 @@
 
 DO $$
 DECLARE
+  -- Wall-clock times are built in this timezone so they display in business
+  -- hours (not shifted to ~midnight) for the demo viewer. Change to match.
+  tz         constant text := 'America/Denver';     -- Mountain time
   today      constant date := DATE '2026-06-02';   -- the demo "now"
   d_start    constant date := DATE '2026-06-01';
   d_end      constant date := DATE '2026-06-14';
@@ -116,8 +119,9 @@ BEGIN
           FROM public.work_instructions WHERE id = wi_id;
 
         bsize   := v_batches[1 + (seq % array_length(v_batches, 1))];
-        -- Stagger each person's runs through the working day.
-        v_start := (d + TIME '07:00') + ((i - 1) * INTERVAL '105 minutes');
+        -- Stagger each person's runs through the working day, starting 06:00
+        -- local (built in `tz` so it isn't shifted to the small hours on screen).
+        v_start := ((d + TIME '06:00') AT TIME ZONE tz) + ((i - 1) * INTERVAL '105 minutes');
         v_end   := v_start + (wi_min * INTERVAL '1 minute');
 
         IF d < cutover THEN
@@ -141,7 +145,7 @@ BEGIN
           v_status  := 'pending';
           v_started := NULL;
           v_done    := NULL;
-          v_created := today + TIME '08:00';
+          v_created := (today + TIME '08:00') AT TIME ZONE tz;
           IF (seq % 10) < 7 THEN
             v_sched_s := v_start;     -- SCHEDULED → shows on the gantt
             v_sched_e := v_end;
