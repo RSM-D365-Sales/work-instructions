@@ -106,6 +106,11 @@ export default function ReagentOrderNewPage() {
     return m;
   }, [reagents]);
 
+  // Reagent orders are nearly always for Finished Goods, so list FG items first
+  // (already name-sorted from the query), with everything else grouped after.
+  const fgReagents = useMemo(() => reagents.filter(r => r.item_type === 'FG'), [reagents]);
+  const otherReagents = useMemo(() => reagents.filter(r => r.item_type !== 'FG'), [reagents]);
+
   function updateLine(key: string, patch: Partial<LineDraft>) {
     setLines(prev => prev.map(l => (l.key === key ? { ...l, ...patch } : l)));
   }
@@ -294,11 +299,24 @@ export default function ReagentOrderNewPage() {
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">Select a reagent…</option>
-                      {reagents.map(rg => (
-                        <option key={rg.id} value={rg.id}>
-                          {rg.item_number} — {rg.product_name} ({rg.unit_of_measure})
-                        </option>
-                      ))}
+                      {fgReagents.length > 0 && (
+                        <optgroup label="Finished Goods">
+                          {fgReagents.map(rg => (
+                            <option key={rg.id} value={rg.id}>
+                              {rg.item_number} — {rg.product_name} ({rg.unit_of_measure})
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {otherReagents.length > 0 && (
+                        <optgroup label="Other items">
+                          {otherReagents.map(rg => (
+                            <option key={rg.id} value={rg.id}>
+                              {rg.item_number} — {rg.product_name} ({rg.unit_of_measure})
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
                     </select>
                   </div>
                   <div className="w-40">
