@@ -118,9 +118,16 @@ export default function ProductionOrdersListPage() {
     },
   });
 
+  const isOperator = profile?.role === 'operator';
+  // Operators only see (and act on) production orders assigned to them.
+  const scopedOrders = useMemo(
+    () => (isOperator && profile ? orders.filter(o => o.assigned_to === profile.id) : orders),
+    [orders, isOperator, profile]
+  );
+
   const itemOptions = useMemo(
-    () => toOptions(orders.map((o: any) => o.work_instruction?.product_name)),
-    [orders]
+    () => toOptions(scopedOrders.map((o: any) => o.work_instruction?.product_name)),
+    [scopedOrders]
   );
   const filtersActive = !!(filterItem || dateFrom || dateTo);
 
@@ -131,12 +138,12 @@ export default function ProductionOrdersListPage() {
     return true;
   }
 
-  const filtered = orders.filter(matchesFilters);
+  const filtered = scopedOrders.filter(matchesFilters);
 
   /** Visible orders sorted by required-by, then split into the chosen groups.
    *  groupBy='none' yields a single unlabelled group (a plain sorted list). */
   const groups = useMemo(() => {
-    const vis = orders.filter(matchesFilters).sort(byRequiredBy);
+    const vis = scopedOrders.filter(matchesFilters).sort(byRequiredBy);
     if (groupBy === 'none') return [{ key: 'all', label: '', rows: vis }];
 
     const map = new Map<string, any[]>();
@@ -166,7 +173,7 @@ export default function ProductionOrdersListPage() {
       rows,
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, hiddenStatuses, groupBy, filterItem, dateFrom, dateTo]);
+  }, [scopedOrders, hiddenStatuses, groupBy, filterItem, dateFrom, dateTo]);
 
   const cancelMutation = useMutation({
     mutationFn: async (orderId: string) => {
@@ -290,7 +297,7 @@ export default function ProductionOrdersListPage() {
         <span className="text-xs font-medium text-gray-400 uppercase tracking-wide mr-1">Show:</span>
         {ALL_STATUSES.map(status => {
           const active = !hiddenStatuses.has(status);
-          const count = orders.filter((o: any) => o.status === status).length;
+          const count = scopedOrders.filter((o: any) => o.status === status).length;
           return (
             <button
               key={status}
@@ -351,8 +358,8 @@ export default function ProductionOrdersListPage() {
         <div className="text-center py-12 text-gray-400">Loading…</div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
-          <p className="text-gray-500 mb-2">{orders.length === 0 ? 'No production orders yet' : 'No orders match the current filters'}</p>
-          {orders.length === 0 && <Link to="/production-orders/new" className="text-blue-600 text-sm hover:underline">Create the first one</Link>}
+          <p className="text-gray-500 mb-2">{scopedOrders.length === 0 ? (isOperator ? 'No production orders assigned to you' : 'No production orders yet') : 'No orders match the current filters'}</p>
+          {scopedOrders.length === 0 && !isOperator && <Link to="/production-orders/new" className="text-blue-600 text-sm hover:underline">Create the first one</Link>}
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -407,20 +414,20 @@ export default function ProductionOrdersListPage() {
                   <td className="px-4 py-3">
                     <RequiredByCell
                       order={order}
-                      canEdit={profile?.role === 'admin' || order.created_by === profile?.id || order.assigned_to === profile?.id}
+                      canEdit={!isOperator && (profile?.role === 'admin' || order.created_by === profile?.id || order.assigned_to === profile?.id)}
                     />
                   </td>
                   <td className="px-4 py-3">
                     <AssigneeCell
                       order={order}
                       users={assignableUsers}
-                      canEdit={profile?.role === 'admin' || order.created_by === profile?.id || order.assigned_to === profile?.id}
+                      canEdit={!isOperator && (profile?.role === 'admin' || order.created_by === profile?.id || order.assigned_to === profile?.id)}
                     />
                   </td>
                   {(() => {
-                    const canEditSchedule = profile?.role === 'admin' ||
+                    const canEditSchedule = !isOperator && (profile?.role === 'admin' ||
                       (order as any).created_by === profile?.id ||
-                      (order as any).assigned_to === profile?.id;
+                      (order as any).assigned_to === profile?.id);
                     const vals = pickerValues(order);
                     const dirty = !!edits[order.id];
                     const saved = flash[order.id];

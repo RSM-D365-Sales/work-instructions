@@ -170,3 +170,137 @@ export function planSchedule(
 
   return assignments;
 }
+
+/* ── Assignment-aware scheduling ─────────────────────────────────────────── */
+
+export interface AssignableOrder {
+  id: string;
+  durationMinutes: number;
+  requiredBy: string | null;
+  createdAt: string;
+  /** Current assignee — kept if they can still meet the deadline, else replaced. */
+  currentAssignee: string | null;
+}
+
+export interface AssignResult {
+  id: string;
+  assigneeId: string;
+  start: Date;
+  end: Date;
+  /** True when the slot ends after the order's required_by date. */
+  late: boolean;
+}
+
+/** Earliest free, in-hours, working-day slot for one person that ends on or
+ *  before `deadlineMs`. Returns null if no such slot exists before the deadline. */
+function earliestSlot(
+  busy: BusyInterval[],
+  workDays: Set<number> | undefined,
+  durMs: number,
+  fromMs: number,
+  deadlineMs: number,
+  startHour: number,
+  endHour: number,
+): { start: number; end: number } | null {
+  const hasWork = !!workDays && workDays.size > 0;
+  let cursor = fromMs;
+  for (let guard = 0; guard < 100_000; guard++) {
+    if (cursor > deadlineMs) return null;
+    if (hasWork && !workDays!.has(new Date(cursor).getDay())) {
+      cursor = nextDayOpen(cursor, startHour);
+      continue;
+    }
+    const win = workWindow(cursor, startHour, endHour);
+    if (cursor < win.open) cursor = win.open;
+    if (cursor + durMs > win.close) {
+      cursor = nextDayOpen(cursor, startHour);
+      continue;
+    }
+    const slotStart = cursor;
+    const slotEnd = cursor + durMs;
+    if (slotEnd > deadlineMs) return null;
+    const clash = busy.find(b => slotStart < b.end && slotEnd > b.start);
+    if (clash) { cursor = Math.max(cursor, clash.end); continue; }
+    return { start: slotStart, end: slotEnd };
+  }
+  return null;
+}
+
+/**
+ * Assign + schedule each order to a candidate person who works that day and can
+ * finish by the order's required-by date. Keeps the current assignee when they
+ * can still meet the deadline; otherwise reassigns to whoever can. If no one can
+ * meet it, schedules the earliest possible slot and flags it `late`.
+ */
+export function planWithAssignment(
+  orders: AssignableOrder[],
+  candidateIds: string[],
+  busyByResource: Map<string, BusyInterval[]>,
+  workingDays: Map<string, Set<number>>,
+  opts: ScheduleOptions,
+): AssignResult[] {
+  const startHour = opts.workStartHour ?? 7;
+  const endHour = opts.workEndHour ?? 18;
+  const slotMs = (opts.slotMinutes ?? 15) * MIN_MS;
+  const fromMs = roundUpMs(opts.from.getTime(), slotMs);
+
+  // Mutable busy copy per person (grows as we place orders this run).
+  const busy = new Map<string, BusyInterval[]>();
+  for (const [k, v] of busyByResource) busy.set(k, [...v].sort((a, b) => a.start - b.start));
+  const busyOf = (id: string): BusyInterval[] => {
+    let a = busy.get(id);
+    if (!a) { a = []; busy.set(id, a); }
+    return a;
+  };
+
+  // Earliest-deadline first (no-deadline last), then oldest created.
+  const sorted = [...orders].sort((a, b) => {
+    const ra = a.requiredBy, rb = b.requiredBy;
+    if (ra !== rb) { if (ra == null) return 1; if (rb == null) return -1; return ra < rb ? -1 : 1; }
+    return a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0;
+  });
+
+  const out: AssignResult[] = [];
+
+  for (const o of sorted) {
+    const durMs = Math.max(o.durationMinutes, 1) * MIN_MS;
+    const deadlineMs = requiredByEndMs(o.requiredBy) ?? Number.POSITIVE_INFINITY;
+
+    // Eligible people: the candidate pool plus the current assignee (always).
+    const pool = new Set(candidateIds);
+    if (o.currentAssignee) pool.add(o.currentAssignee);
+
+    let best: { personId: string; start: number; end: number } | null = null;
+
+    // 1) Keep the current assignee if they can meet the deadline.
+    if (o.currentAssignee) {
+      const s = earliestSlot(busyOf(o.currentAssignee), workingDays.get(o.currentAssignee), durMs, fromMs, deadlineMs, startHour, endHour);
+      if (s) best = { personId: o.currentAssignee, ...s };
+    }
+    // 2) Otherwise whoever can finish earliest before the deadline.
+    if (!best) {
+      for (const pid of pool) {
+        const s = earliestSlot(busyOf(pid), workingDays.get(pid), durMs, fromMs, deadlineMs, startHour, endHour);
+        if (s && (!best || s.end < best.end)) best = { personId: pid, ...s };
+      }
+    }
+    let late = false;
+    // 3) No one can meet it → earliest possible slot overall, flagged late.
+    if (!best) {
+      for (const pid of pool) {
+        const s = earliestSlot(busyOf(pid), workingDays.get(pid), durMs, fromMs, Number.POSITIVE_INFINITY, startHour, endHour);
+        if (s && (!best || s.end < best.end)) best = { personId: pid, ...s };
+      }
+      late = true;
+    }
+
+    if (best) {
+      const arr = busyOf(best.personId);
+      arr.push({ start: best.start, end: best.end });
+      arr.sort((a, b) => a.start - b.start);
+      out.push({ id: o.id, assigneeId: best.personId, start: new Date(best.start), end: new Date(best.end), late });
+    }
+  }
+
+  return out;
+}

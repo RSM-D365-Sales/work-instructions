@@ -4,8 +4,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CalendarClock, CheckCircle, ArrowLeft, Wand2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { cn } from '../lib/utils';
-import { planSchedule, UNASSIGNED_KEY, type SchedulableOrder, type BusyInterval } from '../lib/autoSchedule';
+import { planSchedule, planWithAssignment, UNASSIGNED_KEY, type SchedulableOrder, type BusyInterval, type AssignableOrder } from '../lib/autoSchedule';
 import ListFilters, { toOptions, inDateRange } from '../components/ListFilters';
+import { UserCheck } from 'lucide-react';
 
 /* -------------------------------------------------------------------------- */
 
@@ -40,10 +41,11 @@ export default function UnscheduledOrdersPage() {
   const qc = useQueryClient();
   const [pickers, setPickers] = useState<Record<string, string>>({});
   const [savedFlash, setSavedFlash] = useState<Record<string, boolean>>({});
-  const [autoResult, setAutoResult] = useState<{ count: number; late: number } | null>(null);
+  const [autoResult, setAutoResult] = useState<{ count: number; late: number; reassigned?: number } | null>(null);
   const [filterItem, setFilterItem] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const { data: orders = [], isLoading } = useQuery<UnscheduledOrderRow[]>({
     queryKey: ['unscheduled-orders'],
@@ -113,9 +115,9 @@ export default function UnscheduledOrdersPage() {
   const { data: schedRows = [] } = useQuery({
     queryKey: ['user-work-schedules'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('profiles').select('id, work_schedule');
+      const { data, error } = await supabase.from('profiles').select('id, full_name, role, work_schedule');
       if (error) throw error;
-      return (data ?? []) as { id: string; work_schedule: string[] | null }[];
+      return (data ?? []) as { id: string; full_name: string; role: string; work_schedule: string[] | null }[];
     },
   });
   const workingDays = useMemo(() => {
@@ -129,6 +131,14 @@ export default function UnscheduledOrdersPage() {
     }
     return m;
   }, [schedRows]);
+  // People eligible to be auto-assigned: operators, plus anyone with a saved
+  // working pattern (the production crew the derive script filled in).
+  const candidateIds = useMemo(
+    () => schedRows
+      .filter(r => r.role === 'operator' || (Array.isArray(r.work_schedule) && r.work_schedule.length === 7))
+      .map(r => r.id),
+    [schedRows]
+  );
 
   const scheduleMutation = useMutation({
     mutationFn: async (args: { id: string; startIso: string; endIso: string }) => {
@@ -195,6 +205,64 @@ export default function UnscheduledOrdersPage() {
     autoScheduleMutation.mutate();
   }
 
+  // ── Auto-schedule SELECTED: assign an available person to meet the date ──
+  const selectedVisible = useMemo(() => visibleOrders.filter(o => selected.has(o.id)), [visibleOrders, selected]);
+
+  const autoAssignMutation = useMutation({
+    mutationFn: async () => {
+      const assignable: AssignableOrder[] = selectedVisible.map(o => ({
+        id: o.id,
+        durationMinutes: o.work_instruction?.scheduled_minutes ?? 60,
+        requiredBy: o.required_by,
+        createdAt: o.created_at,
+        currentAssignee: o.assigned_to,
+      }));
+      const results = planWithAssignment(assignable, candidateIds, busyByResource, workingDays, { from: new Date() });
+      const orig = new Map(selectedVisible.map(o => [o.id, o.assigned_to]));
+      let reassigned = 0;
+      await Promise.all(results.map(async a => {
+        const { error } = await supabase
+          .from('production_orders')
+          .update({ scheduled_start: a.start.toISOString(), scheduled_end: a.end.toISOString(), assigned_to: a.assigneeId })
+          .eq('id', a.id);
+        if (error) throw error;
+        if (orig.get(a.id) !== a.assigneeId) reassigned++;
+      }));
+      return { count: results.length, late: results.filter(r => r.late).length, reassigned };
+    },
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['unscheduled-orders'] });
+      qc.invalidateQueries({ queryKey: ['scheduled-busy'] });
+      qc.invalidateQueries({ queryKey: ['gantt-orders'] });
+      qc.invalidateQueries({ queryKey: ['production-orders'] });
+      setSelected(new Set());
+      setAutoResult(res);
+    },
+  });
+
+  function handleAutoScheduleSelected() {
+    if (selectedVisible.length === 0 || autoAssignMutation.isPending) return;
+    const ok = window.confirm(
+      `Auto-schedule ${selectedVisible.length} selected order${selectedVisible.length === 1 ? '' : 's'}, ` +
+      `assigning each to an available person who can finish by its required date?`,
+    );
+    if (!ok) return;
+    setAutoResult(null);
+    autoAssignMutation.mutate();
+  }
+
+  function toggleSelect(id: string) {
+    setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleGroupSelect(groupRows: UnscheduledOrderRow[]) {
+    setSelected(prev => {
+      const n = new Set(prev);
+      const allSel = groupRows.length > 0 && groupRows.every(o => n.has(o.id));
+      groupRows.forEach(o => { if (allSel) n.delete(o.id); else n.add(o.id); });
+      return n;
+    });
+  }
+
   /* Group rows by required-by date so admins can prioritise what's due soonest. */
   const groups = useMemo(() => {
     const map = new Map<string, UnscheduledOrderRow[]>();
@@ -256,6 +324,17 @@ export default function UnscheduledOrdersPage() {
               : filtersActive ? `${visibleOrders.length} of ${orders.length} order${orders.length === 1 ? '' : 's'}`
               : `${orders.length} order${orders.length === 1 ? '' : 's'}`}
           </span>
+          {selectedVisible.length > 0 && (
+            <button
+              onClick={handleAutoScheduleSelected}
+              disabled={autoAssignMutation.isPending}
+              title="Assign each selected order to an available person who can finish by its required date"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+            >
+              <UserCheck size={15} />
+              {autoAssignMutation.isPending ? 'Assigning…' : `Auto-schedule selected (${selectedVisible.length})`}
+            </button>
+          )}
           <button
             onClick={handleAutoSchedule}
             disabled={visibleOrders.length === 0 || autoScheduleMutation.isPending}
@@ -292,7 +371,8 @@ export default function UnscheduledOrdersPage() {
           {autoResult.late > 0 ? <AlertTriangle size={16} /> : <CheckCircle size={16} />}
           <span>
             Scheduled {autoResult.count} order{autoResult.count === 1 ? '' : 's'} into the next open slots.
-            {autoResult.late > 0 && ` ${autoResult.late} finish after their required date — review these.`}
+            {autoResult.reassigned ? ` ${autoResult.reassigned} (re)assigned to meet the date.` : ''}
+            {autoResult.late > 0 ? ` ${autoResult.late} finish after their required date — review these.` : ''}
           </span>
           <button onClick={() => setAutoResult(null)} className="ml-auto text-xs underline opacity-70 hover:opacity-100">
             Dismiss
@@ -337,12 +417,24 @@ export default function UnscheduledOrdersPage() {
             )}>
               {label}
             </p>
-            <span className="text-xs text-gray-400">{rows.length} order{rows.length === 1 ? '' : 's'}</span>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={rows.length > 0 && rows.every(o => selected.has(o.id))}
+                  onChange={() => toggleGroupSelect(rows)}
+                  className="h-3.5 w-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                Select all
+              </label>
+              <span className="text-xs text-gray-400">{rows.length} order{rows.length === 1 ? '' : 's'}</span>
+            </div>
           </div>
 
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-gray-500 uppercase">
               <tr className="border-b border-gray-100">
+                <th className="px-3 py-2 w-8" />
                 <th className="px-4 py-2 font-medium">Lot</th>
                 <th className="px-4 py-2 font-medium">Work Instruction</th>
                 <th className="px-4 py-2 font-medium">Assignee</th>
@@ -357,7 +449,18 @@ export default function UnscheduledOrdersPage() {
                 const picker = pickers[o.id] ?? nextQuarterHourLocal();
                 const saved  = savedFlash[o.id];
                 return (
-                  <tr key={o.id} className="border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50">
+                  <tr key={o.id} className={cn(
+                    'border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50',
+                    selected.has(o.id) && 'bg-emerald-50/50'
+                  )}>
+                    <td className="px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(o.id)}
+                        onChange={() => toggleSelect(o.id)}
+                        className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <Link
                         to={`/production-orders/${o.id}`}

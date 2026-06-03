@@ -222,7 +222,9 @@ export default function WorkInstructionDetailPage() {
   const isAuthor = profile?.role === 'author' || profile?.role === 'admin';
   const isAdmin = profile?.role === 'admin';
   const canEdit = isAuthor && (wi.created_by === profile?.id || isAdmin) && (wi.status === 'draft' || wi.status === 'rejected');
-  const canApprove = isApprover && wi.status === 'pending_review';
+  // Separation of duties: you can review/approve a WI only if you didn't author it.
+  const isOwnSubmission = wi.created_by === profile?.id;
+  const canApprove = isApprover && wi.status === 'pending_review' && !isOwnSubmission;
   const canStartProduction = wi.status === 'approved';
   const canCreateNewVersion = wi.status === 'approved' && (isAuthor || isAdmin);
 
@@ -357,6 +359,13 @@ export default function WorkInstructionDetailPage() {
           </ol>
         )}
       </div>
+
+      {/* You can't approve your own submission */}
+      {isApprover && wi.status === 'pending_review' && isOwnSubmission && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+          You submitted this work instruction, so a different reviewer must approve it (separation of duties).
+        </div>
+      )}
 
       {/* Approval panel */}
       {canApprove && (

@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import {
   ClipboardList, PlayCircle, CheckCircle, Clock, FlaskConical,
   ShoppingCart, Plus, Calendar, Building2, Truck, AlertTriangle, Paperclip, CircleAlert,
+  ClipboardCheck, ChevronRight,
 } from 'lucide-react';
 import ProductionGantt from '../components/ProductionGantt';
 import type { ReagentOrder, ReagentOrderStatus } from '../types';
@@ -48,14 +49,34 @@ function StandardDashboard() {
     },
   });
 
+  const isOperator = profile?.role === 'operator';
+  const isApprover = profile?.role === 'approver' || profile?.role === 'admin';
   const { data: recentOrders } = useQuery({
-    queryKey: ['recent-orders'],
+    queryKey: ['recent-orders', isOperator ? profile?.id : 'all'],
     queryFn: async () => {
-      const { data } = await supabase
+      let q = supabase
         .from('production_orders')
-        .select('*, work_instruction:work_instructions(title, product_name)')
-        .order('created_at', { ascending: false })
-        .limit(5);
+        .select('*, work_instruction:work_instructions(title, product_name)');
+      // Operators only see their own production orders.
+      if (isOperator && profile) q = q.eq('assigned_to', profile.id);
+      const { data } = await q.order('created_at', { ascending: false }).limit(5);
+      return data ?? [];
+    },
+  });
+
+  // Work instructions awaiting review that this user didn't author (so they can
+  // approve them — you can't approve your own).
+  const { data: pendingReviews = [] } = useQuery({
+    queryKey: ['pending-reviews', profile?.id],
+    enabled: !!profile && isApprover,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('work_instructions')
+        .select('id, title, product_name, version, created_at, creator:profiles!created_by(full_name)')
+        .eq('status', 'pending_review')
+        .neq('created_by', profile!.id)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
       return data ?? [];
     },
   });
@@ -102,6 +123,40 @@ function StandardDashboard() {
           bg="bg-green-50"
         />
       </div>
+
+      {/* Pending your review — WIs you didn't author, ready to approve */}
+      {isApprover && pendingReviews.length > 0 && (
+        <div className="bg-white rounded-xl border border-amber-200 overflow-hidden">
+          <div className="p-4 border-b border-amber-100 bg-amber-50/60 flex items-center gap-2">
+            <ClipboardCheck size={18} className="text-amber-600" />
+            <h2 className="font-semibold text-gray-900">Pending Your Review</h2>
+            <span className="text-xs font-semibold text-amber-700 bg-amber-100 rounded-full px-2 py-0.5">{pendingReviews.length}</span>
+            <span className="ml-auto text-xs text-gray-400">Work instructions you didn't author</span>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {pendingReviews.map((wi: any) => (
+              <Link
+                key={wi.id}
+                to={`/work-instructions/${wi.id}`}
+                className="flex items-center justify-between px-4 py-3 hover:bg-amber-50/40 transition-colors"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {wi.title}
+                    {wi.version != null && <span className="ml-1.5 text-xs text-indigo-500">v{wi.version}</span>}
+                  </p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {wi.product_name}{wi.creator?.full_name ? ` · by ${wi.creator.full_name}` : ''}
+                  </p>
+                </div>
+                <span className="flex items-center gap-1 text-xs font-medium text-amber-700 shrink-0">
+                  Review &amp; approve <ChevronRight size={15} />
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Production schedule (Gantt) */}
       <ProductionGantt />
