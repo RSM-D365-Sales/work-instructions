@@ -1,3 +1,4 @@
+import { useState, useMemo, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -207,6 +208,16 @@ const RO_STATUS_LABELS: Record<ReagentOrderStatus, string> = {
   cancelled:   'Cancelled',
 };
 
+/** Sort reagent orders by needed-by date ascending (soonest first; no-date last),
+ *  then newest-created as a tiebreaker. */
+function byNeededBy(a: ReagentOrder, b: ReagentOrder): number {
+  const ra = a.requested_for_date, rb = b.requested_for_date;
+  if (ra && rb) { if (ra !== rb) return ra < rb ? -1 : 1; }
+  else if (ra) return -1;
+  else if (rb) return 1;
+  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+}
+
 function LabDashboard() {
   const { profile } = useAuth();
   const labId = profile?.default_lab_id ?? null;
@@ -262,6 +273,72 @@ function LabDashboard() {
     return acc;
   }, {} as Record<string, number>);
 
+  const [groupByDay, setGroupByDay] = useState(false);
+  // Always needed-by sorted; optionally bucketed by needed-by day.
+  const sorted = useMemo(() => [...orders].sort(byNeededBy), [orders]);
+  const dayGroups = useMemo(() => {
+    const map = new Map<string, ReagentOrder[]>();
+    for (const o of sorted) {
+      const key = o.requested_for_date ?? '__none__';
+      const arr = map.get(key);
+      if (arr) arr.push(o); else map.set(key, [o]);
+    }
+    return [...map.entries()]; // insertion order = needed-by ascending
+  }, [sorted]);
+
+  function renderRow(o: ReagentOrder) {
+    const lines = linesOf(o);
+    const delivered = lines.some(li => li.delivered_at);
+    return (
+      <tr key={o.id} className="hover:bg-gray-50 align-top">
+        <td className="px-4 py-3 font-mono text-xs">
+          <div className="flex items-center gap-2">
+            {o.high_priority && <CircleAlert size={18} strokeWidth={2.5} className="text-red-600" aria-label="High priority" />}
+            {o.order_number}
+            {o.notes?.trim() && (
+              <span title={o.notes} className="inline-flex text-indigo-600 cursor-help" aria-label="Order note">
+                <Paperclip size={13} />
+              </span>
+            )}
+          </div>
+        </td>
+        <td className="px-4 py-3">
+          {lines.length === 0 ? <span className="text-xs text-gray-400">—</span> : (
+            <ul className="space-y-0.5">
+              {lines.map(li => (
+                <li key={li.id} className="flex items-baseline gap-2">
+                  <span className="text-gray-900 font-medium">{li.reagent_item?.product_name ?? '—'}</span>
+                  <span className="text-xs text-gray-500 font-mono">{li.reagent_item?.item_number}</span>
+                  <span className="ml-auto text-xs text-gray-700 whitespace-nowrap">{li.quantity} <span className="text-gray-500">{li.unit}</span></span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </td>
+        <td className="px-4 py-3">
+          <span className="flex items-center gap-1.5 text-gray-700">
+            <Calendar size={12} className="text-gray-400" />
+            {formatDate(o.requested_for_date)}
+          </span>
+        </td>
+        <td className="px-4 py-3">
+          <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', RO_STATUS_STYLES[o.status])}>
+            {RO_STATUS_LABELS[o.status]}
+          </span>
+        </td>
+        <td className="px-4 py-3">
+          {delivered ? (
+            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700">
+              <Truck size={12} /> Delivered
+            </span>
+          ) : (
+            <span className="text-xs text-gray-400">—</span>
+          )}
+        </td>
+      </tr>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -300,15 +377,26 @@ function LabDashboard() {
         </div>
       ) : (
         <>
-          {/* Status summary */}
-          <div className="flex flex-wrap gap-2">
+          {/* Status summary + grouping toggle */}
+          <div className="flex flex-wrap items-center gap-2">
             {(['pending', 'in_progress', 'fulfilled'] as ReagentOrderStatus[]).map(s => (
               <span key={s} className={cn('inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium', RO_STATUS_STYLES[s])}>
                 {RO_STATUS_LABELS[s]}
                 <span className="font-bold">{counts[s] ?? 0}</span>
               </span>
             ))}
+            <button
+              onClick={() => setGroupByDay(v => !v)}
+              className={cn(
+                'ml-auto inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors',
+                groupByDay ? 'bg-blue-600 text-white border-transparent' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              )}
+              title="Group orders by needed-by day"
+            >
+              <Calendar size={13} /> {groupByDay ? 'Grouped by day' : 'Group by day'}
+            </button>
           </div>
+          <p className="text-xs text-gray-400 -mt-3">Sorted by needed-by date.</p>
 
           {/* Orders list */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -333,58 +421,24 @@ function LabDashboard() {
                       <Link to="/reagent-orders/new" className="text-blue-600 hover:underline">Place your first order</Link>
                     </div>
                   </td></tr>
-                ) : orders.map(o => {
-                  const lines = linesOf(o);
-                  const delivered = lines.some(li => li.delivered_at);
-                  return (
-                    <tr key={o.id} className="hover:bg-gray-50 align-top">
-                      <td className="px-4 py-3 font-mono text-xs">
-                        <div className="flex items-center gap-2">
-                          {o.high_priority && <CircleAlert size={18} strokeWidth={2.5} className="text-red-600" aria-label="High priority" />}
-                          {o.order_number}
-                          {o.notes?.trim() && (
-                            <span title={o.notes} className="inline-flex text-indigo-600 cursor-help" aria-label="Order note">
-                              <Paperclip size={13} />
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {lines.length === 0 ? <span className="text-xs text-gray-400">—</span> : (
-                          <ul className="space-y-0.5">
-                            {lines.map(li => (
-                              <li key={li.id} className="flex items-baseline gap-2">
-                                <span className="text-gray-900 font-medium">{li.reagent_item?.product_name ?? '—'}</span>
-                                <span className="text-xs text-gray-500 font-mono">{li.reagent_item?.item_number}</span>
-                                <span className="ml-auto text-xs text-gray-700 whitespace-nowrap">{li.quantity} <span className="text-gray-500">{li.unit}</span></span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="flex items-center gap-1.5 text-gray-700">
-                          <Calendar size={12} className="text-gray-400" />
-                          {formatDate(o.requested_for_date)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', RO_STATUS_STYLES[o.status])}>
-                          {RO_STATUS_LABELS[o.status]}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {delivered ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700">
-                            <Truck size={12} /> Delivered
+                ) : groupByDay ? (
+                  dayGroups.map(([key, rows]) => (
+                    <Fragment key={key}>
+                      <tr className="bg-gray-50/70">
+                        <td colSpan={5} className="px-4 py-2 text-xs font-semibold text-gray-600">
+                          <span className="inline-flex items-center gap-1.5">
+                            <Calendar size={12} className="text-gray-400" />
+                            {key === '__none__' ? 'No needed-by date' : formatDate(key)}
+                            <span className="font-normal text-gray-400">· {rows.length} order{rows.length === 1 ? '' : 's'}</span>
                           </span>
-                        ) : (
-                          <span className="text-xs text-gray-400">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                      </tr>
+                      {rows.map(renderRow)}
+                    </Fragment>
+                  ))
+                ) : (
+                  sorted.map(renderRow)
+                )}
               </tbody>
             </table>
           </div>

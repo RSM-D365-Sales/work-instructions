@@ -27,6 +27,16 @@ const ALL_STATUSES: ReagentOrderStatus[] = ['pending', 'in_progress', 'fulfilled
 // Orders that can still be delivered.
 const DELIVERABLE: ReagentOrderStatus[] = ['pending', 'in_progress'];
 
+/** Sort by needed-by (requested_for_date) ascending — soonest first, no-date
+ *  last — then newest-created as a tiebreaker. */
+function byNeededBy(a: ReagentOrder, b: ReagentOrder): number {
+  const ra = a.requested_for_date, rb = b.requested_for_date;
+  if (ra && rb) { if (ra !== rb) return ra < rb ? -1 : 1; }
+  else if (ra) return -1;
+  else if (rb) return 1;
+  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+}
+
 type GroupBy = 'none' | 'lab' | 'date';
 
 // Persisted UI preferences ----------------------------------------------------
@@ -159,7 +169,7 @@ export default function ReagentOrdersListPage() {
         if (!hay.includes(s)) return false;
       }
       return true;
-    });
+    }).sort(byNeededBy);
   }, [orders, hiddenStatuses, search, filterLab, filterItem, dateFrom, dateTo]);
 
   // Build groups when grouping is active.
