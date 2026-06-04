@@ -27,6 +27,14 @@ function localInputToIso(local: string): string | null {
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+/** Local YYYY-MM-DD for a date, offset by `addDays` (no UTC shift). */
+function localDateStr(addDays = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + addDays);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /** Format a date-only value (YYYY-MM-DD) without UTC-shifting it a day. */
 function formatDateOnly(dateStr: string | null | undefined): string {
   if (!dateStr) return '—';
@@ -79,10 +87,12 @@ function byRequiredBy(a: any, b: any): number {
 
 export default function ProductionOrdersListPage() {
   const [hiddenStatuses, setHiddenStatuses] = useState<Set<string>>(new Set(['completed', 'cancelled']));
-  const [groupBy, setGroupBy] = useState<GroupBy>('none');
+  // Default the view to grouped-by-required-date, pre-filtered to the next 3 days
+  // (today → today+3) so the soonest-due work is front and centre.
+  const [groupBy, setGroupBy] = useState<GroupBy>('date');
   const [filterItem, setFilterItem] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFrom, setDateFrom] = useState(() => localDateStr(0));
+  const [dateTo, setDateTo] = useState(() => localDateStr(3));
   const { profile } = useAuth();
   const qc = useQueryClient();
 
