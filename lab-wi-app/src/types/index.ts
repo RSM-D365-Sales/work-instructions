@@ -35,6 +35,9 @@ export interface ReagentOrder {
   requested_for_date: string;
   notes?: string | null;
   high_priority: boolean;
+  /** Demo flag set at order creation — surfaces the order on the planner
+   *  "Insufficient Stock" dashboard tile so a production order can be raised. */
+  insufficient_stock?: boolean;
   status: ReagentOrderStatus;
   created_by: string;
   requested_by: string;
@@ -207,6 +210,11 @@ export interface ProductionOrder {
   d365_start_status?: 'pending' | 'sent' | 'failed' | 'skipped' | null;
   d365_start_error?: string | null;
   d365_start_sent_at?: string | null;
+  /** Reagent order this production order was raised from (planner flow). */
+  source_reagent_order_id?: string | null;
+  /** D365 OData ProductionOrderHeaders create tracking. */
+  d365_create_status?: 'pending' | 'sent' | 'failed' | 'skipped' | null;
+  d365_create_error?: string | null;
   created_at: string;
   work_instruction?: WorkInstruction;
   creator?: Profile;

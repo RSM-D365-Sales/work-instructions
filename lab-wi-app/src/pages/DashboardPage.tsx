@@ -64,6 +64,21 @@ function StandardDashboard() {
     },
   });
 
+  // Reagent orders flagged as insufficient stock — planners (admin/approver)
+  // raise production orders from these.
+  const { data: insufficientCount = 0 } = useQuery({
+    queryKey: ['insufficient-stock-count'],
+    enabled: isApprover,
+    queryFn: async () => {
+      const { count } = await supabase
+        .from('reagent_orders')
+        .select('id', { count: 'exact', head: true })
+        .eq('insufficient_stock', true)
+        .in('status', ['pending', 'in_progress']);
+      return count ?? 0;
+    },
+  });
+
   // Work instructions awaiting review that this user didn't author (so they can
   // approve them — you can't approve your own).
   const { data: pendingReviews = [] } = useQuery({
@@ -123,6 +138,26 @@ function StandardDashboard() {
           bg="bg-green-50"
         />
       </div>
+
+      {/* Insufficient stock — reagent orders needing a production order (planners) */}
+      {isApprover && insufficientCount > 0 && (
+        <Link
+          to="/reagent-orders?insufficient=1"
+          className="flex items-center gap-4 p-4 bg-white rounded-xl border border-amber-300 hover:bg-amber-50/50 transition-colors"
+        >
+          <div className="bg-amber-100 p-3 rounded-lg shrink-0">
+            <AlertTriangle size={22} className="text-amber-600" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-gray-900">
+              Insufficient Stock
+              <span className="ml-2 text-xs font-semibold text-amber-700 bg-amber-100 rounded-full px-2 py-0.5">{insufficientCount}</span>
+            </p>
+            <p className="text-sm text-gray-500">Reagent orders that need a production order raised</p>
+          </div>
+          <ChevronRight size={18} className="text-amber-400 ml-auto shrink-0" />
+        </Link>
+      )}
 
       {/* Pending your review — WIs you didn't author, ready to approve */}
       {isApprover && pendingReviews.length > 0 && (

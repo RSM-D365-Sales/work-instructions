@@ -1,10 +1,10 @@
 import { useState, useMemo, Fragment } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { ReagentOrder, ReagentOrderStatus } from '../types';
-import { ShoppingCart, Plus, Search, CircleAlert, Calendar, Building2, Truck, Paperclip, MessageSquare } from 'lucide-react';
+import { ShoppingCart, Plus, Search, CircleAlert, Calendar, Building2, Truck, Paperclip, MessageSquare, AlertTriangle } from 'lucide-react';
 import { formatDate, cn } from '../lib/utils';
 import ListFilters, { toOptions, inDateRange } from '../components/ListFilters';
 
@@ -63,6 +63,8 @@ function loadGroupBy(): GroupBy {
 export default function ReagentOrdersListPage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [onlyInsufficient, setOnlyInsufficient] = useState(searchParams.get('insufficient') === '1');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [hiddenStatuses, setHiddenStatuses] = useState<Set<ReagentOrderStatus>>(loadHiddenStatuses);
@@ -97,6 +99,16 @@ export default function ReagentOrdersListPage() {
   function changeGroupBy(g: GroupBy) {
     setGroupBy(g);
     try { localStorage.setItem(GROUP_KEY, g); } catch { /* ignore */ }
+  }
+
+  function toggleInsufficient() {
+    setOnlyInsufficient(v => {
+      const nv = !v;
+      const next = new URLSearchParams(searchParams);
+      if (nv) next.set('insufficient', '1'); else next.delete('insufficient');
+      setSearchParams(next, { replace: true });
+      return nv;
+    });
   }
 
   const { data: orders = [], isLoading } = useQuery<ReagentOrder[]>({
@@ -157,6 +169,7 @@ export default function ReagentOrdersListPage() {
   const filtered = useMemo(() => {
     return orders.filter(o => {
       if (hiddenStatuses.has(o.status)) return false;
+      if (onlyInsufficient && !o.insufficient_stock) return false;
       if (filterLab && (o.lab?.id ?? '') !== filterLab) return false;
       if (filterItem && !linesOf(o).some(li => (li.reagent_item?.product_name ?? '') === filterItem)) return false;
       if (!inDateRange(o.requested_for_date, dateFrom, dateTo)) return false;
@@ -170,7 +183,9 @@ export default function ReagentOrdersListPage() {
       }
       return true;
     }).sort(byNeededBy);
-  }, [orders, hiddenStatuses, search, filterLab, filterItem, dateFrom, dateTo]);
+  }, [orders, hiddenStatuses, onlyInsufficient, search, filterLab, filterItem, dateFrom, dateTo]);
+
+  const insufficientCount = useMemo(() => orders.filter(o => o.insufficient_stock).length, [orders]);
 
   // Build groups when grouping is active.
   const groups = useMemo(() => {
@@ -244,6 +259,11 @@ export default function ReagentOrdersListPage() {
             {o.high_priority && (
               <span title="High Priority" className="inline-flex items-center text-red-600">
                 <CircleAlert size={18} strokeWidth={2.5} />
+              </span>
+            )}
+            {o.insufficient_stock && (
+              <span title="Insufficient stock" className="inline-flex items-center text-amber-600">
+                <AlertTriangle size={16} strokeWidth={2.5} />
               </span>
             )}
             <button
@@ -411,6 +431,25 @@ export default function ReagentOrdersListPage() {
             </button>
           );
         })}
+        {/* Insufficient-stock filter toggle */}
+        <button
+          onClick={toggleInsufficient}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ml-1',
+            onlyInsufficient
+              ? 'bg-amber-100 text-amber-800 border-transparent'
+              : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+          )}
+          title="Show only orders flagged as insufficient stock"
+        >
+          <AlertTriangle size={13} />
+          Insufficient stock
+          {insufficientCount > 0 && (
+            <span className={cn('rounded-full px-1.5 py-0.5 text-xs font-bold', onlyInsufficient ? 'bg-white/50' : 'bg-gray-100')}>
+              {insufficientCount}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Group-by + search */}

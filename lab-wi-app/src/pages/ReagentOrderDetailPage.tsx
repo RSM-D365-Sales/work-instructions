@@ -1,11 +1,14 @@
 import type { ReactNode } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import type { ReagentOrder, ReagentOrderItem, ReagentOrderStatus } from '../types';
+import { useAuth } from '../context/AuthContext';
+import type { ReagentOrder, ReagentOrderItem, ReagentOrderStatus, WorkInstruction } from '../types';
 import { cn, formatDate } from '../lib/utils';
 import {
   ArrowLeft, Building2, Calendar, Truck, MessageSquare, CircleAlert, PackageCheck, User, Paperclip,
+  AlertTriangle, Factory, Loader2, CheckCircle, XCircle, ChevronRight,
 } from 'lucide-react';
 
 const STATUS_STYLES: Record<ReagentOrderStatus, string> = {
@@ -118,6 +121,20 @@ export default function ReagentOrderDetailPage() {
         </div>
       </div>
 
+      {/* Insufficient-stock warning + planner production action */}
+      {order.insufficient_stock && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex items-start gap-3">
+          <AlertTriangle size={22} className="text-amber-600 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="font-semibold text-amber-900">Insufficient stock</p>
+            <p className="text-sm text-amber-800 mt-0.5">
+              On-hand stock can't fulfil this order. Raise a production order for the affected item(s) below —
+              this creates a production order in D365 (warehouse <span className="font-mono">REAGENT</span>, site <span className="font-mono">3</span>).
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Order record / audit meta */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 grid grid-cols-2 sm:grid-cols-3 gap-5">
         <Meta label="Destination lab">
@@ -223,6 +240,173 @@ export default function ReagentOrderDetailPage() {
           ))}
         </ul>
       </div>
+
+      {/* Planner: raise production order(s) for an insufficient-stock order */}
+      {order.insufficient_stock && <InsufficientStockProduction order={order} />}
+    </div>
+  );
+}
+
+// ─── Planner production action (insufficient-stock flow) ─────────────────────
+type CreateState =
+  | { phase: 'idle' }
+  | { phase: 'creating' }
+  | { phase: 'done'; poId: string; poNumber: string; d365: 'sent' | 'skipped' | 'failed'; d365Detail?: string; d365ProdId?: string | null }
+  | { phase: 'error'; error: string };
+
+function InsufficientStockProduction({ order }: { order: ReagentOrder }) {
+  const { profile } = useAuth();
+  const isPlanner = profile?.role === 'admin' || profile?.role === 'approver';
+  const lines = linesOf(order);
+  const itemIds = [...new Set(lines.map(l => l.reagent_item_id).filter(Boolean))] as string[];
+  const [states, setStates] = useState<Record<string, CreateState>>({});
+
+  const { data: approvedWIs = [] } = useQuery<WorkInstruction[]>({
+    queryKey: ['approved-wis-for-items', itemIds],
+    enabled: isPlanner && itemIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('work_instructions')
+        .select('*')
+        .eq('status', 'approved')
+        .in('reagent_item_id', itemIds);
+      if (error) throw error;
+      return (data ?? []) as WorkInstruction[];
+    },
+  });
+
+  // Latest approved WI per item.
+  const wiByItem = new Map<string, WorkInstruction>();
+  for (const wi of approvedWIs) {
+    if (!wi.reagent_item_id) continue;
+    const cur = wiByItem.get(wi.reagent_item_id);
+    if (!cur || wi.version > cur.version) wiByItem.set(wi.reagent_item_id, wi);
+  }
+
+  if (!isPlanner) return null;
+
+  async function createProductionOrder(line: ReagentOrderItem) {
+    const wi = line.reagent_item_id ? wiByItem.get(line.reagent_item_id) : undefined;
+    if (!wi) return;
+    setStates(s => ({ ...s, [line.id]: { phase: 'creating' } }));
+    try {
+      const stamp = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      const lot = `LOT-${line.reagent_item?.item_number ?? 'RX'}-${stamp}`;
+      const { data: po, error } = await supabase
+        .from('production_orders')
+        .insert({
+          work_instruction_id: wi.id,
+          lot_number: lot,
+          batch_size: line.quantity,
+          batch_size_unit: line.unit,
+          status: 'pending',
+          created_by: profile!.id,
+          source_reagent_order_id: order.id,
+          required_by: order.requested_for_date,
+          d365_create_status: 'pending',
+        })
+        .select('id, production_order_number')
+        .single();
+      if (error || !po) throw new Error(error?.message ?? 'Failed to create production order');
+
+      // Create the production order in D365 via OData (skips when disabled).
+      let d365: 'sent' | 'skipped' | 'failed' = 'failed';
+      let d365Detail: string | undefined;
+      let d365ProdId: string | null | undefined;
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-d365-production-order`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+          },
+          body: JSON.stringify({ production_order_id: po.id }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (body?.skipped) { d365 = 'skipped'; d365Detail = body?.error; }
+        else if (res.ok && body?.success) { d365 = 'sent'; d365ProdId = body?.d365_prod_id; }
+        else { d365 = 'failed'; d365Detail = body?.error ?? `HTTP ${res.status}`; }
+      } catch (e) {
+        d365 = 'failed';
+        d365Detail = e instanceof Error ? e.message : 'D365 call failed';
+      }
+
+      setStates(s => ({ ...s, [line.id]: { phase: 'done', poId: po.id, poNumber: po.production_order_number, d365, d365Detail, d365ProdId } }));
+    } catch (e) {
+      setStates(s => ({ ...s, [line.id]: { phase: 'error', error: e instanceof Error ? e.message : 'Failed to create production order' } }));
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
+        <Factory size={16} className="text-gray-500" />
+        <h2 className="text-sm font-semibold text-gray-800">Raise production</h2>
+        <span className="text-xs text-gray-400">create a production order to cover the shortfall</span>
+      </div>
+      <ul className="divide-y divide-gray-50">
+        {lines.map(line => {
+          const wi = line.reagent_item_id ? wiByItem.get(line.reagent_item_id) : undefined;
+          const st = states[line.id] ?? { phase: 'idle' as const };
+          return (
+            <li key={line.id} className="px-5 py-3.5 flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-gray-900 font-medium truncate">{line.reagent_item?.product_name ?? '—'}</span>
+                  <span className="text-xs text-gray-500 font-mono">{line.reagent_item?.item_number}</span>
+                  <span className="text-xs text-gray-400">· {line.quantity} {line.unit}</span>
+                </div>
+                {wi
+                  ? <p className="text-xs text-gray-400 mt-0.5">WI: {wi.title} <span className="text-indigo-500">v{wi.version}</span></p>
+                  : <p className="text-xs text-amber-600 mt-0.5">No approved work instruction for this item</p>}
+              </div>
+
+              <div className="shrink-0">
+                {st.phase === 'done' ? (
+                  <div className="flex flex-col items-end gap-1">
+                    <Link to={`/production-orders/${st.poId}`} className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline">
+                      {st.poNumber} <ChevronRight size={14} />
+                    </Link>
+                    {st.d365 === 'sent' && (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-green-700">
+                        <CheckCircle size={12} /> D365{st.d365ProdId ? ` · ${st.d365ProdId}` : ' created'}
+                      </span>
+                    )}
+                    {st.d365 === 'skipped' && (
+                      <span className="text-[11px] text-yellow-700" title={st.d365Detail}>D365 integration disabled</span>
+                    )}
+                    {st.d365 === 'failed' && (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-red-600" title={st.d365Detail}>
+                        <XCircle size={12} /> D365 create failed
+                      </span>
+                    )}
+                  </div>
+                ) : st.phase === 'creating' ? (
+                  <span className="inline-flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 size={15} className="animate-spin" /> Creating…
+                  </span>
+                ) : (
+                  <div className="flex flex-col items-end gap-1">
+                    <button
+                      onClick={() => createProductionOrder(line)}
+                      disabled={!wi}
+                      title={wi ? 'Create a production order from this line' : 'No approved work instruction for this item'}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Factory size={14} /> Create Production Order
+                    </button>
+                    {st.phase === 'error' && <span className="text-[11px] text-red-600 max-w-[14rem] text-right">{st.error}</span>}
+                  </div>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

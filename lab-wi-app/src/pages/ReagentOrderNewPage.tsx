@@ -26,6 +26,7 @@ export default function ReagentOrderNewPage() {
   const [requestedForDate, setRequestedForDate] = useState('');
   const [notes, setNotes] = useState('');
   const [highPriority, setHighPriority] = useState(false);
+  const [insufficientStock, setInsufficientStock] = useState(false);
   const [requesterId, setRequesterId] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -160,6 +161,7 @@ export default function ReagentOrderNewPage() {
           requested_for_date: requestedForDate,
           notes: notes.trim() || null,
           high_priority: highPriority,
+          insufficient_stock: insufficientStock,
           created_by: profile!.id,
           requested_by: requesterId,
           status: 'pending',
@@ -442,6 +444,31 @@ export default function ReagentOrderNewPage() {
             <p className="text-xs text-gray-500 mt-0.5">
               When enabled, an email and Microsoft Teams message will be sent to the{' '}
               <span className="font-medium">High Priority Requests</span> user group.
+            </p>
+          </div>
+        </label>
+
+        {/* Insufficient stock (demo flag) */}
+        <label
+          className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+            insufficientStock ? 'border-amber-300 bg-amber-50' : 'border-gray-200 hover:bg-gray-50'
+          }`}
+        >
+          <input
+            type="checkbox"
+            checked={insufficientStock}
+            onChange={e => setInsufficientStock(e.target.checked)}
+            className="mt-0.5 h-4 w-4 text-amber-600 rounded border-gray-300 focus:ring-amber-500"
+          />
+          <div className="flex-1">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+              <AlertTriangle size={14} className={insufficientStock ? 'text-amber-600' : 'text-gray-400'} />
+              Show insufficient stock
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Flags this order as having insufficient on-hand stock. It will appear on the{' '}
+              <span className="font-medium">Insufficient Stock</span> dashboard tile for planners, who can
+              raise a production order directly from it.
             </p>
           </div>
         </label>
