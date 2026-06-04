@@ -66,12 +66,14 @@ export default function App() {
                   } />
                   <Route path="/inventory" element={<InventoryPage />} />
                 </Route>
-                <Route element={<ProtectedRoute allowedRoles={['author', 'approver', 'lab']} />}>
+                <Route element={<ProtectedRoute allowedRoles={['author', 'approver', 'operator', 'lab']} />}>
                   <Route path="/reagent-orders" element={<ReagentOrdersListPage />} />
-                  <Route path="/reagent-orders/new" element={<ReagentOrderNewPage />} />
                   <Route path="/reagent-orders/:id" element={<ReagentOrderDetailPage />} />
                 </Route>
-                <Route element={<ProtectedRoute allowedRoles={['author', 'approver']} />}>
+                <Route element={<ProtectedRoute allowedRoles={['author', 'approver', 'lab']} />}>
+                  <Route path="/reagent-orders/new" element={<ReagentOrderNewPage />} />
+                </Route>
+                <Route element={<ProtectedRoute allowedRoles={['author', 'approver', 'operator']} />}>
                   <Route path="/reagent-orders/deliver" element={<ReagentDeliveryPage />} />
                 </Route>
                 <Route element={<ProtectedRoute allowedRoles={['admin', 'author']} />}>

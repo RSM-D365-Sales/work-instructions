@@ -15,7 +15,7 @@ const mainNav = [
   { to: '/quality-trends', label: 'Quality Trends', icon: TrendingUp, roles: ['admin', 'author', 'approver'] },
   { to: '/inventory', label: 'Inventory', icon: Boxes, roles: ['admin', 'author', 'approver'] },
   { to: '/unscheduled-orders', label: 'Unscheduled Orders', icon: CalendarClock, roles: ['admin'] },
-  { to: '/reagent-orders', label: 'Reagent Orders', icon: ShoppingCart, roles: ['admin', 'author', 'approver', 'lab'] },
+  { to: '/reagent-orders', label: 'Reagent Orders', icon: ShoppingCart, roles: ['admin', 'author', 'approver', 'operator', 'lab'] },
 ];
 
 const setupNav = [
