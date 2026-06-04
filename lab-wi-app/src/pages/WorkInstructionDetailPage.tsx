@@ -134,7 +134,7 @@ export default function WorkInstructionDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('work_instructions')
-        .select('id, title, product_name, reagent_item_id, version, status, updated_at, creator:profiles!created_by(full_name)')
+        .select('*, creator:profiles!created_by(full_name)')
         .eq('title', wi!.title)
         .order('version', { ascending: false });
       if (error) throw error;
