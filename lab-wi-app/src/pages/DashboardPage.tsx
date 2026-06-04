@@ -34,12 +34,17 @@ function StandardDashboard() {
     },
   });
 
+  const isOperator = profile?.role === 'operator';
+
   const { data: poStats } = useQuery({
-    queryKey: ['po-stats'],
+    // Operators see counts for their own assigned orders only.
+    queryKey: ['po-stats', isOperator ? profile?.id : 'all'],
     queryFn: async () => {
-      const { data } = await supabase
+      let q = supabase
         .from('production_orders')
         .select('status');
+      if (isOperator && profile) q = q.eq('assigned_to', profile.id);
+      const { data } = await q;
       const counts = { pending: 0, in_progress: 0, awaiting_qc: 0, completed: 0, failed: 0 };
       data?.forEach(po => {
         const k = po.status as keyof typeof counts;
@@ -48,8 +53,6 @@ function StandardDashboard() {
       return counts;
     },
   });
-
-  const isOperator = profile?.role === 'operator';
   const isApprover = profile?.role === 'approver' || profile?.role === 'admin';
   const { data: recentOrders } = useQuery({
     queryKey: ['recent-orders', isOperator ? profile?.id : 'all'],

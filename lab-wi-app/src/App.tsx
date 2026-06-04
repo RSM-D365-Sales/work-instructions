@@ -58,22 +58,22 @@ export default function App() {
                 </Route>
                 <Route path="/production-orders/:id" element={<ProductionOrderExecutionPage />} />
                 <Route path="/production-orders/:id/certificate" element={<ProductionOrderCertificatePage />} />
-                <Route path="/quality-trends" element={
-                  <Suspense fallback={<div className="text-center py-12 text-gray-400">Loading…</div>}>
-                    <QualityTrendsPage />
-                  </Suspense>
-                } />
-                <Route element={<ProtectedRoute allowedRoles={['author', 'approver', 'operator']} />}>
+                <Route element={<ProtectedRoute allowedRoles={['author', 'approver']} />}>
+                  <Route path="/quality-trends" element={
+                    <Suspense fallback={<div className="text-center py-12 text-gray-400">Loading…</div>}>
+                      <QualityTrendsPage />
+                    </Suspense>
+                  } />
                   <Route path="/inventory" element={<InventoryPage />} />
                 </Route>
-                <Route path="/reagent-orders" element={<ReagentOrdersListPage />} />
                 <Route element={<ProtectedRoute allowedRoles={['author', 'approver', 'lab']} />}>
+                  <Route path="/reagent-orders" element={<ReagentOrdersListPage />} />
                   <Route path="/reagent-orders/new" element={<ReagentOrderNewPage />} />
+                  <Route path="/reagent-orders/:id" element={<ReagentOrderDetailPage />} />
                 </Route>
-                <Route element={<ProtectedRoute allowedRoles={['author', 'approver', 'operator']} />}>
+                <Route element={<ProtectedRoute allowedRoles={['author', 'approver']} />}>
                   <Route path="/reagent-orders/deliver" element={<ReagentDeliveryPage />} />
                 </Route>
-                <Route path="/reagent-orders/:id" element={<ReagentOrderDetailPage />} />
                 <Route element={<ProtectedRoute allowedRoles={['admin', 'author']} />}>
                   <Route path="/reagents" element={<ReagentItemsPage />} />
                 </Route>
