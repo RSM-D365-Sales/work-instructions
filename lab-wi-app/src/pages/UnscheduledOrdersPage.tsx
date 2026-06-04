@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CalendarClock, CheckCircle, ArrowLeft, Wand2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { cn } from '../lib/utils';
-import { planSchedule, planWithAssignment, UNASSIGNED_KEY, type SchedulableOrder, type BusyInterval, type AssignableOrder } from '../lib/autoSchedule';
+import { planWithAssignment, UNASSIGNED_KEY, type BusyInterval, type AssignableOrder } from '../lib/autoSchedule';
 import ListFilters, { toOptions, inDateRange } from '../components/ListFilters';
 import { UserCheck } from 'lucide-react';
 
@@ -163,27 +163,30 @@ export default function UnscheduledOrdersPage() {
     },
   });
 
-  /* Auto-schedule every unscheduled order: earliest required-date first, packed
-   * into the next free 07:00–18:00 slot per assignee, never overlapping an
-   * existing or just-placed run. */
+  /* Auto-schedule every unscheduled order: earliest required-date first, each
+   * assigned to an available person who can finish by its required date and
+   * packed into the next free 07:00–18:00 slot, never double-booking anyone. */
   const autoScheduleMutation = useMutation({
     mutationFn: async () => {
-      const schedulable: SchedulableOrder[] = visibleOrders.map(o => ({
+      const assignable: AssignableOrder[] = visibleOrders.map(o => ({
         id: o.id,
         durationMinutes: o.work_instruction?.scheduled_minutes ?? 60,
-        resourceKey: o.assigned_to ?? UNASSIGNED_KEY,
         requiredBy: o.required_by,
         createdAt: o.created_at,
+        currentAssignee: o.assigned_to,
       }));
-      const assignments = planSchedule(schedulable, busyByResource, { from: new Date(), workingDays });
-      await Promise.all(assignments.map(async a => {
+      const results = planWithAssignment(assignable, candidateIds, busyByResource, workingDays, { from: new Date() });
+      const orig = new Map(visibleOrders.map(o => [o.id, o.assigned_to]));
+      let reassigned = 0;
+      await Promise.all(results.map(async a => {
         const { error } = await supabase
           .from('production_orders')
-          .update({ scheduled_start: a.start.toISOString(), scheduled_end: a.end.toISOString() })
+          .update({ scheduled_start: a.start.toISOString(), scheduled_end: a.end.toISOString(), assigned_to: a.assigneeId })
           .eq('id', a.id);
         if (error) throw error;
+        if (orig.get(a.id) !== a.assigneeId) reassigned++;
       }));
-      return { count: assignments.length, late: assignments.filter(a => a.late).length };
+      return { count: results.length, late: results.filter(r => r.late).length, reassigned };
     },
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['unscheduled-orders'] });
@@ -198,7 +201,8 @@ export default function UnscheduledOrdersPage() {
     if (visibleOrders.length === 0 || autoScheduleMutation.isPending) return;
     const ok = window.confirm(
       `Auto-schedule ${visibleOrders.length} order${visibleOrders.length === 1 ? '' : 's'} into the next available ` +
-      `07:00–18:00 slots, earliest required date first? Existing scheduled runs are not moved.`,
+      `07:00–18:00 slots, assigning each to an available person who can finish by its required date? ` +
+      `Existing scheduled runs are not moved.`,
     );
     if (!ok) return;
     setAutoResult(null);

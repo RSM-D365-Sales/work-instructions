@@ -1,14 +1,14 @@
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { ReagentOrder, ReagentOrderItem, ReagentOrderStatus, WorkInstruction } from '../types';
 import { cn, formatDate } from '../lib/utils';
 import {
   ArrowLeft, Building2, Calendar, Truck, MessageSquare, CircleAlert, PackageCheck, User, Paperclip,
-  AlertTriangle, Factory, Loader2, CheckCircle, XCircle, ChevronRight,
+  AlertTriangle, Factory, Loader2, CheckCircle, ChevronRight,
 } from 'lucide-react';
 
 const STATUS_STYLES: Record<ReagentOrderStatus, string> = {
@@ -251,11 +251,12 @@ export default function ReagentOrderDetailPage() {
 type CreateState =
   | { phase: 'idle' }
   | { phase: 'creating' }
-  | { phase: 'done'; poId: string; poNumber: string; d365: 'sent' | 'skipped' | 'failed'; d365Detail?: string; d365ProdId?: string | null }
+  | { phase: 'done'; poId: string; poNumber: string }
   | { phase: 'error'; error: string };
 
 function InsufficientStockProduction({ order }: { order: ReagentOrder }) {
   const { profile } = useAuth();
+  const qc = useQueryClient();
   const isPlanner = profile?.role === 'admin' || profile?.role === 'approver';
   const lines = linesOf(order);
   // Line items are loaded with the nested reagent_item object; the scalar
@@ -314,33 +315,16 @@ function InsufficientStockProduction({ order }: { order: ReagentOrder }) {
         .single();
       if (error || !po) throw new Error(error?.message ?? 'Failed to create production order');
 
-      // Create the production order in D365 via OData (skips when disabled).
-      let d365: 'sent' | 'skipped' | 'failed' = 'failed';
-      let d365Detail: string | undefined;
-      let d365ProdId: string | null | undefined;
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData.session?.access_token;
-        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-d365-production-order`;
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
-          },
-          body: JSON.stringify({ production_order_id: po.id }),
-        });
-        const body = await res.json().catch(() => ({}));
-        if (body?.skipped) { d365 = 'skipped'; d365Detail = body?.error; }
-        else if (res.ok && body?.success) { d365 = 'sent'; d365ProdId = body?.d365_prod_id; }
-        else { d365 = 'failed'; d365Detail = body?.error ?? `HTTP ${res.status}`; }
-      } catch (e) {
-        d365 = 'failed';
-        d365Detail = e instanceof Error ? e.message : 'D365 call failed';
-      }
+      // Production order raised — clear the insufficient-stock flag so the order
+      // drops off the planner dashboard tile and the list filter.
+      await supabase.from('reagent_orders').update({ insufficient_stock: false }).eq('id', order.id);
+      qc.invalidateQueries({ queryKey: ['insufficient-stock-count'] });
+      qc.invalidateQueries({ queryKey: ['reagent-orders'] });
 
-      setStates(s => ({ ...s, [line.id]: { phase: 'done', poId: po.id, poNumber: po.production_order_number, d365, d365Detail, d365ProdId } }));
+      // Simulate the D365 production-order creation for the demo.
+      await new Promise(resolve => setTimeout(resolve, 7000));
+
+      setStates(s => ({ ...s, [line.id]: { phase: 'done', poId: po.id, poNumber: po.production_order_number } }));
     } catch (e) {
       setStates(s => ({ ...s, [line.id]: { phase: 'error', error: e instanceof Error ? e.message : 'Failed to create production order' } }));
     }
@@ -374,22 +358,12 @@ function InsufficientStockProduction({ order }: { order: ReagentOrder }) {
               <div className="shrink-0">
                 {st.phase === 'done' ? (
                   <div className="flex flex-col items-end gap-1">
-                    <Link to={`/production-orders/${st.poId}`} className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline">
-                      {st.poNumber} <ChevronRight size={14} />
+                    <span className="inline-flex items-center gap-1.5 text-sm font-medium text-green-700">
+                      <CheckCircle size={15} /> Production order {st.poNumber} created
+                    </span>
+                    <Link to={`/production-orders/${st.poId}`} className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline">
+                      View order <ChevronRight size={13} />
                     </Link>
-                    {st.d365 === 'sent' && (
-                      <span className="inline-flex items-center gap-1 text-[11px] text-green-700">
-                        <CheckCircle size={12} /> D365{st.d365ProdId ? ` · ${st.d365ProdId}` : ' created'}
-                      </span>
-                    )}
-                    {st.d365 === 'skipped' && (
-                      <span className="text-[11px] text-yellow-700" title={st.d365Detail}>D365 integration disabled</span>
-                    )}
-                    {st.d365 === 'failed' && (
-                      <span className="inline-flex items-center gap-1 text-[11px] text-red-600" title={st.d365Detail}>
-                        <XCircle size={12} /> D365 create failed
-                      </span>
-                    )}
                   </div>
                 ) : st.phase === 'creating' ? (
                   <span className="inline-flex items-center gap-2 text-sm text-gray-500">
