@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { WorkInstruction } from '../types';
 import { Plus, ChevronRight, Trash2 } from 'lucide-react';
-import { formatDate } from '../lib/utils';
+import { formatDate, wiLineageKey } from '../lib/utils';
 import ListFilters, { toOptions, inDateRange } from '../components/ListFilters';
 
 const STATUS_STYLES: Record<string, string> = {
@@ -46,14 +46,40 @@ export default function WorkInstructionsListPage() {
     },
   });
 
-  const itemOptions = useMemo(() => toOptions(wis.map(w => w.product_name)), [wis]);
+  // Collapse each WI lineage to its current + in-progress versions. We keep the
+  // latest *approved* version plus any newer ones still being worked on (draft /
+  // pending review / rejected); older superseded versions drop off. Once a newer
+  // version is approved it becomes the threshold and the previous one drops off.
+  // Full history is still reachable from each WI's detail page.
+  const latestWis = useMemo(() => {
+    const groups = new Map<string, WorkInstruction[]>();
+    for (const w of wis) {
+      const key = wiLineageKey(w);
+      const arr = groups.get(key);
+      if (arr) arr.push(w); else groups.set(key, [w]);
+    }
+    const visible: WorkInstruction[] = [];
+    for (const versions of groups.values()) {
+      const approvedVersions = versions.filter(v => v.status === 'approved').map(v => v.version);
+      // Latest approved version number; if none approved yet, show every version.
+      const threshold = approvedVersions.length ? Math.max(...approvedVersions) : -Infinity;
+      for (const v of versions) {
+        if (v.version >= threshold) visible.push(v);
+      }
+    }
+    return visible.sort(
+      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    );
+  }, [wis]);
+
+  const itemOptions = useMemo(() => toOptions(latestWis.map(w => w.product_name)), [latestWis]);
   const filtersActive = !!(filterItem || dateFrom || dateTo);
   const filteredWis = useMemo(
-    () => wis.filter(w =>
+    () => latestWis.filter(w =>
       (!filterItem || (w.product_name ?? '') === filterItem) &&
       inDateRange(w.updated_at, dateFrom, dateTo)
     ),
-    [wis, filterItem, dateFrom, dateTo]
+    [latestWis, filterItem, dateFrom, dateTo]
   );
 
   return (

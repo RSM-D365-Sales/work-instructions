@@ -7,9 +7,9 @@ import type { WorkInstruction, WIStep, WIApproval, StepType } from '../types';
 import {
   ArrowLeft, Pencil, CheckCircle, XCircle, RotateCcw, PlayCircle, GitBranch,
   FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, Trash2,
-  Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle,
+  Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, ChevronRight,
 } from 'lucide-react';
-import { formatDate } from '../lib/utils';
+import { formatDate, cn, wiLineageKey } from '../lib/utils';
 
 const STEP_ICONS: Record<StepType, React.ReactNode> = {
   gather_inputs:    <FlaskConical size={15} />,
@@ -125,6 +125,24 @@ export default function WorkInstructionDetailPage() {
     },
   });
 
+  // All versions in this WI's lineage (same item link + title), newest first.
+  // Matched by title in SQL, then filtered to the exact lineage client-side so
+  // it stays consistent with the list page's collapsing rule.
+  const { data: versions = [] } = useQuery<WorkInstruction[]>({
+    queryKey: ['wi-versions', wi?.title, wi?.reagent_item_id, wi?.product_name],
+    enabled: !!wi,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('work_instructions')
+        .select('id, title, product_name, reagent_item_id, version, status, updated_at, creator:profiles!created_by(full_name)')
+        .eq('title', wi!.title)
+        .order('version', { ascending: false });
+      if (error) throw error;
+      const key = wiLineageKey(wi!);
+      return (data as WorkInstruction[]).filter(v => wiLineageKey(v) === key);
+    },
+  });
+
   const newVersionMutation = useMutation({
     mutationFn: async () => {
       // Insert next version as a new draft
@@ -134,6 +152,7 @@ export default function WorkInstructionDetailPage() {
           title: wi!.title,
           description: wi!.description ?? null,
           product_name: wi!.product_name,
+          reagent_item_id: wi!.reagent_item_id ?? null,
           target_molarity: wi!.target_molarity ?? null,
           scheduled_minutes: wi!.scheduled_minutes ?? null,
           version: wi!.version + 1,
@@ -194,6 +213,8 @@ export default function WorkInstructionDetailPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['work-instruction-detail', id] });
       qc.invalidateQueries({ queryKey: ['wi-approvals', id] });
+      qc.invalidateQueries({ queryKey: ['wi-versions'] });
+      qc.invalidateQueries({ queryKey: ['work-instructions'] });
       setApprovalComment('');
       setApprovalError('');
     },
@@ -438,6 +459,45 @@ export default function WorkInstructionDetailPage() {
                 </div>
               </li>
             ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Version history — every version in this WI's lineage */}
+      {versions.length > 1 && (
+        <div className="bg-white rounded-xl border border-gray-200">
+          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
+            <GitBranch size={15} className="text-indigo-500" />
+            <h2 className="text-sm font-semibold text-gray-700">Version History</h2>
+            <span className="text-xs text-gray-400">{versions.length} versions</span>
+          </div>
+          <ul className="divide-y divide-gray-50">
+            {versions.map(v => {
+              const isCurrent = v.id === wi.id;
+              return (
+                <li key={v.id}>
+                  <Link
+                    to={`/work-instructions/${v.id}`}
+                    className={cn(
+                      'flex items-center gap-3 px-5 py-3 transition-colors',
+                      isCurrent ? 'bg-indigo-50/50' : 'hover:bg-gray-50'
+                    )}
+                  >
+                    <span className="text-xs font-bold text-gray-500 w-9 shrink-0">v{v.version}</span>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${STATUS_STYLES[v.status]}`}>
+                      {v.status.replace('_', ' ')}
+                    </span>
+                    <span className="text-sm text-gray-600 flex-1 truncate">
+                      {(v as any).creator?.full_name ?? '—'}
+                    </span>
+                    <span className="text-xs text-gray-400 shrink-0">{formatDate(v.updated_at)}</span>
+                    {isCurrent
+                      ? <span className="text-xs text-indigo-600 font-medium shrink-0 w-16 text-right">current</span>
+                      : <span className="shrink-0 w-16 flex justify-end"><ChevronRight size={15} className="text-gray-300" /></span>}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
