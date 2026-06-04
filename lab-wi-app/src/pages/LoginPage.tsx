@@ -1,16 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { FlaskConical, Zap } from 'lucide-react';
-
-const DEMO_ACCOUNTS = [
-  { label: 'Lab Scientist', email: 'lab@demolab.com', role: 'lab', name: 'Demo Lab Scientist', color: 'bg-sky-600 hover:bg-sky-700' },
-  { label: 'Author', email: 'author@demolab.com', role: 'author', name: 'Demo Author', color: 'bg-violet-600 hover:bg-violet-700' },
-  { label: 'Approver', email: 'approver@demolab.com', role: 'approver', name: 'Demo Approver', color: 'bg-emerald-600 hover:bg-emerald-700' },
-  { label: 'Operator', email: 'operator@demolab.com', role: 'operator', name: 'Demo Operator', color: 'bg-amber-600 hover:bg-amber-700' },
-] as const;
-
-const DEMO_PASSWORD = 'Demo@Lab2026';
+import { FlaskConical } from 'lucide-react';
 
 export default function LoginPage() {
   const { signIn, signUp, session } = useAuth();
@@ -26,20 +17,6 @@ export default function LoginPage() {
   const [role, setRole] = useState('operator');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [demoLoading, setDemoLoading] = useState<string | null>(null);
-
-  async function handleDemoLogin(account: typeof DEMO_ACCOUNTS[number]) {
-    setError('');
-    setDemoLoading(account.role);
-    try {
-      await signIn(account.email, DEMO_PASSWORD);
-      navigate('/', { replace: true });
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Demo login failed');
-    } finally {
-      setDemoLoading(null);
-    }
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -150,30 +127,6 @@ export default function LoginPage() {
             {mode === 'signin' ? 'Sign up' : 'Sign in'}
           </button>
         </p>
-
-        {/* Demo login section */}
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <div className="flex items-center gap-2 mb-3">
-            <Zap size={14} className="text-gray-400" />
-            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Demo Mode</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {DEMO_ACCOUNTS.map(account => (
-              <button
-                key={account.role}
-                onClick={() => handleDemoLogin(account)}
-                disabled={demoLoading !== null || loading}
-                className={`${account.color} text-white text-sm py-2 px-3 rounded-lg font-medium disabled:opacity-50 transition-colors flex flex-col items-center gap-0.5`}
-              >
-                <span className="text-xs opacity-75">Sign in as</span>
-                <span>{demoLoading === account.role ? '…' : account.label}</span>
-              </button>
-            ))}
-          </div>
-          <p className="mt-2 text-xs text-gray-400 text-center">
-            Demo accounts are created automatically on first use.
-          </p>
-        </div>
       </div>
     </div>
   );
