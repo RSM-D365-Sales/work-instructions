@@ -258,7 +258,11 @@ function InsufficientStockProduction({ order }: { order: ReagentOrder }) {
   const { profile } = useAuth();
   const isPlanner = profile?.role === 'admin' || profile?.role === 'approver';
   const lines = linesOf(order);
-  const itemIds = [...new Set(lines.map(l => l.reagent_item_id).filter(Boolean))] as string[];
+  // Line items are loaded with the nested reagent_item object; the scalar
+  // reagent_item_id isn't selected, so resolve the id from the nested object
+  // (falling back to the scalar for legacy synthetic lines).
+  const lineItemId = (l: ReagentOrderItem) => l.reagent_item?.id ?? l.reagent_item_id ?? null;
+  const itemIds = [...new Set(lines.map(lineItemId).filter(Boolean))] as string[];
   const [states, setStates] = useState<Record<string, CreateState>>({});
 
   const { data: approvedWIs = [] } = useQuery<WorkInstruction[]>({
@@ -286,7 +290,8 @@ function InsufficientStockProduction({ order }: { order: ReagentOrder }) {
   if (!isPlanner) return null;
 
   async function createProductionOrder(line: ReagentOrderItem) {
-    const wi = line.reagent_item_id ? wiByItem.get(line.reagent_item_id) : undefined;
+    const itemId = lineItemId(line);
+    const wi = itemId ? wiByItem.get(itemId) : undefined;
     if (!wi) return;
     setStates(s => ({ ...s, [line.id]: { phase: 'creating' } }));
     try {
@@ -350,7 +355,8 @@ function InsufficientStockProduction({ order }: { order: ReagentOrder }) {
       </div>
       <ul className="divide-y divide-gray-50">
         {lines.map(line => {
-          const wi = line.reagent_item_id ? wiByItem.get(line.reagent_item_id) : undefined;
+          const itemId = lineItemId(line);
+          const wi = itemId ? wiByItem.get(itemId) : undefined;
           const st = states[line.id] ?? { phase: 'idle' as const };
           return (
             <li key={line.id} className="px-5 py-3.5 flex items-center gap-3">
