@@ -105,6 +105,7 @@ export type StepType =
   | 'notes'             // free-text notes about the order up to this step
   | 'production_break'  // divider marking the boundary between parts of a run
   | 'print_labels'
+  | 'possible_deviation' // flag a possible deviation; capture impacted qty + notify supervisor
   | 'custom';
 
 export interface ParameterFieldDef {

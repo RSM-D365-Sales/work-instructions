@@ -11,7 +11,7 @@ import {
   FlaskConical, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings,
   AlertTriangle, CheckCheck, PlayCircle, Ban, Trash2, Loader2, Wifi, WifiOff,
   Wrench, Beaker, Printer, UserCog, CalendarClock, Check, StickyNote, Milestone,
-  ClipboardCheck, FileText, XCircle, Send, ScanLine,
+  ClipboardCheck, FileText, XCircle, Send, ScanLine, MessageSquare, X,
 } from 'lucide-react';
 
 const STEP_ICONS: Record<StepType, React.ReactNode> = {
@@ -28,6 +28,7 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   notes:            <StickyNote size={16} />,
   production_break: <Milestone size={16} />,
   print_labels:     <Printer size={16} />,
+  possible_deviation: <AlertTriangle size={16} />,
   custom:           <Settings size={16} />,
 };
 
@@ -668,19 +669,183 @@ function PhAdjustStepWidget({
   );
 }
 
+// ─── Possible Deviation: capture impacted qty + notify supervisor via Teams ──
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
+}
+
+function PossibleDeviationWidget({
+  params, values, onChange, locked, orderNumber, technicianName,
+}: {
+  params: Record<string, unknown>;
+  values: Record<string, unknown>;
+  onChange: (v: Record<string, unknown>) => void;
+  locked: boolean;
+  orderNumber: string;
+  technicianName: string;
+}) {
+  const unit = (params.unit as string) ?? 'L';
+  const prompt = (params.prompt as string | undefined)?.trim();
+  const impacted = values.impacted_quantity as number | undefined;
+  const notified = (values.notified_supervisor as boolean) ?? false;
+  const notifiedAt = values.notified_at as string | undefined;
+  const [showTeams, setShowTeams] = useState(false);
+
+  function notifySupervisor() {
+    onChange({ ...values, notified_supervisor: true, notified_at: new Date().toISOString(), unit });
+    setShowTeams(true);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+        <AlertTriangle size={20} className="text-red-600 mt-0.5 shrink-0" />
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-red-500">Possible Deviation</p>
+          <p className="text-sm text-red-800 mt-0.5">
+            {prompt || 'Record the impacted quantity and notify your supervisor if assistance is required.'}
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Impacted Quantity <span className="text-red-500">*</span>
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            step="any"
+            value={impacted ?? ''}
+            onChange={e => {
+              const v = parseFloat(e.target.value);
+              onChange({ ...values, impacted_quantity: isNaN(v) ? undefined : v, unit });
+            }}
+            disabled={locked}
+            placeholder="e.g. 2.5"
+            className="w-40 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 disabled:bg-gray-50"
+          />
+          <span className="text-sm text-gray-500">{unit}</span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <button
+          onClick={notifySupervisor}
+          disabled={locked}
+          className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 disabled:opacity-50"
+        >
+          <AlertTriangle size={15} /> Notify Supervisor
+        </button>
+        {notified && (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+            <CheckCircle size={14} />
+            Supervisor notified via Teams{notifiedAt ? ` · ${new Date(notifiedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+          </span>
+        )}
+      </div>
+      {notified && !locked && (
+        <button onClick={() => setShowTeams(true)} className="text-xs text-gray-400 hover:text-gray-600 underline">
+          View the Teams message that was sent
+        </button>
+      )}
+
+      {showTeams && (
+        <TeamsBroadcastModal
+          orderNumber={orderNumber}
+          technicianName={technicianName}
+          impacted={impacted}
+          unit={unit}
+          onClose={() => setShowTeams(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function TeamsBroadcastModal({
+  orderNumber, technicianName, impacted, unit, onClose,
+}: {
+  orderNumber: string;
+  technicianName: string;
+  impacted: number | undefined;
+  unit: string;
+  onClose: () => void;
+}) {
+  const now = new Date();
+  const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+        {/* Teams title bar */}
+        <div className="flex items-center justify-between px-4 py-3" style={{ backgroundColor: '#5059C9' }}>
+          <div className="flex items-center gap-2 text-white">
+            <MessageSquare size={18} />
+            <span className="font-semibold text-sm">Microsoft Teams</span>
+          </div>
+          <button onClick={onClose} className="text-white/80 hover:text-white"><X size={18} /></button>
+        </div>
+
+        <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50">
+          <p className="text-[11px] uppercase tracking-wide text-gray-400">Posted to channel</p>
+          <p className="text-sm font-medium text-gray-800">Lab Production Floor › Supervisors</p>
+        </div>
+
+        {/* Message */}
+        <div className="p-4 flex gap-3">
+          <div className="h-9 w-9 rounded-full bg-indigo-500 text-white flex items-center justify-center text-sm font-semibold shrink-0">
+            {initials(technicianName || 'Technician')}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm">
+              <span className="font-semibold text-gray-900">{technicianName || 'Technician'}</span>
+              <span className="text-xs text-gray-400 ml-2">{time}</span>
+            </p>
+            <div className="mt-2 border border-red-200 rounded-lg overflow-hidden">
+              <div className="bg-red-600 h-1" />
+              <div className="p-3 space-y-1.5">
+                <p className="flex items-start gap-1.5 text-sm font-semibold text-red-700">
+                  <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                  Production Order {orderNumber || '—'} — Technician requests assistance
+                </p>
+                <p className="text-sm text-gray-700">A possible deviation has been flagged during production.</p>
+                {impacted != null && (
+                  <p className="text-sm text-gray-600">Impacted quantity: <strong>{impacted} {unit}</strong></p>
+                )}
+                <p className="text-xs text-gray-400 pt-0.5">@Production Supervisors — please assist at the bench.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+          <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
+            <CheckCircle size={14} /> Message delivered
+          </span>
+          <button onClick={onClose} className="px-3 py-1.5 text-sm rounded-lg bg-gray-800 text-white hover:bg-gray-900">Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Step execution card ──────────────────────────────────────────────────────
 interface StepCardProps {
   wiStep: WIStep;
   poStep: POStep | undefined;
   index: number;
   isActive: boolean;
+  orderNumber: string;
+  technicianName: string;
   onActivate: () => void;
   onComplete: (actualValues: Record<string, unknown>, notes: string) => void;
   onSkip: () => void;
   onReopen: () => void;
 }
 
-function StepCard({ wiStep, poStep, index, isActive, onActivate, onComplete, onSkip, onReopen }: StepCardProps) {
+function StepCard({ wiStep, poStep, index, isActive, orderNumber, technicianName, onActivate, onComplete, onSkip, onReopen }: StepCardProps) {
   const params = wiStep.parameters as Record<string, unknown>;
   const stepType = (params._step_type ?? 'custom') as StepType;
   const [values, setValues] = useState<Record<string, unknown>>(poStep?.actual_values ?? {});
@@ -718,6 +883,9 @@ function StepCard({ wiStep, poStep, index, isActive, onActivate, onComplete, onS
     }
     if (stepType === 'print_labels') {
       return (values.printed ?? false) === true;
+    }
+    if (stepType === 'possible_deviation') {
+      return values.impacted_quantity != null;
     }
     return true;
   }
@@ -787,6 +955,16 @@ function StepCard({ wiStep, poStep, index, isActive, onActivate, onComplete, onS
           )}
           {stepType === 'print_labels' && (
             <PrintLabelsWidget params={params} values={values} onChange={setValues} locked={locked} />
+          )}
+          {stepType === 'possible_deviation' && (
+            <PossibleDeviationWidget
+              params={params}
+              values={values}
+              onChange={setValues}
+              locked={locked}
+              orderNumber={orderNumber}
+              technicianName={technicianName}
+            />
           )}
           {['heat','cool','transfer','custom'].includes(stepType) && (
             <GenericStepWidget params={params} stepType={stepType} />
@@ -1553,6 +1731,8 @@ export default function ProductionOrderExecutionPage() {
                 poStep={poStep}
                 index={i}
                 isActive={activeStepIdx === i}
+                orderNumber={order?.production_order_number ?? order?.lot_number ?? ''}
+                technicianName={profile?.full_name ?? ''}
                 onActivate={() => setActiveStepIdx(i)}
                 onComplete={async (actualValues, notes) => {
                   await completeStepMutation.mutateAsync({ wiStepId: wiStep.id, actualValues, notes, skip: false });

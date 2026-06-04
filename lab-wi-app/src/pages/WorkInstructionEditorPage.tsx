@@ -7,7 +7,7 @@ import type { StepTemplate, WIStep, WorkInstruction, StepType } from '../types';
 import {
   Plus, Trash2, GripVertical, Save, Send, ChevronDown, ChevronUp, ArrowLeft,
   FlaskConical, Scale as ScaleIcon, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings,
-  Wrench, Beaker, Printer, StickyNote, Milestone,
+  Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -26,6 +26,7 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   notes:            <StickyNote size={15} />,
   production_break: <Milestone size={15} />,
   print_labels:     <Printer size={15} />,
+  possible_deviation: <AlertTriangle size={15} />,
   custom:           <Settings size={15} />,
 };
 
@@ -428,6 +429,36 @@ function StepParamEditor({
         </div>
       );
 
+    case 'possible_deviation': {
+      const units = ['g','kg','mg','mL','L','mol','ea','tube','%'];
+      return (
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Deviation Prompt (optional)</label>
+            <input
+              value={(params.prompt as string) ?? ''}
+              onChange={e => set('prompt', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="e.g. Flag if colour, clarity or yield looks off-spec"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Impacted Quantity Unit</label>
+            <select
+              value={(params.unit as string) ?? 'L'}
+              onChange={e => set('unit', e.target.value)}
+              className="w-28 border border-gray-200 rounded px-2 py-1 text-xs"
+            >
+              {units.map(u => <option key={u}>{u}</option>)}
+            </select>
+          </div>
+          <p className="text-xs text-gray-400">
+            At run time the operator records the impacted quantity and can notify the supervisor via Teams.
+          </p>
+        </div>
+      );
+    }
+
     case 'transfer':
       return (
         <div className="grid grid-cols-2 gap-3">
@@ -765,6 +796,7 @@ export default function WorkInstructionEditorPage() {
       case 'observe': return { prompt: '' };
       case 'notes': return { prompt: '' };
       case 'production_break': return { label: '', description: '' };
+      case 'possible_deviation': return { prompt: '', unit: 'L' };
       case 'transfer': return { from_vessel: '', to_vessel: '' };
       default: return { instruction_text: '' };
     }

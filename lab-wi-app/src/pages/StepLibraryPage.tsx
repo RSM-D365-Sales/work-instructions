@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { StepTemplate, StepType } from '../types';
-import { Plus, Pencil, Trash2, FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, ChevronDown, ChevronUp, Lock, Wrench, Beaker, Printer, StickyNote, Milestone } from 'lucide-react';
+import { Plus, Pencil, Trash2, FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, ChevronDown, ChevronUp, Lock, Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle } from 'lucide-react';
 import type { ParameterSchema } from '../types';
 
 const STEP_TYPE_META: Record<StepType, { label: string; icon: React.ReactNode; color: string }> = {
@@ -20,6 +20,7 @@ const STEP_TYPE_META: Record<StepType, { label: string; icon: React.ReactNode; c
   notes:            { label: 'Notes',                  icon: <StickyNote size={16} />,    color: 'bg-amber-100 text-amber-700' },
   production_break: { label: 'Production Break',       icon: <Milestone size={16} />,     color: 'bg-rose-100 text-rose-700' },
   print_labels:     { label: 'Print Labels',            icon: <Printer size={16} />,       color: 'bg-teal-100 text-teal-700' },
+  possible_deviation: { label: 'Possible Deviation',    icon: <AlertTriangle size={16} />, color: 'bg-red-100 text-red-700' },
   custom:           { label: 'Custom Step',            icon: <Settings size={16} />,      color: 'bg-gray-100 text-gray-700' },
 };
 

@@ -7,7 +7,7 @@ import type { WorkInstruction, WIStep, WIApproval, StepType } from '../types';
 import {
   ArrowLeft, Pencil, CheckCircle, XCircle, RotateCcw, PlayCircle, GitBranch,
   FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, Trash2,
-  Wrench, Beaker, Printer, StickyNote, Milestone,
+  Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle,
 } from 'lucide-react';
 import { formatDate } from '../lib/utils';
 
@@ -24,6 +24,7 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   observe:       <Eye size={15} />,  print_labels:     <Printer size={15} />,  custom:        <Settings size={15} />,
   notes:            <StickyNote size={15} />,
   production_break: <Milestone size={15} />,
+  possible_deviation: <AlertTriangle size={15} />,
 };
 
 const STATUS_STYLES: Record<string, string> = {
@@ -65,6 +66,10 @@ function stepSummary(step: WIStep): string {
     }
     case 'print_labels':
       return `${p.label_template ?? 'Labels'} × ${p.quantity ?? 1}${p.notes ? ` — ${p.notes}` : ''}`;
+    case 'possible_deviation':
+      return (p.prompt as string)?.trim()
+        ? (p.prompt as string)
+        : `Capture impacted quantity${p.unit ? ` (${p.unit})` : ''} and notify supervisor`;
     default:
       return (p.instruction_text as string) ?? '';
   }
