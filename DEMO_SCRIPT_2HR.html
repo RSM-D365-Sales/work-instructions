@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lab WI System — 2-Hour "Day in the Life" Demo Script</title>
+<style>
+  :root{
+    --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; --bg:#f8fafc; --card:#fff;
+    --blue:#2563eb; --blue-bg:#eff6ff; --green:#059669; --green-bg:#ecfdf5;
+    --amber:#b45309; --amber-bg:#fffbeb; --red:#dc2626; --red-bg:#fef2f2;
+    --violet:#7c3aed; --sky:#0284c7; --slate:#334155; --purple:#7c3aed;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       color:var(--ink);background:var(--bg);line-height:1.55;font-size:15px}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px 80px}
+  header.hero{background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;padding:38px 0 30px;margin-bottom:8px}
+  header.hero .wrap{padding-bottom:0}
+  header.hero h1{margin:0 0 6px;font-size:30px;letter-spacing:-.5px}
+  header.hero p{margin:0;opacity:.92}
+  .pillrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  .hpill{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.25);border-radius:999px;
+         padding:5px 12px;font-size:13px;font-weight:600}
+  h2{font-size:22px;margin:38px 0 4px;letter-spacing:-.3px;scroll-margin-top:16px}
+  h3{font-size:17px;margin:22px 0 6px}
+  h4{font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:18px 0 6px}
+  p{margin:8px 0}
+  ol,ul{margin:8px 0 8px 22px;padding:0}
+  li{margin:4px 0}
+  code{background:#eef2ff;border:1px solid #e0e7ff;border-radius:5px;padding:1px 5px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.86em}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:#f1f5f9;font-weight:600}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:14px 0;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+  .act{border-left:5px solid var(--blue);scroll-margin-top:16px}
+  .act .acthead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:2px}
+  .act h2{margin:0}
+  .badge{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;white-space:nowrap}
+  .time{background:#111827;color:#fff}
+  .role-lab{background:#e0f2fe;color:#0369a1}
+  .role-admin{background:#e5e7eb;color:#374151}
+  .role-author{background:#ede9fe;color:#6d28d9}
+  .role-approver{background:#d1fae5;color:#047857}
+  .role-operator{background:#fef3c7;color:#92400e}
+  .say{background:var(--blue-bg);border-left:4px solid var(--blue);border-radius:0 10px 10px 0;padding:10px 14px;margin:10px 0;font-style:italic}
+  .say::before{content:"🗣 Say this";display:block;font-style:normal;font-weight:700;font-size:11px;letter-spacing:.06em;color:var(--blue);text-transform:uppercase;margin-bottom:3px}
+  .why{background:var(--green-bg);border-left:4px solid var(--green);border-radius:0 10px 10px 0;padding:10px 14px;margin:10px 0}
+  .why::before{content:"💡 Why it matters";display:block;font-weight:700;font-size:11px;letter-spacing:.06em;color:var(--green);text-transform:uppercase;margin-bottom:3px}
+  .watch{background:var(--amber-bg);border-left:4px solid var(--amber);border-radius:0 10px 10px 0;padding:10px 14px;margin:10px 0}
+  .watch::before{content:"⚠ Watch out";display:block;font-weight:700;font-size:11px;letter-spacing:.06em;color:var(--amber);text-transform:uppercase;margin-bottom:3px}
+  .click{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;padding:8px 14px;margin:10px 0}
+  .click::before{content:"🖱 Click path";display:block;font-weight:700;font-size:11px;letter-spacing:.06em;color:var(--slate);text-transform:uppercase;margin-bottom:3px}
+  .toc{position:sticky;top:0}
+  .toc ol{counter-reset:item;list-style:none;margin-left:0}
+  .toc li{margin:3px 0}
+  .toc .t{color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .kbd{background:#111827;color:#fff;border-radius:5px;padding:1px 6px;font-size:12px;font-family:ui-monospace,monospace}
+  hr{border:none;border-top:1px solid var(--line);margin:30px 0}
+  .lead{font-size:16px;color:var(--slate)}
+  .tag{display:inline-block;background:#eef2ff;color:#3730a3;border-radius:6px;padding:1px 7px;font-size:12px;font-weight:600;margin-right:4px}
+  .new{background:#dcfce7;color:#166534}
+  /* ── Side navigation pane (demo walk-through) ─────────────── */
+  .sidenav{position:fixed;top:0;left:0;bottom:0;width:212px;background:#0f172a;color:#cbd5e1;
+    padding:14px 12px 24px;overflow-y:auto;z-index:50;box-shadow:2px 0 10px rgba(0,0,0,.12);
+    transition:transform .2s ease}
+  .sidenav .navhead{display:flex;align-items:center;justify-content:space-between;margin:0 4px 8px}
+  .sidenav .navhead span{color:#fff;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.85}
+  .sidenav .nav-close{background:transparent;border:none;color:#94a3b8;font-size:20px;line-height:1;cursor:pointer;padding:0 4px}
+  .sidenav .nav-close:hover{color:#fff}
+  .sidenav .navlabel{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#64748b;margin:14px 6px 4px}
+  .sidenav a{display:block;color:#cbd5e1;text-decoration:none;padding:7px 10px;border-radius:8px;font-size:13px;line-height:1.25;margin:1px 0}
+  .sidenav a:hover{background:#1e293b;color:#fff;text-decoration:none}
+  .sidenav a.active{background:var(--blue);color:#fff;font-weight:600}
+  .sidenav a .n{display:inline-block;width:18px;font-weight:700;opacity:.75}
+  .sidenav a.active .n{opacity:1}
+  .sidenav a .tt{display:block;margin-left:18px;font-size:10.5px;opacity:.6;font-weight:400}
+  .sidenav a.active .tt{opacity:.85}
+  .nav-open-btn{display:none;position:fixed;top:12px;left:12px;z-index:60;background:#0f172a;color:#fff;
+    border:none;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.18)}
+  body.nav-hidden .sidenav{transform:translateX(-100%)}
+  body.nav-hidden .nav-open-btn{display:inline-block}
+  @media(min-width:1000px){ body:not(.nav-hidden){padding-left:212px} }
+
+  @media print{
+    body{background:#fff;font-size:12px;padding-left:0}
+    header.hero{background:#1e3a8a !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .say,.why,.watch,.click,.badge,th,.hpill{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .noprint{display:none}
+    .act{break-inside:avoid}
+    h2{break-after:avoid}
+  }
+  @media(max-width:720px){.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- ───────────────── SIDE NAV (walk-through) ───────────────── -->
+<nav class="sidenav noprint" aria-label="Demo sections">
+  <div class="navhead"><span>Demo Script</span><button class="nav-close" title="Hide navigation" aria-label="Hide navigation">&times;</button></div>
+
+  <div class="navlabel">Prep</div>
+  <a href="#overview"><span class="n">·</span>Overview</a>
+  <a href="#agenda"><span class="n">·</span>Agenda &amp; time budget</a>
+  <a href="#cast"><span class="n">·</span>Cast &amp; logins</a>
+  <a href="#prep"><span class="n">·</span>Pre-demo checklist</a>
+
+  <div class="navlabel">The walk-through</div>
+  <a href="#act0"><span class="n">0</span>Welcome &amp; framing<span class="tt">5 min · You</span></a>
+  <a href="#act1"><span class="n">1</span>The demand signal<span class="tt">15 min · Lab Scientist</span></a>
+  <a href="#act2"><span class="n">2</span>Plan &amp; triage<span class="tt">25 min · Planner</span></a>
+  <a href="#act3"><span class="n">3</span>Make the batch<span class="tt">35 min · Operator</span></a>
+  <a href="#act4"><span class="n">4</span>Close the loop — deliver<span class="tt">15 min</span></a>
+  <a href="#act5"><span class="n">5</span>The engine room<span class="tt">20 min · Author / Approver</span></a>
+  <a href="#act6"><span class="n">6</span>Recap, ROI &amp; Q&amp;A<span class="tt">5 min</span></a>
+
+  <div class="navlabel">Reference</div>
+  <a href="#flex"><span class="n">★</span>Flexing the clock</a>
+  <a href="#appendix"><span class="n">⚙</span>D365 integration</a>
+  <a href="#reset"><span class="n">↺</span>Reset between runs</a>
+</nav>
+<button class="nav-open-btn noprint" title="Show navigation">&#9776; Sections</button>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>Lab WI System — “A Day in the Life”</h1>
+    <p>Reagent Production · 2-Hour Presales Demo Script</p>
+    <div class="pillrow">
+      <span class="hpill">⏱ ~120 minutes</span>
+      <span class="hpill">👥 Lab Scientist → Planner → Operator → Delivery → Authoring</span>
+      <span class="hpill">🔗 Integrated with Dynamics 365 F&amp;SC</span>
+      <span class="hpill">🧪 Built on the Microsoft stack</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<!-- ───────────────── OVERVIEW ───────────────── -->
+<div class="card" id="overview">
+  <p class="lead">This script walks one continuous story — a single day in the reagent lab — to show the whole platform without overwhelming the audience. We start small (a scientist asking for a reagent), build to the full shop-floor + quality experience, close the supply loop with a delivery, and finish in the “engine room” where the recipes are authored and governed.</p>
+
+  <h4>The story (the supply-chain loop)</h4>
+  <ol>
+    <li><strong>Demand</strong> — A Lab Scientist requests a reagent for their bench.</li>
+    <li><strong>Plan</strong> — The production planner checks inventory &amp; the request, then creates and schedules a production order.</li>
+    <li><strong>Make</strong> — An operator runs the batch on the floor: guided steps, scale capture, quality testing, and a released Certificate of Quality.</li>
+    <li><strong>Fulfil</strong> — A team member delivers the finished product to the requesting lab.</li>
+    <li><strong>Govern</strong> — We end in the authoring &amp; approval workflow that produced the recipe in the first place — change control and traceability.</li>
+  </ol>
+
+  <h4>Why this order</h4>
+  <p>Each act adds one new persona and one new slice of the app, so complexity grows gradually. By the finale the audience has seen every module and understands how the pieces connect — ending on governance leaves them with the “this is enterprise-grade and auditable” impression that wins regulated-lab business.</p>
+</div>
+
+<!-- ───────────────── TOC ───────────────── -->
+<div class="card" id="agenda">
+  <h3 style="margin-top:0">Agenda &amp; time budget</h3>
+  <div class="toc">
+  <table>
+    <tr><th style="width:46px">#</th><th>Act</th><th>Persona</th><th style="width:80px">Time</th></tr>
+    <tr><td>0</td><td><a href="#act0">Welcome &amp; framing</a></td><td>You</td><td>5 min</td></tr>
+    <tr><td>1</td><td><a href="#act1">The demand signal — request a reagent</a></td><td><span class="badge role-lab">Lab Scientist</span></td><td>15 min</td></tr>
+    <tr><td>2</td><td><a href="#act2">Plan &amp; triage — inventory, catalog, scheduling</a></td><td><span class="badge role-admin">Admin / Planner</span></td><td>25 min</td></tr>
+    <tr><td>3</td><td><a href="#act3">Make the batch — execution, scale, QC, COQ</a></td><td><span class="badge role-operator">Operator</span></td><td>35 min</td></tr>
+    <tr><td>4</td><td><a href="#act4">Close the loop — deliver to the lab</a></td><td><span class="badge role-operator">Team member</span></td><td>15 min</td></tr>
+    <tr><td>5</td><td><a href="#act5">The engine room — authoring &amp; approval</a></td><td><span class="badge role-author">Author</span> <span class="badge role-approver">Approver</span></td><td>20 min</td></tr>
+    <tr><td>6</td><td><a href="#act6">Recap, ROI &amp; Q&amp;A</a></td><td>You</td><td>5 min</td></tr>
+  </table>
+  </div>
+  <p class="t">Total ≈ 120 min. See <a href="#flex">Flexing the clock</a> to expand or compress to land exactly on time.</p>
+</div>
+
+<!-- ───────────────── CAST ───────────────── -->
+<div class="card" id="cast">
+  <h3 style="margin-top:0">Cast &amp; logins</h3>
+  <p>All demo passwords: <code>Demo@Lab2026</code>. The login screen has one-click buttons for the four non-admin personas; sign in as the admin manually.</p>
+  <table>
+    <tr><th>Persona</th><th>Plays</th><th>Login</th><th>Sees in the app</th></tr>
+    <tr><td><span class="badge role-lab">Lab Scientist</span> “Dana”</td><td>Bench scientist in a satellite lab</td><td><strong>Lab Scientist</strong> button · <code>lab@demolab.com</code></td><td>Dashboard, Reagent Orders</td></tr>
+    <tr><td><span class="badge role-admin">Admin / Planner</span> “Riley”</td><td>Lab IT / production planner</td><td><code>ryan@lab.com</code> (type it)</td><td>Everything</td></tr>
+    <tr><td><span class="badge role-operator">Operator</span> “Olivia”</td><td>Shop-floor lab tech</td><td><strong>Operator</strong> button · <code>operator@demolab.com</code></td><td>Dashboard, WIs, Production &amp; Reagent Orders, Quality Trends, Inventory</td></tr>
+    <tr><td><span class="badge role-author">Author</span> “Alex”</td><td>Senior chemist who writes recipes</td><td><strong>Author</strong> button · <code>author@demolab.com</code></td><td>+ authoring, Step Library, Reagent Items</td></tr>
+    <tr><td><span class="badge role-approver">Approver</span> “Sam”</td><td>QA reviewer who signs off</td><td><strong>Approver</strong> button · <code>approver@demolab.com</code></td><td>+ approvals, Step Library</td></tr>
+  </table>
+  <div class="why">The same application renders a completely different navigation and capability set per role — driven by the user’s role and enforced again at the database with row-level security. One app, five tailored experiences, no “admin can see everything / everyone else is confused” mess.</div>
+</div>
+
+<!-- ───────────────── PREP ───────────────── -->
+<div class="card noprint" id="prep">
+  <h3 style="margin-top:0">Pre-demo checklist (do this 30 min before)</h3>
+  <ul>
+    <li><strong>Database is migrated.</strong> In the Supabase SQL editor, confirm migrations through <code>030</code> have run — especially <code>026</code> (Inventory), <code>027</code>/<code>028</code> (delivery + D365 start message), <code>029</code> (search name), <code>030</code> (demo scales). These power the newest screens.</li>
+    <li><strong>Demo users exist incl. the Lab Scientist.</strong> Run <code>node scripts/create-demo-users.mjs</code> (now seeds <code>lab@demolab.com</code>). On the RSM proxy, prefix with <code>$env:NODE_TLS_REJECT_UNAUTHORIZED="0"</code>.</li>
+    <li><strong>Lab Scientist has a default lab.</strong> Sign in once as the Lab Scientist and pick a default lab in the sidebar (bottom). Without it, the lab role can’t see its own orders (by design — RLS scopes labs to their site).</li>
+    <li><strong>One approved Work Instruction</strong> that (a) is linked to a reagent item, (b) has a <strong>Weigh</strong> step, (c) uses a <strong>lot-controlled</strong> reagent, and (d) that reagent item has <strong>QC specifications</strong> defined (Reagent Items → QC icon). This makes the scale-scan, lot capture, QC, and COQ all light up in Act 3.</li>
+    <li><strong>Inventory &amp; scales are seeded</strong> (migrations 026 &amp; 030). Confirm a few scales show as <em>active</em> on the Scales page and the Inventory screen has rows.</li>
+    <li><strong>A pending reagent order</strong> already in the system is a nice fallback so Act 4 has something to deliver even if Act 1 runs short.</li>
+    <li><strong>Browser:</strong> zoom 110%, close other tabs. Open <strong>two windows</strong> (or two profiles) so you can keep one persona signed in while switching another — avoids re-login friction.</li>
+    <li><strong>D365 toggle decision (Act 3):</strong> with D365 disabled, the “Start production order” message shows <em>Skipped — integration disabled</em>; that’s fine to narrate (“this is the call that posts to D365”). If you want it to show <em>Sent</em>, enable D365 in Reagent Items → D365 Connection Settings and set Company = <code>USP2</code> beforehand.</li>
+  </ul>
+</div>
+
+<hr>
+
+<!-- ───────────────── ACT 0 ───────────────── -->
+<div class="card act" id="act0" style="border-left-color:#111827">
+  <div class="acthead"><span class="badge time">5 min</span><h2>Act 0 · Welcome &amp; framing</h2></div>
+  <p>Set the scene before anyone touches the screen. Keep the login page up.</p>
+  <div class="say">“Today I’m going to walk you through one day in your reagent lab — not feature by feature, but the way work actually flows. A scientist needs a reagent. Someone plans and makes it to spec. Quality releases it. It gets delivered. And behind all of that is a governed library of recipes. You’ll see the same single application adapt to each person’s job, and you’ll see it talking to Dynamics 365 at every step. Let’s start where the work starts — with a request.”</p>
+  <h4>Frame the three pains you solve</h4>
+  <ul>
+    <li><strong>Paper &amp; spreadsheets</strong> for work instructions, lot records, and QC — no audit trail.</li>
+    <li><strong>Disconnected ordering</strong> between labs and the central reagent lab.</li>
+    <li><strong>ERP island</strong> — production reality never makes it back into D365.</li>
+  </ul>
+  <div class="watch">Don’t open every menu yet. Resist the “grand tour.” The power of this script is restraint — reveal each module only when the story needs it.</div>
+</div>
+
+<!-- ───────────────── ACT 1 ───────────────── -->
+<div class="card act" id="act1" style="border-left-color:var(--sky)">
+  <div class="acthead"><span class="badge time">15 min</span><span class="badge role-lab">Lab Scientist — “Dana”</span><h2>Act 1 · The demand signal</h2></div>
+  <p><strong>Goal:</strong> a satellite-lab scientist requests reagents from the central production lab — the event that kicks off everything else.</p>
+
+  <div class="click">
+    <ol>
+      <li>On the login screen, click the blue <strong>Lab Scientist</strong> demo button.</li>
+      <li>Land on the <strong>Dashboard</strong>. Note how spare the sidebar is — just Dashboard and Reagent Orders.</li>
+      <li>Sidebar → <strong>Reagent Orders</strong> → <strong>New Order</strong>.</li>
+      <li>Add 2–3 line items (e.g. <em>Sodium Phosphate Dibasic — 500 g</em>, <em>Sodium Phosphate Monobasic — 250 g</em>). Use the searchable item picker.</li>
+      <li>Confirm the <strong>Ordering Lab</strong> (defaults to Dana’s lab), set a <strong>Needed-by date</strong>, and add a note.</li>
+      <li>Tick <strong>High Priority</strong> to trigger the notification demo.</li>
+      <li>Click <strong>Submit Order</strong>.</li>
+    </ol>
+  </div>
+
+  <div class="say">“Dana doesn’t see production orders, work instructions, scales — none of it. She sees exactly two things: her dashboard and the ability to order reagents for her bench. She builds a multi-line request, tells us when she needs it, and flags it urgent.”</div>
+
+  <h4>Show / point out</h4>
+  <ul>
+    <li>The <strong>role-scoped sidebar</strong> — minimal by design for a bench user.</li>
+    <li>The <strong>High Priority</strong> confirmation: a mocked <strong>email + Microsoft Teams</strong> alert to the “High Priority Requests” group. Read it aloud — it personalises the order, lab, and items.</li>
+    <li>Back on the <strong>Reagent Orders list</strong>: the new order with a <strong>Pending</strong> status pill and (if D365 is on) a <strong>Transfer Order</strong> reference.</li>
+  </ul>
+
+  <div class="why">This is the demand signal — and it’s not a silo. The moment Dana submits, the system can raise a <strong>D365 transfer order</strong> automatically and ping the right people. No email chains, no shared spreadsheet, no “did anyone order that?”.</div>
+  <div class="watch">If D365 is disabled the transfer-order line shows “Skipped” — narrate it as “in production this fires a real D365 transfer order.” Don’t apologise for it; it’s a config toggle.</div>
+</div>
+
+<!-- ───────────────── ACT 2 ───────────────── -->
+<div class="card act" id="act2" style="border-left-color:#334155">
+  <div class="acthead"><span class="badge time">25 min</span><span class="badge role-admin">Admin / Planner — “Riley”</span><h2>Act 2 · Plan &amp; triage</h2></div>
+  <p><strong>Goal:</strong> the planner sees the request, checks stock and the catalog, then creates and schedules the production order. This act shows the “control tower.”</p>
+
+  <div class="click"><strong>Switch persona:</strong> sign out (or use your 2nd window) → sign in as <code>ryan@lab.com</code>.</div>
+
+  <h3>2.1 — Dashboard (3 min)</h3>
+  <div class="click">Land on the <strong>Dashboard</strong>. Point to the four KPI tiles and the <strong>production schedule Gantt</strong>.</div>
+  <div class="say">“Riley runs the lab. Every morning this is the control tower — what’s approved, what’s pending review, what’s running right now, and a timeline of the whole floor’s schedule.”</div>
+
+  <h3>2.2 — Inventory <span class="tag new">highlight</span> (6 min)</h3>
+  <div class="click">
+    <ol>
+      <li>Sidebar → <strong>Inventory</strong>.</li>
+      <li>Toggle the <strong>FG / RM / PKG</strong> filter pills — show how it isolates finished goods vs raw materials vs packaging.</li>
+      <li>Filter by a specific <strong>reagent lab</strong>; switch the <strong>By lab / By item</strong> grouping.</li>
+      <li>Read the columns: <strong>Physical, Reserved, Ordered In, On Order, Total Available</strong>.</li>
+    </ol>
+  </div>
+  <div class="say">“Before we make anything, do we even need to? This is on-hand inventory modeled exactly like the D365 Finance &amp; Supply Chain on-hand form — physical, reserved, what’s on order, and true availability — broken down by each reagent lab, and filterable by finished good, raw material, or packaging. Notice it’s synced from D365: one version of the truth.”</div>
+  <div class="why">The planner answers “make, buy, or transfer?” in seconds — using the same numbers Finance sees in D365. The Lab Scientist role is deliberately excluded from this screen; inventory is a planning tool, not a bench tool.</div>
+
+  <h3>2.3 — Reagent Items catalog <span class="tag new">highlight</span> (5 min)</h3>
+  <div class="click">
+    <ol>
+      <li>Sidebar → <strong>Reagent Items</strong>.</li>
+      <li>Point out the <strong>Type</strong> column (FG/RM/PKG) and that <strong>Product Name</strong> is a clean display name over the raw <strong>Search Name</strong> from D365.</li>
+      <li>Open one item — show CAS, molecular weight, hazard/GHS, storage, <strong>lot-controlled</strong> flag.</li>
+      <li>Click the <strong>QC</strong> (clipboard) icon on a product — show its quality specifications (limits, methods).</li>
+      <li>Expand <strong>D365 Connection Settings</strong> — show the live sync config incl. the <strong>MES Message Queue</strong> field.</li>
+    </ol>
+  </div>
+  <div class="say">“The catalog is the D365 item master — we don’t maintain a parallel list. On top of D365’s data we layer the lab’s world: CAS numbers, hazard pictograms, storage, lot control, and the QC panel every batch of this product is tested against. That QC panel is what drives the Certificate of Quality you’ll see later.”</div>
+  <div class="why">Item master stays in D365; lab-specific science and quality specs live here. No duplication, and the spec that governs release is defined once, centrally.</div>
+
+  <h3>2.4 — Triage the request &amp; (optional) source raw materials (3 min)</h3>
+  <div class="click">
+    <ol>
+      <li>Sidebar → <strong>Reagent Orders</strong>. Show the multi-select <strong>status filter</strong> (defaults to Pending + In Progress) and <strong>Group by Lab / Needed By</strong>.</li>
+      <li>Find Dana’s urgent request from Act 1.</li>
+      <li>(Optional) Mention raw materials can be ordered/transferred the same way.</li>
+    </ol>
+  </div>
+  <div class="say">“Riley triages incoming demand — filtered to what’s actually actionable and grouped by lab or by due date. There’s Dana’s urgent phosphate request.”</div>
+
+  <h3>2.5 — Create the production order (4 min)</h3>
+  <div class="click">
+    <ol>
+      <li>Sidebar → <strong>Production Orders</strong> → <strong>New Production Order</strong>.</li>
+      <li><strong>Work Instruction:</strong> pick the approved buffer recipe.</li>
+      <li><strong>Lot Number</strong> (e.g. <code>PB-2026-0601-01</code>), <strong>Batch Size</strong> (e.g. 2 L), <strong>Assigned to:</strong> Olivia, set a required-by date.</li>
+      <li>Create.</li>
+    </ol>
+  </div>
+  <div class="say">“We turn the approved recipe into a real batch — a lot number, a size, an owner. Critically, the system stamps this order with the exact <strong>recipe version</strong> in force right now. If Alex publishes v2 tomorrow, this batch stays pinned to the version it was created against. That’s non-negotiable for traceability.”</div>
+
+  <h3>2.6 — Schedule it (4 min)</h3>
+  <div class="click">
+    <ol>
+      <li>Sidebar → <strong>Unscheduled Orders</strong>.</li>
+      <li>Place the new order onto a slot (e.g. tomorrow morning) on the Gantt.</li>
+      <li>Return to the <strong>Dashboard</strong> to show it now on the schedule timeline.</li>
+    </ol>
+  </div>
+  <div class="why">Capacity planning and execution live in the same system as the recipe and the quality spec — so the schedule is never out of sync with what’s actually buildable.</div>
+  <div class="watch">If short on time, you can create the order and skip the Gantt drag — just point at the schedule on the Dashboard and move on.</div>
+</div>
+
+<!-- ───────────────── ACT 3 ───────────────── -->
+<div class="card act" id="act3" style="border-left-color:var(--amber)">
+  <div class="acthead"><span class="badge time">35 min</span><span class="badge role-operator">Operator — “Olivia”</span><h2>Act 3 · Make the batch</h2></div>
+  <p><strong>Goal:</strong> the headline act. Run the batch on the floor with guided steps, live scale capture, lot tracking, quality testing, and a released Certificate of Quality. Slow down here.</p>
+
+  <div class="click"><strong>Switch persona:</strong> sign in with the <strong>Operator</strong> button.</div>
+
+  <h3>3.1 — The focused floor view (2 min)</h3>
+  <div class="say">“It’s the next morning. Olivia taps the tablet at her bench. Her world is deliberately narrow — no authoring, no admin. Just the work in front of her.”</div>
+
+  <h3>3.2 — Open &amp; start the order → D365 start message <span class="tag new">highlight</span> (4 min)</h3>
+  <div class="click">
+    <ol>
+      <li>Sidebar → <strong>Production Orders</strong> → open the assigned batch (top of the list, <strong>Pending</strong>).</li>
+      <li>Click <strong>Start Production</strong>.</li>
+      <li>Watch the <strong>D365 Production Order Start</strong> card appear (Sending → Sent, or Skipped if D365 is off).</li>
+    </ol>
+  </div>
+  <div class="say">“The moment Olivia hits Start, two things happen. The app builds her step-by-step run sheet — and it posts a <code>ProdProductionOrderStart</code> message into the D365 message-processor framework, starting the matching production order in the ERP automatically. The floor and Finance move in lockstep.”</div>
+  <div class="why">No double entry. Starting work on the floor starts it in D365 — the integration we wrote posts the exact production order number, company, and consumption rules to the SysMessage service.</div>
+
+  <h3>3.3 — Work the steps (12 min) — the money shot</h3>
+  <p>Walk each step deliberately. The recipe may include any of these step types — narrate the ones present:</p>
+  <table>
+    <tr><th>Step</th><th>What to show</th></tr>
+    <tr><td><strong>Gather Inputs / Equipment / Reagents</strong></td><td>A checklist the operator confirms before starting. For lot-controlled reagents, the operator must <strong>record the lot number</strong> used.</td></tr>
+    <tr><td><strong>Weigh</strong> <span class="tag new">highlight</span></td><td>The big one — see 3.4 below.</td></tr>
+    <tr><td><strong>Mix / Heat / Cool</strong></td><td>Capture actual duration / temperature against the target.</td></tr>
+    <tr><td><strong>pH Adjust</strong></td><td>Enter measured pH; instant in-/out-of-tolerance check.</td></tr>
+    <tr><td><strong>Transfer</strong></td><td>From-vessel → to-vessel confirmation.</td></tr>
+    <tr><td><strong>Observe / Notes</strong></td><td>Free-text observations captured into the batch record.</td></tr>
+    <tr><td><strong>Print Labels</strong></td><td>Generates lot labels at the end of the run.</td></tr>
+  </table>
+
+  <h3>3.4 — The Weigh step: scan-to-connect scale <span class="tag new">highlight</span> (6 min)</h3>
+  <div class="click">
+    <ol>
+      <li>On the Weigh step, show the target and tolerance band.</li>
+      <li>In <strong>“Connect your bench scale,”</strong> <strong>scan or type a scale</strong> (e.g. <code>SCL-A1</code>) — or pick from the dropdown of active scales.</li>
+      <li>The panel flips to a green pulsing <strong>“Connected · Live”</strong> indicator; the reading field unlocks.</li>
+      <li>Enter a weight inside tolerance → green <strong>In tolerance</strong> badge.</li>
+      <li><em>Optional drama:</em> enter an out-of-tolerance value → red <strong>OUT OF TOLERANCE — do not proceed</strong>; then correct it.</li>
+      <li>Complete the step.</li>
+    </ol>
+  </div>
+  <div class="say">“A lot of these buffers can be made at any bench, so we don’t hard-code a scale into the recipe. Instead, Olivia scans the balance in front of her — the system connects, shows a live reading, and the weight is captured against this batch with the exact scale, the measured value, the deviation, and pass/fail. If she’s out of tolerance, the system stops her. This is audit-grade capture, not a checkbox.”</div>
+  <div class="why">We record <em>which</em> scale, the <em>actual</em> measured value, the deviation %, and the tolerance result — exactly what an investigator needs a year later. And because the operator picks the scale at run time, the same recipe works at any bench.</div>
+  <div class="watch">You’ll type the weight manually (no physical scanner needed) — the field accepts both a barcode scanner and the keyboard. The scale list comes from migration 030; have <code>SCL-A1</code>…<code>SCL-M1</code> handy.</div>
+
+  <h3>3.5 — Quality Control &amp; release (5 min)</h3>
+  <div class="click">
+    <ol>
+      <li>Below the steps, the <strong>Quality Control</strong> card lists the product’s QC tests (from the catalog spec).</li>
+      <li>Enter measured results; watch each evaluate <strong>PASS/FAIL</strong> live, with an overall <strong>All in spec</strong> badge.</li>
+      <li>Click <strong>Certificate</strong>.</li>
+    </ol>
+  </div>
+  <div class="say">“Release testing happens right where the batch is made. Every result is judged against the spec we defined centrally on the item — and rolls up to a clear disposition.”</div>
+
+  <h3>3.6 — Certificate of Quality (4 min)</h3>
+  <div class="click">
+    <ol>
+      <li>On the certificate page, choose <strong>Certificate of Quality (COQ)</strong> (or COA).</li>
+      <li>Click <strong>Issue Certificate</strong> — a certificate number is assigned.</li>
+      <li>Show the <strong>RELEASED — Conforms to specification</strong> banner, the results table, lot/version metadata, and signatures.</li>
+      <li>Click <strong>Print / Save as PDF</strong> to show the print-ready document.</li>
+    </ol>
+  </div>
+  <div class="why">A regulator-ready Certificate of Quality, generated from the same data the operator captured — product, lot, batch, recipe version, every test vs spec, and who performed and released it. No re-keying into Word.</div>
+
+  <h3>3.7 — Audit trail &amp; trends (2 min)</h3>
+  <div class="click">Return to the completed order (all steps green, <strong>Completed</strong>, recipe-version badge). Then sidebar → <strong>Quality Trends</strong> to show QC results trending across lots.</div>
+  <div class="say">“The batch is closed: lot stamped, recipe version stamped, every measurement and who-did-what-when captured. And across batches, the Quality Trends view turns all that captured data into process insight — drift you’d never see on paper.”</div>
+</div>
+
+<!-- ───────────────── ACT 4 ───────────────── -->
+<div class="card act" id="act4" style="border-left-color:var(--green)">
+  <div class="acthead"><span class="badge time">15 min</span><span class="badge role-operator">Team member</span><h2>Act 4 · Close the loop — deliver to the lab</h2></div>
+  <p><strong>Goal:</strong> fulfil Dana’s original request — deliver the finished product to her lab with scanned from/to locations and lot capture.</p>
+
+  <div class="click"><strong>Switch persona:</strong> any central-lab role (Operator/Author/Approver) can deliver. Stay as Operator or use the Author button.</div>
+
+  <div class="click">
+    <ol>
+      <li>Sidebar → <strong>Reagent Orders</strong>.</li>
+      <li>Tick the checkbox on Dana’s order (and any others going to the same lab) → <strong>Deliver Selected</strong>.</li>
+      <li>On the delivery screen, note orders are <strong>grouped by destination lab</strong> — one D365 transfer order per lab.</li>
+      <li>For each line, set the <strong>Deliver Qty</strong>, <strong>scan the From location</strong> (source bin at the reagent lab) and the <strong>To location</strong> (bin at the destination lab), and a <strong>LOT</strong> for lot-controlled items.</li>
+      <li>Click <strong>Finalize Delivery</strong> → transfer-order numbers are generated and the orders flip to <strong>Fulfilled</strong>.</li>
+      <li>Back on the list, show the delivered details on the order: <em>qty · from → to · LOT</em>.</li>
+    </ol>
+  </div>
+
+  <div class="say">“Now we close the loop. Whoever’s running deliveries selects the orders to send together, and the system batches them into transfer orders — one per destination lab. They scan where they picked it from and where it lands, capture the lot, and finalize. That’s a real warehouse transfer with bin-level, lot-level traceability — the kind of record an auditor loves.”</div>
+
+  <div class="click"><strong>Emotional close:</strong> sign back in as the <strong>Lab Scientist</strong> and show Dana’s order now <strong>Fulfilled</strong> with its delivery details — the request she made in Act 1 is complete.</div>
+  <div class="why">From a scientist’s request to a delivered, lot-traced, location-scanned product — every hop captured and reconcilable with D365. The full physical supply loop in one system.</div>
+</div>
+
+<!-- ───────────────── ACT 5 ───────────────── -->
+<div class="card act" id="act5" style="border-left-color:var(--violet)">
+  <div class="acthead"><span class="badge time">20 min</span><span class="badge role-author">Author — “Alex”</span><span class="badge role-approver">Approver — “Sam”</span><h2>Act 5 · The engine room</h2></div>
+  <p><strong>Goal:</strong> reveal where the recipe that powered today comes from — authoring, the building-block step library, and the approval / version-control governance.</p>
+
+  <div class="click"><strong>Switch persona:</strong> sign in with the <strong>Author</strong> button.</div>
+
+  <h3>5.1 — The building blocks (3 min)</h3>
+  <div class="click">Sidebar → <strong>Step Library</strong>. Scroll the system step templates (Gather, Weigh, Mix, Heat, Cool, pH Adjust, Transfer, Observe, Notes, Print Labels, Custom…).</div>
+  <div class="say">“These are the Lego bricks. Authors snap them together into a recipe — and you can add your own custom step types for procedures unique to your lab.”</div>
+
+  <h3>5.2 — Author a Work Instruction (8 min)</h3>
+  <div class="click">
+    <ol>
+      <li>Sidebar → <strong>Work Instructions</strong> → <strong>New Work Instruction</strong>.</li>
+      <li>Fill the header (title, product, target molarity), then add steps via the library or the <strong>+</strong> buttons.</li>
+      <li>Add a <strong>Gather Inputs</strong> step (materials), then a <strong>Weigh</strong> step — point out the material auto-fills from the gathered inputs, and that <strong>no scale is chosen here</strong>: it’s selected at the bench during the run.</li>
+      <li>Add Mix / pH Adjust / Observe as desired. <strong>Drag a step</strong> by its handle to reorder, then drag it back.</li>
+      <li><strong>Save Draft</strong> → then <strong>Submit for Review</strong>.</li>
+    </ol>
+  </div>
+  <div class="say">“Alex builds the recipe visually — drag-and-drop, with parameters and tolerances baked in. Notice we deliberately don’t pin a scale to the weigh step anymore; these recipes run at any bench, so the operator connects their own scale at run time. Save as a draft, then submit it for QA.”</div>
+  <div class="why">Recipes are structured data, not documents — which is exactly why the shop floor can render them as guided steps and capture measurements against them.</div>
+
+  <h3>5.3 — Review &amp; approve (5 min)</h3>
+  <div class="click">
+    <ol>
+      <li><strong>Switch persona:</strong> sign in with the <strong>Approver</strong> button.</li>
+      <li>Dashboard → <strong>Pending Review</strong> tile (or Work Instructions filtered to Pending Review). Open Alex’s WI.</li>
+      <li>Scroll the steps as the operator will see them. Optionally <strong>Reject</strong> with a comment (“add a cooling step”) to show the feedback loop, then <strong>Approve</strong>.</li>
+      <li>Show the <strong>Approved</strong> badge, reviewer name, and timestamp.</li>
+    </ol>
+  </div>
+  <div class="say">“Sam sees the recipe exactly as the floor will. One click approves — or rejects with a comment that routes straight back to the author. Once approved, the recipe is frozen at this version.”</div>
+
+  <h3>5.4 — Change control (4 min)</h3>
+  <div class="click">
+    <ol>
+      <li>Back as the <strong>Author</strong> (or admin), open the approved WI → <strong>New Version</strong>.</li>
+      <li>Show the new draft (v2) cloned from v1, ready to edit and re-approve.</li>
+    </ol>
+  </div>
+  <div class="why">This is regulated-lab change control. v1 is preserved forever; v2 goes through its own approval. And remember Act 2 — every production order is pinned to the version it was created against, so a new version never silently changes a batch that’s already in flight.</div>
+</div>
+
+<!-- ───────────────── ACT 6 ───────────────── -->
+<div class="card act" id="act6" style="border-left-color:#111827">
+  <div class="acthead"><span class="badge time">5 min</span><h2>Act 6 · Recap, ROI &amp; Q&amp;A</h2></div>
+  <div class="say">“In the last two hours we followed one reagent from request to delivery — and never left the system or re-keyed a thing. A scientist ordered it. A planner checked live D365 inventory and scheduled it. An operator made it to spec with live scale capture, tested it, and released a Certificate of Quality — while D365 started the order in the background. A teammate delivered it with bin- and lot-level scans. And we ended in the governed recipe library that makes all of it repeatable and auditable.”</div>
+  <h4>Business outcomes to land</h4>
+  <ul>
+    <li><strong>One role-aware app</strong> replaces paper WIs, the QA sign-off binder, the reagent order pad, the scheduler, and the floor checklist.</li>
+    <li><strong>Audit-grade traceability</strong> — every batch pinned to a frozen recipe version, every measurement, lot, scale, and signature captured.</li>
+    <li><strong>D365-native</strong> — inventory, item master, transfer orders, and production order start all flow through Dynamics 365. No ERP island.</li>
+    <li><strong>Built on Microsoft</strong> — fits the customer’s existing stack, security, and reporting (Power BI over the D365 data).</li>
+  </ul>
+  <h4>Roadmap one-liners (for the inevitable questions)</h4>
+  <ul>
+    <li><strong>21 CFR Part 11 e-signatures</strong> — today every action is user- and time-stamped; full e-sig flow is roadmap.</li>
+    <li><strong>Offline/PWA shop-floor mode</strong> — current build assumes a connected tablet.</li>
+    <li><strong>Inventory auto-adjust on delivery</strong> — wiring deliveries to decrement/increment on-hand is a fast follow.</li>
+  </ul>
+  <div class="say">“What questions can I answer — and which of these workflows is the one that hurts the most for your team today?”</div>
+</div>
+
+<hr>
+
+<!-- ───────────────── FLEX ───────────────── -->
+<div class="card" id="flex">
+  <h3 style="margin-top:0">Flexing the clock</h3>
+  <div class="grid2">
+    <div>
+      <h4>Running long? Trim here</h4>
+      <ul>
+        <li>Act 2: skip the Gantt drag; just create the order.</li>
+        <li>Act 3: narrate fewer step types; do one Weigh + QC + COQ.</li>
+        <li>Act 5: describe authoring from a pre-built draft instead of building live.</li>
+        <li>Cut the Quality Trends sidebar (3.7).</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Running short? Expand here</h4>
+      <ul>
+        <li>Act 2: full setup tour — Labs, Scales, Users, Step Library.</li>
+        <li>Act 3: do the out-of-tolerance drama and a step <strong>Reopen</strong>.</li>
+        <li>Act 5: live-build the whole recipe and do a real Reject → fix → resubmit cycle.</li>
+        <li>Deep-dive the D365 integration appendix below with IT stakeholders.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────── INTEGRATION APPENDIX ───────────────── -->
+<div class="card" id="appendix">
+  <h3 style="margin-top:0">Appendix · Dynamics 365 integration points (for IT stakeholders)</h3>
+  <table>
+    <tr><th>Capability</th><th>Mechanism</th><th>Direction</th></tr>
+    <tr><td>Reagent item master / catalog</td><td><code>sync-d365-reagents</code> (ReleasedProductsV2 OData)</td><td>D365 → App</td></tr>
+    <tr><td>Labs / warehouses</td><td><code>sync-d365-warehouses</code></td><td>D365 → App</td></tr>
+    <tr><td>Reagent order → transfer order</td><td><code>create-d365-transfer-order</code> (TransferOrderHeaders/Lines)</td><td>App → D365</td></tr>
+    <tr><td>Production orders ingest</td><td><code>ingest-d365-prod-order</code></td><td>D365 → App</td></tr>
+    <tr><td><strong>Start production order</strong></td><td><code>start-d365-production-order</code> → SysMessage <code>ProdProductionOrderStart</code></td><td>App → D365</td></tr>
+    <tr><td>On-hand inventory</td><td>Modeled on the D365 on-hand form (demo data presented as D365-synced)</td><td>D365 → App</td></tr>
+  </table>
+  <p>Auth is Entra ID client-credentials; the client secret lives server-side as a Supabase secret, never in the browser. Connection settings (URL, tenant, client, company, MES queue) are managed in <strong>Reagent Items → D365 Connection Settings</strong>.</p>
+</div>
+
+<!-- ───────────────── RESET ───────────────── -->
+<div class="card noprint" id="reset">
+  <h3 style="margin-top:0">Reset between runs</h3>
+  <ol>
+    <li>As Admin: Production Orders → cancel/delete the demo batch.</li>
+    <li>Work Instructions → delete the v2 draft if you created one; ensure the v1 approved recipe remains.</li>
+    <li>Reagent Orders → delete (or re-create) the demo order so Act 1/Act 4 start clean.</li>
+    <li>Re-run <code>create-demo-users.mjs</code> only if passwords drifted.</li>
+  </ol>
+  <div class="watch"><strong>Security note (not part of the demo):</strong> <code>scripts/create-demo-users.mjs</code> and <code>CONTEXT.md</code> contain live secrets committed to the repo (a Supabase service-role key and a stray token). Rotate them and move them to environment variables / Supabase secrets before this repo is shared beyond the demo team.</div>
+</div>
+
+<p class="t" style="text-align:center;margin-top:30px">Lab WI System — Reagent Production · Presales demo script · Good luck — go win it. 🧪</p>
+
+</div>
+
+<script>
+(function(){
+  var body = document.body;
+  var links = Array.prototype.slice.call(document.querySelectorAll('.sidenav a[href^="#"]'));
+  var targets = links
+    .map(function(a){ return { a: a, el: document.querySelector(a.getAttribute('href')) }; })
+    .filter(function(x){ return x.el; });
+
+  // Collapse / expand the pane.
+  var closeBtn = document.querySelector('.nav-close');
+  var openBtn  = document.querySelector('.nav-open-btn');
+  if (closeBtn) closeBtn.addEventListener('click', function(){ body.classList.add('nav-hidden'); });
+  if (openBtn)  openBtn.addEventListener('click', function(){ body.classList.remove('nav-hidden'); });
+
+  // Start collapsed on narrow screens so it never covers the notes.
+  if (window.innerWidth < 1000) body.classList.add('nav-hidden');
+
+  // On narrow screens, auto-hide after jumping so the section is readable.
+  links.forEach(function(a){
+    a.addEventListener('click', function(){ if (window.innerWidth < 1000) body.classList.add('nav-hidden'); });
+  });
+
+  // Scroll-spy: highlight whichever section is currently in view.
+  function spy(){
+    var y = window.scrollY + 130, cur = targets.length ? targets[0] : null;
+    for (var i = 0; i < targets.length; i++) {
+      if (targets[i].el.offsetTop <= y) cur = targets[i];
+    }
+    targets.forEach(function(s){ s.a.classList.toggle('active', s === cur); });
+  }
+  window.addEventListener('scroll', spy, { passive: true });
+  window.addEventListener('resize', spy);
+  spy();
+})();
+</script>
+</body>
+</html>

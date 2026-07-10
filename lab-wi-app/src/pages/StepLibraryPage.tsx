@@ -3,8 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { StepTemplate, StepType } from '../types';
-import { Plus, Pencil, Trash2, FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, ChevronDown, ChevronUp, Lock, Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle } from 'lucide-react';
-import type { ParameterSchema } from '../types';
+import { Plus, Pencil, Trash2, FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, ChevronDown, ChevronUp, Lock, Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal } from 'lucide-react';
+import type { ParameterSchema, ParameterFieldDef } from '../types';
 
 const STEP_TYPE_META: Record<StepType, { label: string; icon: React.ReactNode; color: string }> = {
   gather_inputs:    { label: 'Gather Inputs (legacy)', icon: <FlaskConical size={16} />, color: 'bg-indigo-100 text-indigo-700' },
@@ -21,6 +21,7 @@ const STEP_TYPE_META: Record<StepType, { label: string; icon: React.ReactNode; c
   production_break: { label: 'Production Break',       icon: <Milestone size={16} />,     color: 'bg-rose-100 text-rose-700' },
   print_labels:     { label: 'Print Labels',            icon: <Printer size={16} />,       color: 'bg-teal-100 text-teal-700' },
   possible_deviation: { label: 'Possible Deviation',    icon: <AlertTriangle size={16} />, color: 'bg-red-100 text-red-700' },
+  user_defined:     { label: 'User Defined',           icon: <SlidersHorizontal size={16} />, color: 'bg-emerald-100 text-emerald-700' },
   custom:           { label: 'Custom Step',            icon: <Settings size={16} />,      color: 'bg-gray-100 text-gray-700' },
 };
 
@@ -197,6 +198,7 @@ export default function StepLibraryPage() {
       {showForm && (
         <TemplateModal
           template={editing}
+          systemTemplates={templates.filter(t => t.is_system)}
           onClose={() => setShowForm(false)}
           onSaved={() => { setShowForm(false); qc.invalidateQueries({ queryKey: ['step-templates'] }); }}
         />
@@ -205,22 +207,107 @@ export default function StepLibraryPage() {
   );
 }
 
+// ── Parameter builder ──────────────────────────────────────────────────────
+// A local editable row that maps 1:1 to a ParameterFieldDef in parameter_schema.
+interface ParamRow {
+  id: string;
+  label: string;
+  type: ParameterFieldDef['type'];
+  options: string;   // comma-separated; string/number only
+  default: string;   // parsed per type on save
+  required: boolean;
+}
+
+function slugifyKey(label: string): string {
+  return label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function rowsFromSchema(schema: ParameterSchema): ParamRow[] {
+  return Object.entries(schema)
+    .filter((entry): entry is [string, ParameterFieldDef] => !('items' in entry[1]))
+    .map(([key, def]) => ({
+      id: crypto.randomUUID(),
+      label: def.label ?? key,
+      type: def.type,
+      options: (def.options ?? []).join(', '),
+      default: def.default !== undefined ? String(def.default) : '',
+      required: !!def.required,
+    }));
+}
+
+function schemaFromRows(rows: ParamRow[]): ParameterSchema {
+  const schema: ParameterSchema = {};
+  for (const row of rows) {
+    const label = row.label.trim();
+    if (!label) continue;
+    let key = slugifyKey(label) || 'param';
+    let n = 2;
+    while (key in schema) key = `${slugifyKey(label)}_${n++}`;
+
+    const def: ParameterFieldDef = { type: row.type, label };
+    if (row.type !== 'boolean' && row.options.trim()) {
+      const raw = row.options.split(',').map(o => o.trim()).filter(Boolean);
+      const options = row.type === 'number'
+        ? raw.map(o => parseFloat(o)).filter(o => !Number.isNaN(o))
+        : raw;
+      if (options.length > 0) def.options = options;
+    }
+    if (row.default.trim()) {
+      if (row.type === 'number') {
+        const d = parseFloat(row.default);
+        if (!Number.isNaN(d)) def.default = d;
+      } else if (row.type === 'boolean') {
+        def.default = row.default === 'true';
+      } else {
+        def.default = row.default.trim();
+      }
+    }
+    if (row.required) def.required = true;
+    schema[key] = def;
+  }
+  return schema;
+}
+
 function TemplateModal({
-  template, onClose, onSaved,
+  template, systemTemplates, onClose, onSaved,
 }: {
   template: StepTemplate | null;
+  systemTemplates: StepTemplate[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const { profile } = useAuth();
   const [name, setName] = useState(template?.name ?? '');
   const [description, setDescription] = useState(template?.description ?? '');
-  const [stepType, setStepType] = useState<StepType>(template?.step_type ?? 'custom');
+  const [stepType, setStepType] = useState<StepType>(template?.step_type ?? 'user_defined');
+  const [paramRows, setParamRows] = useState<ParamRow[]>(
+    template ? rowsFromSchema(template.parameter_schema) : []
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  function updateRow(id: string, patch: Partial<ParamRow>) {
+    setParamRows(rows => rows.map(r => r.id === id ? { ...r, ...patch } : r));
+  }
+
+  function addRow() {
+    setParamRows(rows => [...rows, { id: crypto.randomUUID(), label: '', type: 'string', options: '', default: '', required: false }]);
+  }
+
+  function resolveSchema(): ParameterSchema {
+    if (stepType === 'user_defined') return schemaFromRows(paramRows);
+    // Built-in type: mirror the system template's schema so the card shows real
+    // parameters; keep the existing schema when the type hasn't changed on edit.
+    if (template && template.step_type === stepType) return template.parameter_schema;
+    return systemTemplates.find(s => s.step_type === stepType)?.parameter_schema ?? {};
+  }
+
   async function save() {
     if (!name.trim()) { setError('Name is required'); return; }
+    if (stepType === 'user_defined' && paramRows.some(r => !r.label.trim())) {
+      setError('Every parameter needs a label (or remove the empty row)');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -228,7 +315,7 @@ function TemplateModal({
         name: name.trim(),
         description: description.trim() || null,
         step_type: stepType,
-        parameter_schema: template?.parameter_schema ?? {},
+        parameter_schema: resolveSchema(),
         is_system: false,
         created_by: profile!.id,
       };
@@ -249,43 +336,136 @@ function TemplateModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
           {template ? 'Edit Template' : 'New Step Template'}
         </h2>
         {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-            <input
-              value={name}
-              onChange={e => setName(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g. Centrifuge"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Step Type</label>
-            <select
-              value={stepType}
-              onChange={e => setStepType(e.target.value as StepType)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {Object.entries(STEP_TYPE_META).map(([type, meta]) => (
-                <option key={type} value={type}>{meta.label}</option>
-              ))}
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+              <input
+                value={name}
+                onChange={e => setName(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="e.g. Centrifuge"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Step Type</label>
+              <select
+                value={stepType}
+                onChange={e => setStepType(e.target.value as StepType)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="user_defined">User Defined — build your own parameters</option>
+                {Object.entries(STEP_TYPE_META)
+                  .filter(([type]) => type !== 'user_defined')
+                  .map(([type, meta]) => (
+                    <option key={type} value={type}>{meta.label}</option>
+                  ))}
+              </select>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
             <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
-              rows={3}
+              rows={2}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="What does this step do?"
             />
           </div>
+
+          {stepType === 'user_defined' ? (
+            <div className="border border-gray-200 rounded-xl p-4 space-y-3">
+              <div>
+                <p className="text-sm font-medium text-gray-700">Configurable Parameters</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Authors fill these in when adding this step to a work instruction; operators see the values during a run.
+                </p>
+              </div>
+
+              {paramRows.length > 0 && (
+                <div className="grid grid-cols-[1fr_90px_1fr_90px_24px_24px] gap-2 items-center text-[11px] font-medium text-gray-400">
+                  <span>Label</span><span>Type</span><span>Options</span><span>Default</span><span className="text-center">Req</span><span />
+                </div>
+              )}
+              {paramRows.map(row => (
+                <div key={row.id} className="grid grid-cols-[1fr_90px_1fr_90px_24px_24px] gap-2 items-center">
+                  <input
+                    value={row.label}
+                    onChange={e => updateRow(row.id, { label: e.target.value })}
+                    placeholder="e.g. Spin Speed (RPM)"
+                    className="border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  />
+                  <select
+                    value={row.type}
+                    onChange={e => updateRow(row.id, { type: e.target.value as ParamRow['type'], options: '', default: '' })}
+                    className="border border-gray-200 rounded px-1 py-1.5 text-xs"
+                  >
+                    <option value="string">text</option>
+                    <option value="number">number</option>
+                    <option value="boolean">yes/no</option>
+                  </select>
+                  {row.type !== 'boolean' ? (
+                    <input
+                      value={row.options}
+                      onChange={e => updateRow(row.id, { options: e.target.value })}
+                      placeholder="Dropdown options, comma-separated"
+                      className="border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    />
+                  ) : (
+                    <span className="text-xs text-gray-300 text-center">—</span>
+                  )}
+                  {row.type === 'boolean' ? (
+                    <select
+                      value={row.default}
+                      onChange={e => updateRow(row.id, { default: e.target.value })}
+                      className="border border-gray-200 rounded px-1 py-1.5 text-xs"
+                    >
+                      <option value="">—</option>
+                      <option value="true">yes</option>
+                      <option value="false">no</option>
+                    </select>
+                  ) : (
+                    <input
+                      value={row.default}
+                      onChange={e => updateRow(row.id, { default: e.target.value })}
+                      type={row.type === 'number' ? 'number' : 'text'}
+                      placeholder="Default"
+                      className="border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    />
+                  )}
+                  <input
+                    type="checkbox"
+                    checked={row.required}
+                    onChange={e => updateRow(row.id, { required: e.target.checked })}
+                    className="justify-self-center"
+                    title="Required at authoring time"
+                  />
+                  <button
+                    onClick={() => setParamRows(rows => rows.filter(r => r.id !== row.id))}
+                    className="text-gray-300 hover:text-red-500 justify-self-center"
+                    title="Remove parameter"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+
+              <button onClick={addRow} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                <Plus size={12} /> Add Parameter
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+              This template reuses the built-in {STEP_TYPE_META[stepType].label} step — its parameters and
+              run-time behavior come from the system. Choose “User Defined” to build your own parameter list.
+            </p>
+          )}
         </div>
         <div className="flex justify-end gap-2 mt-6">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">Cancel</button>

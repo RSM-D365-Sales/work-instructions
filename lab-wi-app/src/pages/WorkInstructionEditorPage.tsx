@@ -3,11 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import type { StepTemplate, WIStep, WorkInstruction, StepType } from '../types';
+import type { StepTemplate, WIStep, WorkInstruction, StepType, ParameterSchema, ParameterFieldDef } from '../types';
 import {
   Plus, Trash2, GripVertical, Save, Send, ChevronDown, ChevronUp, ArrowLeft,
   FlaskConical, Scale as ScaleIcon, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings,
-  Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle,
+  Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -27,8 +27,76 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   production_break: <Milestone size={15} />,
   print_labels:     <Printer size={15} />,
   possible_deviation: <AlertTriangle size={15} />,
+  user_defined:     <SlidersHorizontal size={15} />,
   custom:           <Settings size={15} />,
 };
+
+// ─── Generic editor for user-defined templates ───────────────────────────────
+// Renders authoring inputs from the parameter schema snapshotted into the step
+// (parameters._param_schema) when it was added from the library.
+function UserDefinedParamEditor({
+  params, onChange,
+}: {
+  params: Record<string, unknown>;
+  onChange: (p: Record<string, unknown>) => void;
+}) {
+  const schema = (params._param_schema ?? {}) as ParameterSchema;
+  const fields = Object.entries(schema).filter(
+    (entry): entry is [string, ParameterFieldDef] => !('items' in entry[1])
+  );
+  if (fields.length === 0) {
+    return <p className="text-xs text-gray-400 italic">This template has no configurable parameters.</p>;
+  }
+
+  function set(key: string, value: unknown) {
+    onChange({ ...params, [key]: value });
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {fields.map(([key, def]) => (
+        <div key={key} className={def.type === 'string' && !def.options ? 'col-span-2' : ''}>
+          <label className="block text-xs font-medium text-gray-600 mb-1">
+            {def.label}
+            {def.required && <span className="text-red-500 ml-0.5">*</span>}
+          </label>
+          {def.type === 'boolean' ? (
+            <label className="flex items-center gap-2 py-1">
+              <input
+                type="checkbox"
+                checked={(params[key] as boolean) ?? (def.default as boolean) ?? false}
+                onChange={e => set(key, e.target.checked)}
+              />
+              <span className="text-xs text-gray-500">Yes</span>
+            </label>
+          ) : def.options && def.options.length > 0 ? (
+            <select
+              value={String(params[key] ?? def.default ?? '')}
+              onChange={e => set(key, def.type === 'number' ? parseFloat(e.target.value) : e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs"
+            >
+              <option value="">— Select —</option>
+              {def.options.map(o => <option key={String(o)} value={String(o)}>{String(o)}</option>)}
+            </select>
+          ) : def.type === 'number' ? (
+            <input
+              type="number"
+              value={(params[key] as number) ?? (def.default as number) ?? ''}
+              onChange={e => set(key, e.target.value === '' ? null : parseFloat(e.target.value))}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+          ) : (
+            <input
+              value={(params[key] as string) ?? (def.default as string) ?? ''}
+              onChange={e => set(key, e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ─── Parameter editors per step type ─────────────────────────────────────────
 function StepParamEditor({
@@ -517,6 +585,9 @@ function StepParamEditor({
         </div>
       );
 
+    case 'user_defined':
+      return <UserDefinedParamEditor params={params} onChange={onChange} />;
+
     default:
       return (
         <div>
@@ -635,11 +706,15 @@ function StepRow({ step, index, total, canDrag, isDragging, isDropTarget, gather
                 onChange={e => onChange(step._localId, { step_type: e.target.value as StepType, parameters: {} })}
                 className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
               >
-                {Object.entries(STEP_ICONS).map(([type]) => (
-                  <option key={type} value={type}>
-                    {type === 'ph_adjust' ? 'pH adjust' : type.replace('_', ' ')}
-                  </option>
-                ))}
+                {Object.entries(STEP_ICONS)
+                  // user_defined steps get their parameters from a library template,
+                  // so the type is only offered when the step already has one
+                  .filter(([type]) => type !== 'user_defined' || step.step_type === 'user_defined')
+                  .map(([type]) => (
+                    <option key={type} value={type}>
+                      {type === 'ph_adjust' ? 'pH adjust' : type.replace('_', ' ')}
+                    </option>
+                  ))}
               </select>
             </div>
           </div>
@@ -778,8 +853,21 @@ export default function WorkInstructionEditorPage() {
       description: t.description ?? '',
       step_type: t.step_type,
       step_template_id: t.id,
-      parameters: getDefaultParams(t.step_type),
+      parameters: t.step_type === 'user_defined'
+        ? userDefinedDefaults(t.parameter_schema)
+        : getDefaultParams(t.step_type),
     }]);
+  }
+
+  // Snapshot the template's schema into the step (like _step_type) so the
+  // editor, detail, and execution pages can render it without re-fetching the
+  // template — and so later template edits don't change existing WIs.
+  function userDefinedDefaults(schema: ParameterSchema): Record<string, unknown> {
+    const params: Record<string, unknown> = { _param_schema: schema };
+    for (const [key, def] of Object.entries(schema)) {
+      if (!('items' in def) && def.default !== undefined) params[key] = def.default;
+    }
+    return params;
   }
 
   function getDefaultParams(type: StepType): Record<string, unknown> {

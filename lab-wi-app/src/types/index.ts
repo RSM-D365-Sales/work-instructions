@@ -109,6 +109,7 @@ export type StepType =
   | 'production_break'  // divider marking the boundary between parts of a run
   | 'print_labels'
   | 'possible_deviation' // flag a possible deviation; capture impacted qty + notify supervisor
+  | 'user_defined'      // author-built template; fields defined in parameter_schema
   | 'custom';
 
 export interface ParameterFieldDef {

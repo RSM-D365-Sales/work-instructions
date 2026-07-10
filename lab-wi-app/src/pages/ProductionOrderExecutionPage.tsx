@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import type { ProductionOrder, WIStep, POStep, StepType, Scale, Profile, QCTest, QCResult, POStatus } from '../types';
+import type { ProductionOrder, WIStep, POStep, StepType, Scale, Profile, QCTest, QCResult, POStatus, ParameterSchema, ParameterFieldDef } from '../types';
 import { calculateTolerance, cn } from '../lib/utils';
 import { evaluateQC, formatSpec } from '../lib/qc';
 import {
@@ -11,7 +11,7 @@ import {
   FlaskConical, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings,
   AlertTriangle, CheckCheck, PlayCircle, Ban, Trash2, Loader2, Wifi, WifiOff,
   Wrench, Beaker, Printer, UserCog, CalendarClock, Check, StickyNote, Milestone,
-  ClipboardCheck, FileText, XCircle, Send, ScanLine, MessageSquare, X,
+  ClipboardCheck, FileText, XCircle, Send, ScanLine, MessageSquare, X, SlidersHorizontal,
 } from 'lucide-react';
 
 const STEP_ICONS: Record<StepType, React.ReactNode> = {
@@ -29,6 +29,7 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   production_break: <Milestone size={16} />,
   print_labels:     <Printer size={16} />,
   possible_deviation: <AlertTriangle size={16} />,
+  user_defined:     <SlidersHorizontal size={16} />,
   custom:           <Settings size={16} />,
 };
 
@@ -640,6 +641,40 @@ function GenericStepWidget({
   );
 }
 
+// Renders the values an author configured on a user-defined library step,
+// using the parameter schema snapshotted into the step at authoring time.
+function UserDefinedStepWidget({ params }: { params: Record<string, unknown> }) {
+  const schema = (params._param_schema ?? {}) as ParameterSchema;
+  const rows = Object.entries(schema)
+    .filter((entry): entry is [string, ParameterFieldDef] => !('items' in entry[1]))
+    .map(([key, def]) => {
+      const v = params[key];
+      const display = def.type === 'boolean'
+        ? (v === true ? 'Yes' : v === false ? 'No' : null)
+        : (v !== undefined && v !== null && v !== '' ? String(v) : null);
+      return { key, label: def.label ?? key, display };
+    })
+    .filter(r => r.display !== null);
+
+  if (rows.length === 0) {
+    return (
+      <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
+        <p className="text-sm text-gray-500">Follow the step instructions above.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 space-y-1.5">
+      {rows.map(r => (
+        <p key={r.key} className="text-sm text-emerald-900">
+          <span className="font-medium">{r.label}:</span> {r.display}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 function PhAdjustStepWidget({
   params, values, onChange, locked,
 }: {
@@ -965,6 +1000,9 @@ function StepCard({ wiStep, poStep, index, isActive, orderNumber, technicianName
               orderNumber={orderNumber}
               technicianName={technicianName}
             />
+          )}
+          {stepType === 'user_defined' && (
+            <UserDefinedStepWidget params={params} />
           )}
           {['heat','cool','transfer','custom'].includes(stepType) && (
             <GenericStepWidget params={params} stepType={stepType} />

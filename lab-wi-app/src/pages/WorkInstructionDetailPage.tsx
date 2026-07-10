@@ -3,11 +3,11 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import type { WorkInstruction, WIStep, WIApproval, StepType } from '../types';
+import type { WorkInstruction, WIStep, WIApproval, StepType, ParameterSchema } from '../types';
 import {
   ArrowLeft, Pencil, CheckCircle, XCircle, RotateCcw, PlayCircle, GitBranch,
   FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, Trash2,
-  Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, ChevronRight,
+  Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, ChevronRight, SlidersHorizontal,
 } from 'lucide-react';
 import { formatDate, cn, wiLineageKey } from '../lib/utils';
 
@@ -25,6 +25,7 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   notes:            <StickyNote size={15} />,
   production_break: <Milestone size={15} />,
   possible_deviation: <AlertTriangle size={15} />,
+  user_defined:     <SlidersHorizontal size={15} />,
 };
 
 const STATUS_STYLES: Record<string, string> = {
@@ -70,6 +71,17 @@ function stepSummary(step: WIStep): string {
       return (p.prompt as string)?.trim()
         ? (p.prompt as string)
         : `Capture impacted quantity${p.unit ? ` (${p.unit})` : ''} and notify supervisor`;
+    case 'user_defined': {
+      const schema = (p._param_schema ?? {}) as ParameterSchema;
+      return Object.entries(schema)
+        .filter(([key, def]) => !('items' in def) && p[key] !== undefined && p[key] !== null && p[key] !== '')
+        .map(([key, def]) => {
+          const v = p[key];
+          const display = !('items' in def) && def.type === 'boolean' ? (v ? 'Yes' : 'No') : String(v);
+          return `${def.label ?? key}: ${display}`;
+        })
+        .join(', ');
+    }
     default:
       return (p.instruction_text as string) ?? '';
   }

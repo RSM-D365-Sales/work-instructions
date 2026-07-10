@@ -18,9 +18,10 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 const DEMO_PASSWORD = 'Demo@Lab2026';
 
 const DEMO_USERS = [
-  { email: 'author@demolab.com',   full_name: 'Demo Author',   role: 'author' },
-  { email: 'approver@demolab.com', full_name: 'Demo Approver', role: 'approver' },
-  { email: 'operator@demolab.com', full_name: 'Demo Operator', role: 'operator' },
+  { email: 'author@demolab.com',   full_name: 'Demo Author',        role: 'author' },
+  { email: 'approver@demolab.com', full_name: 'Demo Approver',      role: 'approver' },
+  { email: 'operator@demolab.com', full_name: 'Demo Operator',      role: 'operator' },
+  { email: 'lab@demolab.com',      full_name: 'Demo Lab Scientist', role: 'lab' },
 ];
 
 // Fetch all existing users so we can update passwords if they already exist
