@@ -392,3 +392,46 @@ export interface QCCertificate {
   created_at: string;
   issuer?: Profile;
 }
+
+// ── Planned production orders (D365 Master Planning) ────────
+export type PlannedOrderStatus = 'unprocessed' | 'firmed';
+
+/** One demand line behind a planned order (the D365 Pegging grid). */
+export interface PlannedOrderPegging {
+  reference: string;               // 'Transfer order' | 'Safety stock' | 'BOM line' | …
+  number?: string | null;          // the demand document number, when there is one
+  requirement_date?: string;       // YYYY-MM-DD
+  quantity?: number;
+}
+
+/** A D365-style planned production / batch order. Firming creates a
+ *  production order against the item's approved work instruction
+ *  (its default formula). requirement_date is the demand date and is
+ *  never edited; order_date / delivery_date are, with a warning when
+ *  moved past the requirement date. */
+export interface PlannedProductionOrder {
+  id: string;
+  number: string;
+  reference: string;
+  reagent_item_id: string;
+  quantity: number;
+  unit: string;
+  requirement_date: string;        // YYYY-MM-DD (read-only in UI)
+  order_date: string;              // YYYY-MM-DD (editable)
+  delivery_date?: string | null;   // YYYY-MM-DD (editable)
+  planning_priority: number;
+  site: string;
+  warehouse: string;
+  plan_name: string;
+  bom_number?: string | null;
+  route_number?: string | null;
+  pegging: PlannedOrderPegging[];
+  status: PlannedOrderStatus;
+  d365_ref_id?: string | null;
+  firmed_production_order_id?: string | null;
+  firmed_by?: string | null;
+  firmed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  item?: Pick<ReagentItem, 'id' | 'item_number' | 'product_name' | 'unit_of_measure'> | null;
+}
