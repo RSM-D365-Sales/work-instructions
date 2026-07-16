@@ -394,6 +394,50 @@ export interface QCCertificate {
   issuer?: Profile;
 }
 
+// ── Inventory batches + cycle counting ──────────────────────
+/** One lot of an item at a lab. Batch quantities for an item×lab sum to
+ *  inventory_on_hand.physical_inventory. */
+export interface InventoryBatch {
+  id: string;
+  reagent_item_id: string;
+  lab_id: string;
+  batch_number: string;
+  quantity: number;
+  received_at?: string | null;
+  expiration_date?: string | null;
+  created_at: string;
+  updated_at: string;
+  reagent_item?: Pick<ReagentItem, 'id' | 'item_number' | 'product_name' | 'item_type' | 'unit_of_measure'>;
+  lab?: Pick<Lab, 'id' | 'name' | 'warehouse_id'>;
+}
+
+/** A posted cycle count for a lab (one line per batch counted). Posting
+ *  adjusts inventory and mimics the sync to D365. */
+export interface CycleCount {
+  id: string;
+  lab_id: string;
+  counted_by?: string | null;
+  status: 'posted';
+  total_lines: number;
+  total_variance: number;
+  d365_sync_status: 'pending' | 'sent' | 'failed';
+  d365_synced_at?: string | null;
+  created_at: string;
+  counter?: Pick<Profile, 'id' | 'full_name'>;
+  lab?: Pick<Lab, 'id' | 'name'>;
+}
+
+export interface CycleCountLine {
+  id: string;
+  cycle_count_id: string;
+  inventory_batch_id?: string | null;
+  reagent_item_id: string;
+  batch_number: string;
+  expected_quantity: number;
+  counted_quantity: number;
+  created_at: string;
+}
+
 // ── Planned production orders (D365 Master Planning) ────────
 export type PlannedOrderStatus = 'unprocessed' | 'firmed';
 

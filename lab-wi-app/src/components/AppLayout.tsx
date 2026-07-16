@@ -4,7 +4,7 @@ import {
   Rocket, LayoutDashboard, BookOpen, ClipboardList,
   PlayCircle, LogOut, ChevronRight, Beaker, Scale, Users, Building2,
   ShoppingCart, CalendarClock, TrendingUp, Boxes, PanelLeftClose, PanelLeftOpen,
-  Factory, CalendarDays,
+  Factory, CalendarDays, ListChecks,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
@@ -17,6 +17,7 @@ const mainNav = [
   { to: '/schedule', label: 'Production Schedule', icon: CalendarDays, roles: ['admin', 'author', 'approver', 'operator'] },
   { to: '/quality-trends', label: 'Quality Trends', icon: TrendingUp, roles: ['admin', 'author', 'approver'] },
   { to: '/inventory', label: 'Inventory', icon: Boxes, roles: ['admin', 'author', 'approver'] },
+  { to: '/cycle-count', label: 'Cycle Count', icon: ListChecks, roles: ['admin', 'author', 'approver', 'operator', 'lab'] },
   { to: '/planned-orders', label: 'Planned Production Orders', icon: Factory, roles: ['admin', 'approver'] },
   { to: '/unscheduled-orders', label: 'Unscheduled Orders', icon: CalendarClock, roles: ['admin'] },
   { to: '/reagent-orders', label: 'Reagent Orders', icon: ShoppingCart, roles: ['admin', 'author', 'approver', 'operator', 'lab'] },

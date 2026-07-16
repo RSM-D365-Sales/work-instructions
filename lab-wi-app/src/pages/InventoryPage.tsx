@@ -1,10 +1,14 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, Fragment } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import type { InventoryOnHand, ItemType, Lab } from '../types';
+import type { InventoryOnHand, InventoryBatch, ItemType, Lab } from '../types';
 import { cn } from '../lib/utils';
-import { Boxes, Search, X, RefreshCw, Layers, Building2, Package } from 'lucide-react';
+import {
+  Boxes, Search, X, RefreshCw, Layers, Building2, Package,
+  ListChecks, ChevronRight, ChevronDown,
+} from 'lucide-react';
 
 // ─── Item-type presentation ──────────────────────────────────────────────────
 const TYPE_LABELS: Record<ItemType, string> = {
@@ -29,6 +33,7 @@ const num = (n: number) =>
 interface Line {
   key: string;
   itemId: string;
+  labId?: string;            // set in by-lab grouping; drives the batch drill-down
   itemNumber: string;
   productName: string;
   itemType: ItemType;
@@ -78,6 +83,28 @@ export default function InventoryPage() {
     },
   });
 
+  // Batch (lot) detail behind each summary line — shown only on drill-down;
+  // the summary table itself stays totals-only.
+  const { data: allBatches = [] } = useQuery<InventoryBatch[]>({
+    queryKey: ['inventory-batches'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('inventory_batches')
+        .select('*, lab:labs(id, name)')
+        .order('batch_number');
+      if (error) throw error;
+      return data as InventoryBatch[];
+    },
+  });
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  function toggleExpanded(key: string) {
+    setExpanded(prev => {
+      const n = new Set(prev);
+      if (n.has(key)) n.delete(key); else n.add(key);
+      return n;
+    });
+  }
+
   // Most-recent "sync" timestamp, to sell the D365 story.
   const lastSync = useMemo(() => {
     let max = 0;
@@ -114,6 +141,7 @@ export default function InventoryPage() {
         .map<Line>(r => ({
           key: r.id,
           itemId: r.reagent_item_id,
+          labId: r.lab_id,
           itemNumber: r.reagent_item!.item_number,
           productName: r.reagent_item!.product_name,
           itemType: r.reagent_item!.item_type,
@@ -206,6 +234,13 @@ export default function InventoryPage() {
             )}
           </p>
         </div>
+        <Link
+          to="/cycle-count"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors shrink-0"
+        >
+          <ListChecks size={15} />
+          Cycle Count
+        </Link>
       </div>
 
       {/* Type filter pills */}
@@ -338,31 +373,91 @@ export default function InventoryPage() {
               <tbody className="divide-y divide-gray-50">
                 {lines.map(l => {
                   const total = totalAvailable(l);
+                  const isOpen = expanded.has(l.key);
+                  // Batches behind this line: the exact lab in by-lab mode,
+                  // or every lab visible under the current filters in by-item mode.
+                  const lineBatches = l.labId
+                    ? allBatches.filter(b => b.reagent_item_id === l.itemId && b.lab_id === l.labId)
+                    : (() => {
+                        const allowed = new Set(
+                          filteredRows.filter(r => r.reagent_item_id === l.itemId).map(r => r.lab_id)
+                        );
+                        return allBatches.filter(b => b.reagent_item_id === l.itemId && allowed.has(b.lab_id));
+                      })();
                   return (
-                    <tr key={l.key} className="hover:bg-blue-50/40 transition-colors">
-                      <td className="px-4 py-2.5 font-mono font-medium text-gray-900 whitespace-nowrap">{l.itemNumber}</td>
-                      <td className="px-4 py-2.5 text-gray-800">{l.productName}</td>
-                      <td className="px-4 py-2.5">
-                        <span
-                          className={cn('px-2 py-0.5 rounded-full text-xs font-semibold', TYPE_BADGE[l.itemType])}
-                          title={TYPE_LABELS[l.itemType]}
-                        >
-                          {l.itemType}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">{l.labLabel}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-gray-800">{num(l.physical)}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-gray-500">{num(l.reserved)}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-gray-500">{num(l.orderedIn)}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-gray-500">{num(l.onOrder)}</td>
-                      <td className={cn(
-                        'px-4 py-2.5 text-right tabular-nums font-semibold bg-blue-50/40',
-                        total <= 0 ? 'text-red-600' : 'text-blue-800'
-                      )}>
-                        {num(total)}
-                      </td>
-                      <td className="px-3 py-2.5 text-gray-400">{l.uom}</td>
-                    </tr>
+                    <Fragment key={l.key}>
+                      <tr
+                        onClick={() => toggleExpanded(l.key)}
+                        title={isOpen ? 'Hide batches' : 'Show batches'}
+                        className="hover:bg-blue-50/40 transition-colors cursor-pointer"
+                      >
+                        <td className="px-4 py-2.5 font-mono font-medium text-gray-900 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1.5">
+                            {isOpen
+                              ? <ChevronDown size={13} className="text-gray-400 shrink-0" />
+                              : <ChevronRight size={13} className="text-gray-300 shrink-0" />}
+                            {l.itemNumber}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-gray-800">{l.productName}</td>
+                        <td className="px-4 py-2.5">
+                          <span
+                            className={cn('px-2 py-0.5 rounded-full text-xs font-semibold', TYPE_BADGE[l.itemType])}
+                            title={TYPE_LABELS[l.itemType]}
+                          >
+                            {l.itemType}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">{l.labLabel}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-gray-800">{num(l.physical)}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-gray-500">{num(l.reserved)}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-gray-500">{num(l.orderedIn)}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-gray-500">{num(l.onOrder)}</td>
+                        <td className={cn(
+                          'px-4 py-2.5 text-right tabular-nums font-semibold bg-blue-50/40',
+                          total <= 0 ? 'text-red-600' : 'text-blue-800'
+                        )}>
+                          {num(total)}
+                        </td>
+                        <td className="px-3 py-2.5 text-gray-400">{l.uom}</td>
+                      </tr>
+
+                      {/* Batch drill-down — lots stay out of the summary until expanded */}
+                      {isOpen && (
+                        <tr className="bg-gray-50/60">
+                          <td colSpan={10} className="px-6 py-3">
+                            {lineBatches.length === 0 ? (
+                              <p className="text-xs text-gray-400">No batch detail for this line.</p>
+                            ) : (
+                              <table className="text-xs w-auto min-w-[28rem]">
+                                <thead className="text-left text-[10px] uppercase text-gray-400">
+                                  <tr>
+                                    <th className="pr-6 pb-1.5 font-medium">Batch #</th>
+                                    {!l.labId && <th className="pr-6 pb-1.5 font-medium">Lab</th>}
+                                    <th className="pr-6 pb-1.5 font-medium">Received</th>
+                                    <th className="pr-6 pb-1.5 font-medium text-right">Quantity</th>
+                                    <th className="pb-1.5 font-medium">UoM</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {lineBatches.map(b => (
+                                    <tr key={b.id} className="border-t border-gray-100">
+                                      <td className="pr-6 py-1.5 font-mono text-gray-800">{b.batch_number}</td>
+                                      {!l.labId && <td className="pr-6 py-1.5 text-gray-600">{b.lab?.name ?? '—'}</td>}
+                                      <td className="pr-6 py-1.5 text-gray-500">
+                                        {b.received_at ? new Date(b.received_at).toLocaleDateString() : '—'}
+                                      </td>
+                                      <td className="pr-6 py-1.5 text-right tabular-nums text-gray-800">{num(b.quantity)}</td>
+                                      <td className="py-1.5 text-gray-400">{l.uom}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>

@@ -26,6 +26,7 @@ import ReagentOrderDetailPage from './pages/ReagentOrderDetailPage';
 import UnscheduledOrdersPage from './pages/UnscheduledOrdersPage';
 import PlannedProductionOrdersPage from './pages/PlannedProductionOrdersPage';
 import ProductionSchedulePage from './pages/ProductionSchedulePage';
+import CycleCountPage from './pages/CycleCountPage';
 import RocketLoader from './components/RocketLoader';
 
 // Charts (recharts) are heavy and only used here — load this route lazily so a
@@ -75,6 +76,7 @@ export default function App() {
                 <Route element={<ProtectedRoute allowedRoles={['author', 'approver', 'operator', 'lab']} />}>
                   <Route path="/reagent-orders" element={<ReagentOrdersListPage />} />
                   <Route path="/reagent-orders/:id" element={<ReagentOrderDetailPage />} />
+                  <Route path="/cycle-count" element={<CycleCountPage />} />
                 </Route>
                 <Route element={<ProtectedRoute allowedRoles={['author', 'approver', 'lab']} />}>
                   <Route path="/reagent-orders/new" element={<ReagentOrderNewPage />} />
