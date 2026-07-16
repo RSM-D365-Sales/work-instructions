@@ -6,7 +6,8 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
 import {
-  useGanttOrders, deriveSpan, startOfDay, addDays, DAY_MS, STATUS_DOT_CLASS,
+  useGanttOrders, useStepProgress, deriveSpan, startOfDay, addDays,
+  STATUS_DOT_CLASS, STATUS_LABEL, STATUS_LETTER,
   type GanttOrderRow,
 } from '../lib/ganttData';
 
@@ -51,8 +52,18 @@ function fmtHour(d: Date): string {
   return `${h}${ap}`;
 }
 
-function diffDays(a: Date, b: Date): number {
-  return (a.getTime() - b.getTime()) / DAY_MS;
+/** Visible hours in the 1-day view — the working window, so bars get room. */
+const DAY_VIEW_START_HOUR = 5;   // 5:00 AM
+const DAY_VIEW_END_HOUR   = 17;  // 5:00 PM
+
+/** "Wed, Jul 22 · 7:00 AM – 9:15 AM" (two full datetimes when days differ). */
+function fmtRange(start: Date, end: Date): string {
+  const day  = (x: Date) => x.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  const time = (x: Date) => x.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (start.toDateString() === end.toDateString()) {
+    return `${day(start)} · ${time(start)} – ${time(end)}`;
+  }
+  return `${day(start)} ${time(start)} → ${day(end)} ${time(end)}`;
 }
 
 const STATUS_BAR_CLASS: Record<GanttOrderRow['status'], string> = {
@@ -106,13 +117,29 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
     props.onAnchorChange ? props.onAnchorChange(a) : setOwnAnchor(a);
   // Live drag preview ({orderId, dx px}) while an admin drags a bar.
   const [dragPreview, setDragPreview] = useState<{ orderId: string; dx: number } | null>(null);
+  // Hover card state — the bar under the pointer plus the cursor position.
+  const [hover, setHover] = useState<{ bar: GanttBar; x: number; y: number } | null>(null);
   const suppressClick = useRef(false);
 
   const rangeStart = useMemo(() => startOfDay(anchor), [anchor]);
   const rangeEnd   = useMemo(() => addDays(rangeStart, windowDays), [rangeStart, windowDays]);
 
+  // The 1-day view shows only the working window (5:00 AM – 5:00 PM) so the
+  // intra-day schedule gets more room; multi-day views span whole days.
+  const isDayView = windowDays === 1;
+  const viewStart = useMemo(
+    () => (isDayView ? new Date(rangeStart.getTime() + DAY_VIEW_START_HOUR * 3_600_000) : rangeStart),
+    [isDayView, rangeStart]
+  );
+  const viewEnd = useMemo(
+    () => (isDayView ? new Date(rangeStart.getTime() + DAY_VIEW_END_HOUR * 3_600_000) : rangeEnd),
+    [isDayView, rangeStart, rangeEnd]
+  );
+
   /* ----- Data fetch ----- */
   const { data: orders, isLoading } = useGanttOrders(rangeStart, rangeEnd, windowDays);
+  // Steps completed vs. total, for the hover card on in-progress orders.
+  const { data: stepProgress } = useStepProgress(orders);
 
   /* ----- Per-person working pattern (grey out off / PTO days) ----- */
   const { data: schedRows = [] } = useQuery({
@@ -142,8 +169,8 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
     for (const o of orders) {
       const span = deriveSpan(o);
       if (!span) continue;   // unscheduled — lives in the Unscheduled Orders queue
-      // Skip bars completely outside the window
-      if (span.end < rangeStart || span.start > rangeEnd) continue;
+      // Skip bars completely outside the visible window
+      if (span.end < viewStart || span.start > viewEnd) continue;
 
       const owner = o.assignee ?? o.creator;
       const ownerId   = owner?.id        ?? 'unassigned';
@@ -164,13 +191,11 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
     );
     out.forEach(r => r.bars.sort((a, b) => a.start.getTime() - b.start.getTime()));
     return out;
-  }, [orders, rangeStart, rangeEnd]);
+  }, [orders, viewStart, viewEnd]);
 
   /* ----- Axis cells ----- */
-  // The 1-day view swaps the day columns for an hourly (24-column) axis so the
-  // intra-day schedule is legible; bars still position by fraction of the range.
-  const isDayView = windowDays === 1;
-
+  // The 1-day view swaps the day columns for an hourly axis over the working
+  // window (5a–5p); bars position by fraction of the visible range.
   const dayCells = useMemo(() => {
     const cells: Date[] = [];
     for (let i = 0; i < windowDays; i++) cells.push(addDays(rangeStart, i));
@@ -179,18 +204,20 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
 
   const hourCells = useMemo(() => {
     const cells: Date[] = [];
-    for (let h = 0; h < 24; h++) cells.push(new Date(rangeStart.getTime() + h * 60 * 60 * 1000));
+    for (let h = DAY_VIEW_START_HOUR; h < DAY_VIEW_END_HOUR; h++) {
+      cells.push(new Date(rangeStart.getTime() + h * 3_600_000));
+    }
     return cells;
   }, [rangeStart]);
 
   const axisCells   = isDayView ? hourCells : dayCells;
-  const columnCount = isDayView ? 24 : windowDays;
+  const columnCount = isDayView ? DAY_VIEW_END_HOUR - DAY_VIEW_START_HOUR : windowDays;
 
-  const totalSpanMs = rangeEnd.getTime() - rangeStart.getTime();
+  const totalSpanMs = viewEnd.getTime() - viewStart.getTime();
   const todayOffsetPct = (() => {
     const now = new Date();
-    if (now < rangeStart || now > rangeEnd) return null;
-    return ((now.getTime() - rangeStart.getTime()) / totalSpanMs) * 100;
+    if (now < viewStart || now > viewEnd) return null;
+    return ((now.getTime() - viewStart.getTime()) / totalSpanMs) * 100;
   })();
 
   const isAdmin = profile?.role === 'admin';
@@ -256,6 +283,7 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
   function onBarPointerDown(e: React.PointerEvent<HTMLDivElement>, bar: GanttBar) {
     if (!canEditBar(bar.order)) return;
     e.preventDefault();
+    setHover(null);   // no hover card while dragging
     const lane = (e.currentTarget.offsetParent as HTMLElement | null);
     const laneWidth = lane?.getBoundingClientRect().width ?? 1;
     const startX = e.clientX;
@@ -275,8 +303,8 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
       if (!moved) return;
       suppressClick.current = true;            // swallow the click that follows a drag
       const dx = ev.clientX - startX;
-      const deltaDays = (dx / laneWidth) * windowDays;
-      const newStart = snap15(originStart + deltaDays * DAY_MS);
+      const deltaMs = (dx / laneWidth) * totalSpanMs;
+      const newStart = snap15(originStart + deltaMs);
       const duration = originEnd - originStart;
       rescheduleMutation.mutate({
         id: bar.order.id,
@@ -377,28 +405,26 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="px-4 py-2 border-b border-gray-100 flex flex-wrap items-center gap-3 text-xs text-gray-600">
-        <LegendDot status="pending"     label="Pending" />
-        <LegendDot status="in_progress" label="In progress" />
-        <LegendDot status="awaiting_qc" label="Awaiting QC" />
-        <LegendDot status="completed"   label="Completed" />
-        <LegendDot status="failed"      label="Failed" />
-        <LegendDot status="cancelled"   label="Cancelled" />
-        <span className="inline-flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-sm bg-gray-200 border border-gray-300" /> Off
+      {/* Legend — every status carries a letter (on the swatch AND on the bars)
+          so colour-blind users can match by letter instead of hue. */}
+      <div className="px-4 py-2.5 border-b border-gray-100 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
+        {(['pending', 'in_progress', 'awaiting_qc', 'completed', 'failed', 'cancelled'] as const).map(s => (
+          <LegendKey key={s} status={s} />
+        ))}
+        <span className="inline-flex items-center gap-1.5 text-xs">
+          <span className="w-4 h-4 rounded-sm bg-gray-200 border border-gray-300" /> Off
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-300" /> Time off
+        <span className="inline-flex items-center gap-1.5 text-xs">
+          <span className="w-4 h-4 rounded-sm bg-emerald-100 border border-emerald-300" /> Time off
         </span>
         {isAdmin && (
-          <span className="inline-flex items-center gap-1 text-gray-400">
+          <span className="inline-flex items-center gap-1 text-xs text-gray-400">
             <GripHorizontal size={13} /> Drag a bar to reschedule
           </span>
         )}
-        <span className="ml-auto text-gray-500">
+        <span className="ml-auto text-xs text-gray-500">
           {isDayView
-            ? rangeStart.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })
+            ? `${rangeStart.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })} · 5:00 AM – 5:00 PM`
             : `${fmtDay(rangeStart)} – ${fmtDay(addDays(rangeEnd, -1))}`}
         </span>
       </div>
@@ -417,8 +443,8 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
               const isCurrent = isDayView
                 ? startOfDay(now).getTime() === rangeStart.getTime() && now.getHours() === c.getHours()
                 : startOfDay(now).getTime() === c.getTime();
-              // In the hourly view, label every 2nd hour to avoid clutter.
-              const label = isDayView ? (c.getHours() % 2 === 0 ? fmtHour(c) : '') : fmtDay(c);
+              // 12 working-hour columns leave room to label every hour.
+              const label = isDayView ? fmtHour(c) : fmtDay(c);
               return (
                 <div
                   key={i}
@@ -502,23 +528,18 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
 
                 {/* Bars */}
                 {row.bars.map((bar, idx) => {
-                  const clippedStart = bar.start < rangeStart ? rangeStart : bar.start;
-                  const clippedEnd   = bar.end   > rangeEnd   ? rangeEnd   : bar.end;
-                  const leftPct  = (diffDays(clippedStart, rangeStart) / windowDays) * 100;
+                  const clippedStart = bar.start < viewStart ? viewStart : bar.start;
+                  const clippedEnd   = bar.end   > viewEnd   ? viewEnd   : bar.end;
+                  const leftPct  = ((clippedStart.getTime() - viewStart.getTime()) / totalSpanMs) * 100;
                   const widthPct = Math.max(
                     1.5,
-                    (diffDays(clippedEnd, clippedStart) / windowDays) * 100
+                    ((clippedEnd.getTime() - clippedStart.getTime()) / totalSpanMs) * 100
                   );
                   const o = bar.order;
                   const editable = canEditBar(o);
                   const isDragging = dragPreview?.orderId === o.id;
-                  const title =
-                    `${o.lot_number} · ${o.work_instruction?.product_name ?? ''}\n` +
-                    `${o.status.replace('_', ' ')}\n` +
-                    `${bar.start.toLocaleString()} → ${bar.end.toLocaleString()}` +
-                    (editable ? '\n(drag to reschedule)' : '');
                   const barClass = cn(
-                    'absolute top-2 bottom-2 rounded-md px-2 flex items-center text-[11px] font-medium text-white shadow-sm ring-1 ring-inset overflow-hidden',
+                    'absolute top-2 bottom-2 rounded-md px-1.5 flex items-center text-[11px] font-medium text-white shadow-sm ring-1 ring-inset overflow-hidden',
                     STATUS_BAR_CLASS[o.status],
                     editable ? 'cursor-grab active:cursor-grabbing touch-none' : 'cursor-pointer',
                     isDragging ? 'z-10 opacity-95 shadow-lg ring-2 ring-white' : 'transition-all'
@@ -528,18 +549,32 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
                     width: `${widthPct}%`,
                     transform: isDragging ? `translateX(${dragPreview!.dx}px)` : undefined,
                   };
+                  const hoverHandlers = {
+                    onMouseEnter: (e: React.MouseEvent) => setHover({ bar, x: e.clientX, y: e.clientY }),
+                    onMouseMove:  (e: React.MouseEvent) => setHover({ bar, x: e.clientX, y: e.clientY }),
+                    onMouseLeave: () => setHover(null),
+                  };
                   const label = (
-                    <span className="truncate">
-                      {o.lot_number}
-                      {o.work_instruction?.product_name ? ` · ${o.work_instruction.product_name}` : ''}
-                    </span>
+                    <>
+                      {/* Status letter — the colour-blind-safe identifier, matching the legend */}
+                      <span
+                        aria-hidden
+                        className="mr-1.5 w-4 h-4 rounded-sm bg-white/25 ring-1 ring-white/50 text-[10px] font-extrabold flex items-center justify-center shrink-0"
+                      >
+                        {STATUS_LETTER[o.status]}
+                      </span>
+                      <span className="truncate">
+                        {o.lot_number}
+                        {o.work_instruction?.product_name ? ` · ${o.work_instruction.product_name}` : ''}
+                      </span>
+                    </>
                   );
 
                   if (editable) {
                     return (
                       <div
                         key={o.id + idx}
-                        title={title}
+                        {...hoverHandlers}
                         onPointerDown={e => onBarPointerDown(e, bar)}
                         onClick={e => onBarClick(e, o.id)}
                         className={barClass}
@@ -552,8 +587,8 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
                   return (
                     <Link
                       key={o.id + idx}
+                      {...hoverHandlers}
                       to={`/production-orders/${o.id}`}
-                      title={title}
                       className={barClass}
                       style={barStyle}
                     >
@@ -566,17 +601,111 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
           ))}
         </div>
       </div>
+
+      {/* Hover card — richer than a native tooltip; hidden while dragging */}
+      {hover && !dragPreview && (() => {
+        const o = hover.bar.order;
+        const prog = o.status === 'in_progress' ? stepProgress?.get(o.id) : undefined;
+        const pct = prog && prog.total > 0 ? Math.round((prog.completed / prog.total) * 100) : null;
+        const mins = o.work_instruction?.scheduled_minutes;
+        return (
+          <div
+            className="fixed z-50 pointer-events-none"
+            style={{
+              left: Math.min(hover.x + 14, window.innerWidth - 310),
+              top:  Math.min(hover.y + 14, window.innerHeight - 240),
+            }}
+          >
+            <div className="w-72 rounded-xl border border-gray-200 bg-white shadow-xl p-3.5 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-bold text-gray-900">{o.lot_number}</span>
+                <span className={cn(
+                  'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold text-white',
+                  STATUS_DOT_CLASS[o.status]
+                )}>
+                  <span className="font-extrabold">{STATUS_LETTER[o.status]}</span>
+                  {STATUS_LABEL[o.status]}
+                </span>
+              </div>
+              <div>
+                <p className="font-medium text-gray-800">{o.work_instruction?.product_name ?? '—'}</p>
+                {o.work_instruction?.title && (
+                  <p className="text-gray-500">{o.work_instruction.title}</p>
+                )}
+              </div>
+              <div className="space-y-1 border-t border-gray-100 pt-2">
+                <p className="flex justify-between gap-3">
+                  <span className="text-gray-400 shrink-0">When</span>
+                  <span className="text-gray-800 text-right">{fmtRange(hover.bar.start, hover.bar.end)}</span>
+                </p>
+                <p className="flex justify-between gap-3">
+                  <span className="text-gray-400">Assigned to</span>
+                  <span className={o.assignee ? 'text-gray-800' : 'text-gray-400 italic'}>
+                    {o.assignee?.full_name ?? 'Unassigned'}
+                  </span>
+                </p>
+                {o.batch_size != null && (
+                  <p className="flex justify-between gap-3">
+                    <span className="text-gray-400">Batch</span>
+                    <span className="text-gray-800">{o.batch_size} {o.batch_size_unit ?? ''}</span>
+                  </p>
+                )}
+                {mins != null && (
+                  <p className="flex justify-between gap-3">
+                    <span className="text-gray-400">Duration</span>
+                    <span className="text-gray-800">{mins} min</span>
+                  </p>
+                )}
+              </div>
+              {prog && prog.total > 0 && (
+                <div className="border-t border-gray-100 pt-2">
+                  <p className="flex justify-between gap-3 mb-1">
+                    <span className="text-gray-400">Steps</span>
+                    <span className="font-semibold text-gray-800">
+                      {prog.completed}/{prog.total} complete · {pct}%
+                    </span>
+                  </p>
+                  <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                    <div className="h-full rounded-full bg-amber-500" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              )}
+              <p className="text-[10px] text-gray-400 border-t border-gray-100 pt-1.5">
+                {canEditBar(o) ? 'Click to open · drag to reschedule' : 'Click to open'}
+              </p>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
 
 /* -------------------------------------------------------------------------- */
 
-function LegendDot({ status, label }: { status: GanttOrderRow['status']; label: string }) {
+/** Legend entry: a lettered swatch plus the label with the matching letter
+ *  highlighted — colour-blind users match bars to letters, not hues. */
+function LegendKey({ status }: { status: GanttOrderRow['status'] }) {
+  const letter = STATUS_LETTER[status];
+  const label = STATUS_LABEL[status];
+  const idx = label.indexOf(letter);
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className={cn('w-2.5 h-2.5 rounded-sm', STATUS_DOT_CLASS[status])} />
-      {label}
+      <span className={cn(
+        'w-5 h-5 rounded-md text-white text-[12px] font-extrabold flex items-center justify-center shadow-sm',
+        STATUS_DOT_CLASS[status]
+      )}>
+        {letter}
+      </span>
+      <span>
+        {idx === -1 ? label : (
+          <>
+            {label.slice(0, idx)}
+            <span className="font-extrabold text-gray-900 bg-yellow-100 rounded px-0.5">{label[idx]}</span>
+            {label.slice(idx + 1)}
+          </>
+        )}
+      </span>
     </span>
   );
 }

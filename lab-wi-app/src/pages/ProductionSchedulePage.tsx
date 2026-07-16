@@ -5,7 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
 import ProductionGantt from '../components/ProductionGantt';
 import {
-  useGanttOrders, deriveSpan, startOfDay, addDays, STATUS_DOT_CLASS,
+  useGanttOrders, deriveSpan, startOfDay, addDays,
+  STATUS_DOT_CLASS, STATUS_LABEL, STATUS_LETTER,
   type GanttOrderRow,
 } from '../lib/ganttData';
 
@@ -167,7 +168,15 @@ export default function ProductionSchedulePage() {
                             title={`${o.lot_number} · ${o.work_instruction?.product_name ?? ''}\n${o.status.replace('_', ' ')}\n${start.toLocaleString()} → ${end.toLocaleString()}`}
                             className="inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-lg border border-gray-200 bg-gray-50/60 hover:bg-blue-50 hover:border-blue-200 transition-colors text-xs"
                           >
-                            <span className={cn('w-2 h-2 rounded-full shrink-0', STATUS_DOT_CLASS[o.status])} />
+                            <span
+                              aria-label={STATUS_LABEL[o.status]}
+                              className={cn(
+                                'w-4 h-4 rounded-sm text-white text-[9px] font-extrabold flex items-center justify-center shrink-0',
+                                STATUS_DOT_CLASS[o.status]
+                              )}
+                            >
+                              {STATUS_LETTER[o.status]}
+                            </span>
                             <span className="inline-flex items-center gap-1 text-gray-500 whitespace-nowrap">
                               <Clock size={11} />
                               {fmtTime(start)}–{fmtTime(end)}

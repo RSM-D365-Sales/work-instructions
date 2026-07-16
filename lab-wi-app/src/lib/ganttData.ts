@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 
 export interface GanttOrderRow {
   id: string;
+  work_instruction_id: string;
   lot_number: string;
   status: 'pending' | 'in_progress' | 'awaiting_qc' | 'completed' | 'failed' | 'cancelled';
   batch_size: number | null;
@@ -86,6 +87,68 @@ export const STATUS_DOT_CLASS: Record<GanttOrderRow['status'], string> = {
   cancelled:   'bg-gray-400',
 };
 
+export const STATUS_LABEL: Record<GanttOrderRow['status'], string> = {
+  pending:     'Pending',
+  in_progress: 'In progress',
+  awaiting_qc: 'Awaiting QC',
+  completed:   'Completed',
+  failed:      'Failed',
+  cancelled:   'Cancelled',
+};
+
+/** One letter per status, shown on bars and in the legend so colour-blind
+ *  users can match by letter instead of hue. ('X' for cancelled — 'C' is
+ *  taken by completed.) */
+export const STATUS_LETTER: Record<GanttOrderRow['status'], string> = {
+  pending:     'P',
+  in_progress: 'I',
+  awaiting_qc: 'Q',
+  completed:   'C',
+  failed:      'F',
+  cancelled:   'X',
+};
+
+/** Step progress (completed / total) for the in-progress orders in view:
+ *  completed po_steps per order vs. total wi_steps on the order's WI. */
+export function useStepProgress(orders: GanttOrderRow[] | undefined) {
+  const inProg = (orders ?? []).filter(o => o.status === 'in_progress' && o.work_instruction_id);
+  const orderIds = inProg.map(o => o.id).sort();
+  const wiIds = [...new Set(inProg.map(o => o.work_instruction_id))].sort();
+
+  return useQuery<Map<string, { completed: number; total: number }>>({
+    queryKey: ['gantt-step-progress', orderIds.join(',')],
+    enabled: orderIds.length > 0,
+    queryFn: async () => {
+      const [stepsRes, wiRes] = await Promise.all([
+        supabase.from('po_steps').select('production_order_id, status').in('production_order_id', orderIds),
+        supabase.from('wi_steps').select('id, work_instruction_id').in('work_instruction_id', wiIds),
+      ]);
+      if (stepsRes.error) throw stepsRes.error;
+      if (wiRes.error) throw wiRes.error;
+
+      const totalByWi = new Map<string, number>();
+      for (const r of wiRes.data ?? []) {
+        totalByWi.set(r.work_instruction_id, (totalByWi.get(r.work_instruction_id) ?? 0) + 1);
+      }
+      const doneByOrder = new Map<string, number>();
+      for (const r of stepsRes.data ?? []) {
+        if (r.status === 'completed') {
+          doneByOrder.set(r.production_order_id, (doneByOrder.get(r.production_order_id) ?? 0) + 1);
+        }
+      }
+
+      const m = new Map<string, { completed: number; total: number }>();
+      for (const o of inProg) {
+        m.set(o.id, {
+          completed: doneByOrder.get(o.id) ?? 0,
+          total: totalByWi.get(o.work_instruction_id) ?? 0,
+        });
+      }
+      return m;
+    },
+  });
+}
+
 /** Orders that could intersect the window. Shared (same query key) between the
  *  dashboard gantt and the Production Schedule page, so both render one fetch. */
 export function useGanttOrders(rangeStart: Date, rangeEnd: Date, windowDays: number) {
@@ -102,7 +165,7 @@ export function useGanttOrders(rangeStart: Date, rangeEnd: Date, windowDays: num
       let q = supabase
         .from('production_orders')
         .select(
-          'id, lot_number, status, batch_size, batch_size_unit, ' +
+          'id, work_instruction_id, lot_number, status, batch_size, batch_size_unit, ' +
           'created_at, started_at, completed_at, scheduled_start, scheduled_end, ' +
           'assigned_to, created_by, ' +
           'assignee:profiles!production_orders_assigned_to_fkey(id, full_name, role), ' +
