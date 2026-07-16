@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { StepTemplate, StepType } from '../types';
-import { Plus, Pencil, Trash2, FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, ChevronDown, ChevronUp, Lock, Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal } from 'lucide-react';
+import { Plus, Pencil, Trash2, FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, ChevronDown, ChevronUp, Lock, Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal, Paperclip } from 'lucide-react';
 import type { ParameterSchema, ParameterFieldDef } from '../types';
 
 const STEP_TYPE_META: Record<StepType, { label: string; icon: React.ReactNode; color: string }> = {
@@ -20,6 +20,7 @@ const STEP_TYPE_META: Record<StepType, { label: string; icon: React.ReactNode; c
   notes:            { label: 'Notes',                  icon: <StickyNote size={16} />,    color: 'bg-amber-100 text-amber-700' },
   production_break: { label: 'Production Break',       icon: <Milestone size={16} />,     color: 'bg-rose-100 text-rose-700' },
   print_labels:     { label: 'Print Labels',            icon: <Printer size={16} />,       color: 'bg-teal-100 text-teal-700' },
+  attachment:       { label: 'Add Attachment',          icon: <Paperclip size={16} />,     color: 'bg-violet-100 text-violet-700' },
   possible_deviation: { label: 'Possible Deviation',    icon: <AlertTriangle size={16} />, color: 'bg-red-100 text-red-700' },
   user_defined:     { label: 'User Defined',           icon: <SlidersHorizontal size={16} />, color: 'bg-emerald-100 text-emerald-700' },
   custom:           { label: 'Custom Step',            icon: <Settings size={16} />,      color: 'bg-gray-100 text-gray-700' },
@@ -77,7 +78,9 @@ export default function StepLibraryPage() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<StepTemplate | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const canManage = profile?.role === 'author' || profile?.role === 'approver' || profile?.role === 'admin';
+  const [deleteError, setDeleteError] = useState('');
+  const isAdmin = profile?.role === 'admin';
+  const canManage = profile?.role === 'author' || profile?.role === 'approver' || isAdmin;
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ['step-templates'],
@@ -98,7 +101,40 @@ export default function StepLibraryPage() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['step-templates'] }),
+    // The DB trigger backstops the in-use check — surface its message here.
+    onError: (e: unknown) => setDeleteError(e instanceof Error ? e.message : 'Delete failed.'),
   });
+
+  /** Delete a template unless an ACTIVE work instruction (draft / pending
+   *  review / approved) still uses it — in that case explain which ones. */
+  async function handleDelete(t: StepTemplate) {
+    setDeleteError('');
+    const { data, error } = await supabase
+      .from('wi_steps')
+      .select('work_instructions!inner(id, title, version, status)')
+      .eq('step_template_id', t.id)
+      .in('work_instructions.status', ['draft', 'pending_review', 'approved']);
+    if (error) { setDeleteError(error.message); return; }
+
+    const inUse = new Map<string, { title: string; version: number; status: string }>();
+    for (const row of (data ?? []) as unknown as { work_instructions: { id: string; title: string; version: number; status: string } | null }[]) {
+      if (row.work_instructions) inUse.set(row.work_instructions.id, row.work_instructions);
+    }
+    if (inUse.size > 0) {
+      const names = [...inUse.values()]
+        .slice(0, 4)
+        .map(w => `“${w.title}” v${w.version} (${w.status.replace('_', ' ')})`);
+      setDeleteError(
+        `Can't delete “${t.name}” — it is used by ${inUse.size} active work instruction${inUse.size === 1 ? '' : 's'}: ` +
+        names.join(', ') + (inUse.size > 4 ? ', …' : '') +
+        '. Remove the step from those work instructions (or retire them) first.'
+      );
+      return;
+    }
+
+    if (!confirm(`Delete “${t.name}” from the step library?`)) return;
+    deleteMutation.mutate(t.id);
+  }
 
   function openNew() { setEditing(null); setShowForm(true); }
   function openEdit(t: StepTemplate) { setEditing(t); setShowForm(true); }
@@ -120,6 +156,16 @@ export default function StepLibraryPage() {
           </button>
         )}
       </div>
+
+      {deleteError && (
+        <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 text-sm text-red-700">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          <span className="flex-1">{deleteError}</span>
+          <button onClick={() => setDeleteError('')} className="text-xs underline opacity-70 hover:opacity-100 shrink-0">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="text-center py-12 text-gray-400">Loading…</div>
@@ -145,18 +191,22 @@ export default function StepLibraryPage() {
                     </div>
                     <div className="flex gap-1">
                       {canManage && !t.is_system && (
-                        <>
-                          <button onClick={() => openEdit(t)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors" title="Edit">
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            onClick={() => { if (confirm('Delete this template?')) deleteMutation.mutate(t.id); }}
-                            className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </>
+                        <button onClick={() => openEdit(t)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors" title="Edit">
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                      {/* Admins may delete any template (incl. system); authors
+                          their own non-system ones. Blocked while an active WI
+                          uses it — handleDelete explains which. */}
+                      {(isAdmin || (canManage && !t.is_system)) && (
+                        <button
+                          onClick={() => handleDelete(t)}
+                          disabled={deleteMutation.isPending}
+                          className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 disabled:opacity-40 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       )}
                     </div>
                   </div>

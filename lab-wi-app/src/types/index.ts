@@ -108,6 +108,7 @@ export type StepType =
   | 'notes'             // free-text notes about the order up to this step
   | 'production_break'  // divider marking the boundary between parts of a run
   | 'print_labels'
+  | 'attachment'        // attach supporting documents (PDF, image, …) to the order
   | 'possible_deviation' // flag a possible deviation; capture impacted qty + notify supervisor
   | 'user_defined'      // author-built template; fields defined in parameter_schema
   | 'custom';

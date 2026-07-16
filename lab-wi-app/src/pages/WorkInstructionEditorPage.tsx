@@ -7,7 +7,7 @@ import type { StepTemplate, WIStep, WorkInstruction, StepType, ParameterSchema, 
 import {
   Plus, Trash2, GripVertical, Save, Send, ChevronDown, ChevronUp, ArrowLeft,
   FlaskConical, Scale as ScaleIcon, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings,
-  Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal,
+  Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal, Paperclip,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -26,6 +26,7 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   notes:            <StickyNote size={15} />,
   production_break: <Milestone size={15} />,
   print_labels:     <Printer size={15} />,
+  attachment:       <Paperclip size={15} />,
   possible_deviation: <AlertTriangle size={15} />,
   user_defined:     <SlidersHorizontal size={15} />,
   custom:           <Settings size={15} />,
@@ -585,6 +586,30 @@ function StepParamEditor({
         </div>
       );
 
+    case 'attachment':
+      return (
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Attachment Prompt</label>
+            <input
+              value={(params.prompt as string) ?? ''}
+              onChange={e => set('prompt', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="e.g. Attach the balance printout and CoA scan"
+            />
+          </div>
+          <label className="inline-flex items-center gap-2 text-xs font-medium text-gray-600">
+            <input
+              type="checkbox"
+              checked={(params.required as boolean) ?? true}
+              onChange={e => set('required', e.target.checked)}
+              className="w-3.5 h-3.5 rounded accent-blue-600"
+            />
+            At least one attachment is required to complete the step
+          </label>
+        </div>
+      );
+
     case 'user_defined':
       return <UserDefinedParamEditor params={params} onChange={onChange} />;
 
@@ -876,6 +901,7 @@ export default function WorkInstructionEditorPage() {
       case 'gather_equipment': return { equipment: [] };
       case 'gather_reagents': return { reagents: [] };
       case 'print_labels': return { label_template: '', quantity: 1, notes: '' };
+      case 'attachment': return { prompt: '', required: true };
       case 'weigh': return { material_name: '', target_weight: 0, unit: 'g', tolerance_pct: 2 };
       case 'mix': return { duration_minutes: 10, speed: 'medium' };
       case 'heat': return { target_temp_c: 80, duration_minutes: 15 };

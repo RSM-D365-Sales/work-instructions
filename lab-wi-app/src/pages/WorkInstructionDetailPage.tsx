@@ -7,7 +7,7 @@ import type { WorkInstruction, WIStep, WIApproval, StepType, ParameterSchema } f
 import {
   ArrowLeft, Pencil, CheckCircle, XCircle, RotateCcw, PlayCircle, GitBranch,
   FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, Trash2,
-  Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, ChevronRight, SlidersHorizontal,
+  Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, ChevronRight, SlidersHorizontal, Paperclip,
 } from 'lucide-react';
 import { formatDate, cn, wiLineageKey } from '../lib/utils';
 
@@ -22,6 +22,7 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   heat:             <Thermometer size={15} />,
   cool:             <Snowflake size={15} />,
   observe:       <Eye size={15} />,  print_labels:     <Printer size={15} />,  custom:        <Settings size={15} />,
+  attachment:       <Paperclip size={15} />,
   notes:            <StickyNote size={15} />,
   production_break: <Milestone size={15} />,
   possible_deviation: <AlertTriangle size={15} />,
@@ -67,6 +68,8 @@ function stepSummary(step: WIStep): string {
     }
     case 'print_labels':
       return `${p.label_template ?? 'Labels'} × ${p.quantity ?? 1}${p.notes ? ` — ${p.notes}` : ''}`;
+    case 'attachment':
+      return `${(p.prompt as string)?.trim() || 'Attach supporting documents'}${(p.required ?? true) ? ' (required)' : ' (optional)'}`;
     case 'possible_deviation':
       return (p.prompt as string)?.trim()
         ? (p.prompt as string)

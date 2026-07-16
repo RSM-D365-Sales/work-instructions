@@ -12,6 +12,7 @@ import {
   AlertTriangle, CheckCheck, PlayCircle, Ban, Trash2, Loader2, Wifi, WifiOff,
   Wrench, Beaker, Printer, UserCog, CalendarClock, Check, StickyNote, Milestone,
   ClipboardCheck, FileText, XCircle, Send, ScanLine, MessageSquare, X, SlidersHorizontal,
+  Paperclip, ExternalLink,
 } from 'lucide-react';
 
 const STEP_ICONS: Record<StepType, React.ReactNode> = {
@@ -28,6 +29,7 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   notes:            <StickyNote size={16} />,
   production_break: <Milestone size={16} />,
   print_labels:     <Printer size={16} />,
+  attachment:       <Paperclip size={16} />,
   possible_deviation: <AlertTriangle size={16} />,
   user_defined:     <SlidersHorizontal size={16} />,
   custom:           <Settings size={16} />,
@@ -612,6 +614,148 @@ function PrintLabelsWidget({
   );
 }
 
+// ─── Attachment step ─────────────────────────────────────────────────────────
+// The operator attaches documents (PDF, image, spreadsheet, …) to the order
+// via the paperclip button. Files upload to the 'po-attachments' storage
+// bucket under {orderId}/{wiStepId}/…; the list is kept on actual_values so
+// completed steps can be reopened later to view every document.
+
+interface AttachedFile {
+  name: string;
+  path: string;
+  size: number;
+  content_type: string;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
+
+function attachmentUrl(path: string): string {
+  return supabase.storage.from('po-attachments').getPublicUrl(path).data.publicUrl;
+}
+
+function AttachmentStepWidget({
+  params, values, onChange, locked, orderId, wiStepId,
+}: {
+  params: Record<string, unknown>;
+  values: Record<string, unknown>;
+  onChange: (v: Record<string, unknown>) => void;
+  locked: boolean;
+  orderId: string;
+  wiStepId: string;
+}) {
+  const files = (values.files ?? []) as AttachedFile[];
+  const required = (params.required as boolean) ?? true;
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFiles(list: FileList | null) {
+    if (!list || list.length === 0) return;
+    setError('');
+    setUploading(true);
+    try {
+      const added: AttachedFile[] = [];
+      for (const file of Array.from(list)) {
+        const safeName = file.name.replace(/[^\w.-]+/g, '_');
+        const path = `${orderId}/${wiStepId}/${Date.now()}-${safeName}`;
+        const { error: upErr } = await supabase.storage
+          .from('po-attachments')
+          .upload(path, file, { contentType: file.type || undefined });
+        if (upErr) throw upErr;
+        added.push({ name: file.name, path, size: file.size, content_type: file.type });
+      }
+      onChange({ ...values, files: [...files, ...added] });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Upload failed — try again.');
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  }
+
+  async function removeFile(f: AttachedFile) {
+    // Best effort — the authoritative record is the files list on the step.
+    await supabase.storage.from('po-attachments').remove([f.path]);
+    onChange({ ...values, files: files.filter(x => x.path !== f.path) });
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 space-y-1">
+        <p className="text-sm text-gray-700">
+          {((params.prompt as string) || 'Attach the supporting documents for this production order.')}
+        </p>
+        <p className="text-xs text-gray-500">
+          PDF, images, spreadsheets, … up to 25 MB each.
+          {required && ' At least one attachment is required to complete this step.'}
+        </p>
+      </div>
+
+      {/* Attached files */}
+      {files.length > 0 && (
+        <ul className="space-y-1.5">
+          {files.map(f => (
+            <li
+              key={f.path}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm"
+            >
+              <FileText size={15} className="text-gray-400 shrink-0" />
+              <span className="font-medium text-gray-800 truncate">{f.name}</span>
+              <span className="text-xs text-gray-400 shrink-0">{formatFileSize(f.size)}</span>
+              <a
+                href={attachmentUrl(f.path)}
+                target="_blank"
+                rel="noreferrer"
+                className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline shrink-0"
+              >
+                View <ExternalLink size={11} />
+              </a>
+              {!locked && (
+                <button
+                  onClick={() => removeFile(f)}
+                  title="Remove attachment"
+                  className="text-gray-300 hover:text-red-500 shrink-0"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Paperclip attach button */}
+      {!locked && (
+        <>
+          <input
+            ref={inputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={e => handleFiles(e.target.files)}
+          />
+          <button
+            onClick={() => inputRef.current?.click()}
+            disabled={uploading}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition-colors"
+          >
+            {uploading ? <Loader2 size={15} className="animate-spin" /> : <Paperclip size={15} />}
+            {uploading ? 'Uploading…' : files.length > 0 ? 'Attach another file' : 'Attach a file'}
+          </button>
+        </>
+      )}
+      {locked && files.length === 0 && (
+        <p className="text-xs text-gray-400 italic">No documents were attached.</p>
+      )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
 function GenericStepWidget({
   params, stepType,
 }: {
@@ -872,6 +1016,7 @@ interface StepCardProps {
   poStep: POStep | undefined;
   index: number;
   isActive: boolean;
+  orderId: string;
   orderNumber: string;
   technicianName: string;
   onActivate: () => void;
@@ -880,7 +1025,7 @@ interface StepCardProps {
   onReopen: () => void;
 }
 
-function StepCard({ wiStep, poStep, index, isActive, orderNumber, technicianName, onActivate, onComplete, onSkip, onReopen }: StepCardProps) {
+function StepCard({ wiStep, poStep, index, isActive, orderId, orderNumber, technicianName, onActivate, onComplete, onSkip, onReopen }: StepCardProps) {
   const params = wiStep.parameters as Record<string, unknown>;
   const stepType = (params._step_type ?? 'custom') as StepType;
   const [values, setValues] = useState<Record<string, unknown>>(poStep?.actual_values ?? {});
@@ -918,6 +1063,11 @@ function StepCard({ wiStep, poStep, index, isActive, orderNumber, technicianName
     }
     if (stepType === 'print_labels') {
       return (values.printed ?? false) === true;
+    }
+    if (stepType === 'attachment') {
+      const required = (params.required as boolean) ?? true;
+      const files = (values.files ?? []) as unknown[];
+      return !required || files.length > 0;
     }
     if (stepType === 'possible_deviation') {
       return values.impacted_quantity != null;
@@ -990,6 +1140,16 @@ function StepCard({ wiStep, poStep, index, isActive, orderNumber, technicianName
           )}
           {stepType === 'print_labels' && (
             <PrintLabelsWidget params={params} values={values} onChange={setValues} locked={locked} />
+          )}
+          {stepType === 'attachment' && (
+            <AttachmentStepWidget
+              params={params}
+              values={values}
+              onChange={setValues}
+              locked={locked}
+              orderId={orderId}
+              wiStepId={wiStep.id}
+            />
           )}
           {stepType === 'possible_deviation' && (
             <PossibleDeviationWidget
@@ -1769,6 +1929,7 @@ export default function ProductionOrderExecutionPage() {
                 poStep={poStep}
                 index={i}
                 isActive={activeStepIdx === i}
+                orderId={id!}
                 orderNumber={order?.production_order_number ?? order?.lot_number ?? ''}
                 technicianName={profile?.full_name ?? ''}
                 onActivate={() => setActiveStepIdx(i)}

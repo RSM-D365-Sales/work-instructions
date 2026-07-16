@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  CalendarDays, ArrowLeft, CalendarClock, Clock, UserMinus, CheckCircle, AlertTriangle,
+  CalendarDays, ArrowLeft, CalendarClock, Clock, UserMinus, UserX, CheckCircle, AlertTriangle,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -31,6 +31,7 @@ interface PersonDay {
 }
 
 interface ReassignOutcome {
+  mode: 'reassign' | 'unassign';
   person: string;
   moved: number;
   late: number;
@@ -176,7 +177,7 @@ export default function ProductionSchedulePage() {
         id: string; required_by: string | null; created_at: string;
         work_instruction: { scheduled_minutes: number | null } | null;
       }[];
-      if (rows.length === 0) return { person: personName, moved: 0, late: 0, recipients: {} };
+      if (rows.length === 0) return { mode: 'reassign' as const, person: personName, moved: 0, late: 0, recipients: {} };
 
       const pool = candidateIds.filter(id => id !== args.personId);
       if (pool.length === 0) throw new Error('No other available people to reassign to.');
@@ -208,7 +209,7 @@ export default function ProductionSchedulePage() {
         const nm = nameById.get(r.assigneeId) ?? 'Unknown';
         recipients[nm] = (recipients[nm] ?? 0) + 1;
       }
-      return { person: personName, moved: results.length, late: results.filter(r => r.late).length, recipients };
+      return { mode: 'reassign' as const, person: personName, moved: results.length, late: results.filter(r => r.late).length, recipients };
     },
     onSuccess: res => {
       qc.invalidateQueries({ queryKey: ['gantt-orders'] });
@@ -220,8 +221,37 @@ export default function ProductionSchedulePage() {
     },
   });
 
+  /* Take the person off every pending order they're scheduled for in
+   * [from, to]: clear assignee AND scheduled time, so the orders return to
+   * the Unscheduled Orders queue for rescheduling later. */
+  const unassignMutation = useMutation({
+    mutationFn: async (args: { personId: string; from: string; to: string }): Promise<ReassignOutcome> => {
+      const personName = nameById.get(args.personId) ?? 'this person';
+      const { data, error } = await supabase
+        .from('production_orders')
+        .update({ assigned_to: null, scheduled_start: null, scheduled_end: null })
+        .eq('assigned_to', args.personId)
+        .eq('status', 'pending')
+        .gte('scheduled_start', new Date(args.from + 'T00:00:00').toISOString())
+        .lt('scheduled_start', addDays(new Date(args.to + 'T00:00:00'), 1).toISOString())
+        .select('id');
+      if (error) throw error;
+      return { mode: 'unassign' as const, person: personName, moved: (data ?? []).length, late: 0, recipients: {} };
+    },
+    onSuccess: res => {
+      qc.invalidateQueries({ queryKey: ['gantt-orders'] });
+      qc.invalidateQueries({ queryKey: ['scheduled-busy'] });
+      qc.invalidateQueries({ queryKey: ['production-orders'] });
+      qc.invalidateQueries({ queryKey: ['unscheduled-orders'] });
+      qc.invalidateQueries({ queryKey: ['absence-preview'] });
+      setOutcome(res);
+    },
+  });
+
+  const actionPending = reassignMutation.isPending || unassignMutation.isPending;
+
   function handleCoverAbsence() {
-    if (!absentId || reassignMutation.isPending) return;
+    if (!absentId || actionPending) return;
     const name = nameById.get(absentId) ?? 'this person';
     const ok = window.confirm(
       `Move all of ${name}'s pending orders scheduled ${absFrom === absTo ? `on ${absFrom}` : `from ${absFrom} to ${absTo}`} ` +
@@ -232,8 +262,20 @@ export default function ProductionSchedulePage() {
     reassignMutation.mutate({ personId: absentId, from: absFrom, to: absTo });
   }
 
+  function handleUnassignAbsence() {
+    if (!absentId || actionPending) return;
+    const name = nameById.get(absentId) ?? 'this person';
+    const ok = window.confirm(
+      `Take ${name} off all pending orders scheduled ${absFrom === absTo ? `on ${absFrom}` : `from ${absFrom} to ${absTo}`}? ` +
+      `The orders lose their assignee and scheduled time and return to the Unscheduled Orders queue.`
+    );
+    if (!ok) return;
+    setOutcome(null);
+    unassignMutation.mutate({ personId: absentId, from: absFrom, to: absTo });
+  }
+
   function handleReassignDay(p: PersonDay, day: Date, pendingCount: number) {
-    if (reassignMutation.isPending) return;
+    if (actionPending) return;
     const dayLabel = day.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
     const ok = window.confirm(
       `Move ${p.personName}'s ${pendingCount} pending order${pendingCount === 1 ? '' : 's'} on ${dayLabel} ` +
@@ -242,6 +284,18 @@ export default function ProductionSchedulePage() {
     if (!ok) return;
     setOutcome(null);
     reassignMutation.mutate({ personId: p.personId, from: ymd(day), to: ymd(day) });
+  }
+
+  function handleUnassignDay(p: PersonDay, day: Date, pendingCount: number) {
+    if (actionPending) return;
+    const dayLabel = day.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+    const ok = window.confirm(
+      `Take ${p.personName} off ${pendingCount === 1 ? 'the' : `all ${pendingCount}`} pending order${pendingCount === 1 ? '' : 's'} on ${dayLabel}? ` +
+      `The orders lose their assignee and scheduled time and return to the Unscheduled Orders queue.`
+    );
+    if (!ok) return;
+    setOutcome(null);
+    unassignMutation.mutate({ personId: p.personId, from: ymd(day), to: ymd(day) });
   }
 
   /* Break the window down day by day: for each day, who is working on what,
@@ -321,9 +375,10 @@ export default function ProductionSchedulePage() {
       {isAdmin && panelOpen && (
         <div className="bg-white rounded-xl border border-amber-200 p-4">
           <p className="text-sm text-gray-600 mb-3">
-            Someone called in sick? Pick who and when — every <b>pending</b> order they&apos;re scheduled for
-            moves to other available people (respecting work schedules and required-by dates).
-            In-progress runs are not moved.
+            Someone called in sick? Pick who and when, then either <b>Reassign</b> — every <b>pending</b> order
+            they&apos;re scheduled for moves to other available people (respecting work schedules and required-by
+            dates) — or <b>Unassign</b> — the orders lose their assignee and time and return to Unscheduled
+            Orders to plan later. In-progress runs are never touched.
           </p>
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1">
@@ -363,14 +418,26 @@ export default function ProductionSchedulePage() {
                 ? `${previewCount} pending order${previewCount === 1 ? '' : 's'} scheduled`
                 : 'Pick a person to see their workload'}
             </span>
-            <button
-              onClick={handleCoverAbsence}
-              disabled={!absentId || previewCount === 0 || reassignMutation.isPending}
-              className="ml-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-40 transition-colors"
-            >
-              <UserMinus size={15} />
-              {reassignMutation.isPending ? 'Reassigning…' : `Reassign ${previewCount || ''} order${previewCount === 1 ? '' : 's'}`}
-            </button>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={handleUnassignAbsence}
+                disabled={!absentId || previewCount === 0 || actionPending}
+                title="Clear the assignee and scheduled time — the orders return to Unscheduled Orders for rescheduling"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium border border-amber-300 text-amber-700 bg-white hover:bg-amber-50 disabled:opacity-40 transition-colors"
+              >
+                <UserX size={15} />
+                {unassignMutation.isPending ? 'Unassigning…' : `Unassign ${previewCount || ''} order${previewCount === 1 ? '' : 's'}`}
+              </button>
+              <button
+                onClick={handleCoverAbsence}
+                disabled={!absentId || previewCount === 0 || actionPending}
+                title="Move each order to another available person who can finish by its required date"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-40 transition-colors"
+              >
+                <UserMinus size={15} />
+                {reassignMutation.isPending ? 'Reassigning…' : `Reassign ${previewCount || ''} order${previewCount === 1 ? '' : 's'}`}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -387,8 +454,11 @@ export default function ProductionSchedulePage() {
           <span>
             {outcome.moved === 0
               ? `${outcome.person} has no pending scheduled orders in that range.`
-              : `Moved ${outcome.moved} order${outcome.moved === 1 ? '' : 's'} off ${outcome.person}: ` +
-                Object.entries(outcome.recipients).map(([nm, n]) => `${nm} ×${n}`).join(', ') + '.'}
+              : outcome.mode === 'unassign'
+                ? <>Unassigned {outcome.moved} order{outcome.moved === 1 ? '' : 's'} from {outcome.person} — waiting in{' '}
+                    <Link to="/unscheduled-orders" className="underline font-medium">Unscheduled Orders</Link> for rescheduling.</>
+                : `Moved ${outcome.moved} order${outcome.moved === 1 ? '' : 's'} off ${outcome.person}: ` +
+                  Object.entries(outcome.recipients).map(([nm, n]) => `${nm} ×${n}`).join(', ') + '.'}
             {outcome.late > 0 && ` ${outcome.late} finish after their required date — review these.`}
           </span>
           <button onClick={() => setOutcome(null)} className="ml-auto text-xs underline opacity-70 hover:opacity-100">
@@ -479,15 +549,26 @@ export default function ProductionSchedulePage() {
                           ))}
                         </div>
                         {isAdmin && p.personId !== 'unassigned' && pendingCount > 0 && (
-                          <button
-                            onClick={() => handleReassignDay(p, day, pendingCount)}
-                            disabled={reassignMutation.isPending}
-                            title={`Move ${p.personName}'s ${pendingCount} pending order${pendingCount === 1 ? '' : 's'} this day to other available people`}
-                            className="shrink-0 self-start inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-amber-700 border border-amber-200 hover:bg-amber-50 disabled:opacity-40 transition-colors"
-                          >
-                            <UserMinus size={12} />
-                            Reassign ({pendingCount})
-                          </button>
+                          <div className="shrink-0 self-start flex items-center gap-1">
+                            <button
+                              onClick={() => handleReassignDay(p, day, pendingCount)}
+                              disabled={actionPending}
+                              title={`Move ${p.personName}'s ${pendingCount} pending order${pendingCount === 1 ? '' : 's'} this day to other available people`}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-amber-700 border border-amber-200 hover:bg-amber-50 disabled:opacity-40 transition-colors"
+                            >
+                              <UserMinus size={12} />
+                              Reassign ({pendingCount})
+                            </button>
+                            <button
+                              onClick={() => handleUnassignDay(p, day, pendingCount)}
+                              disabled={actionPending}
+                              title={`Take ${p.personName} off the ${pendingCount} pending order${pendingCount === 1 ? '' : 's'} this day — back to Unscheduled Orders`}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-gray-500 border border-gray-200 hover:bg-gray-50 hover:text-gray-700 disabled:opacity-40 transition-colors"
+                            >
+                              <UserX size={12} />
+                              Unassign
+                            </button>
+                          </div>
                         )}
                       </div>
                     );
