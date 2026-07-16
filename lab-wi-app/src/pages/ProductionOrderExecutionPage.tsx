@@ -1254,6 +1254,17 @@ function QualityControlCard({
   const [inputs, setInputs] = useState<Record<string, QCInput>>({});
   const seededFor = useRef<string | null>(null);
 
+  // Equipment suggestions for the instrument field (B4: consistent instrument
+  // names make the by-instrument quality pivot usable).
+  const { data: qcInstruments = [] } = useQuery<Scale[]>({
+    queryKey: ['active-scales'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('scales').select('*').eq('status', 'active').order('name');
+      if (error) throw error;
+      return data as Scale[];
+    },
+  });
+
   const { data: tests = [], isLoading: testsLoading } = useQuery<QCTest[]>({
     queryKey: ['qc-tests', reagentItemId],
     queryFn: async () => {
@@ -1397,6 +1408,10 @@ function QualityControlCard({
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {/* Shared suggestions for every test's instrument input */}
+      <datalist id="qc-instrument-options">
+        {qcInstruments.map(s => <option key={s.id} value={s.name} />)}
+      </datalist>
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 bg-gray-50">
         <div className="flex items-center gap-2 text-gray-800">
           <ClipboardCheck size={18} className="text-emerald-600" />
@@ -1474,6 +1489,7 @@ function QualityControlCard({
                   disabled={locked}
                   onChange={e => setField(t.id, { instrument: e.target.value })}
                   placeholder="Instrument / equipment ID (optional)"
+                  list="qc-instrument-options"
                   className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
                 />
                 <input

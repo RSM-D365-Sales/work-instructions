@@ -300,6 +300,12 @@ export interface Scale {
   id: string;
   name: string;
   barcode?: string | null;
+  // B4: flag-for-calibration (set from Quality Trends, cleared on Scales page)
+  calibration_flagged_at?: string | null;
+  calibration_flagged_by?: string | null;
+  calibration_flag_reason?: string | null;
+  last_calibrated_at?: string | null;
+  calibration_flagger?: Pick<Profile, 'id' | 'full_name'> | null;
   model?: string;
   manufacturer?: string;
   serial_number?: string;

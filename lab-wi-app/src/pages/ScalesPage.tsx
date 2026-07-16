@@ -393,14 +393,34 @@ export default function ScalesPage() {
   const [mutError, setMutError] = useState('');
 
   const { data: scales = [], isLoading } = useQuery<Scale[]>({
-    queryKey: ['scales'],
+    queryKey: ['scales-with-flagger'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('scales')
-        .select('*')
+        .select('*, calibration_flagger:profiles!calibration_flagged_by(id, full_name)')
         .order('name');
       if (error) throw error;
       return data as Scale[];
+    },
+  });
+
+  // B4: clear a calibration flag, stamping the calibration date.
+  const markCalibratedMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('scales')
+        .update({
+          calibration_flagged_at: null,
+          calibration_flagged_by: null,
+          calibration_flag_reason: null,
+          last_calibrated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['scales'] });
+      qc.invalidateQueries({ queryKey: ['scales-with-flagger'] });
     },
   });
 
@@ -434,6 +454,7 @@ export default function ScalesPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['scales'] });
+      qc.invalidateQueries({ queryKey: ['scales-with-flagger'] });
       setModalOpen(false);
       setEditTarget(null);
       setMutError('');
@@ -448,6 +469,7 @@ export default function ScalesPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['scales'] });
+      qc.invalidateQueries({ queryKey: ['scales-with-flagger'] });
       setDeleteTarget(null);
     },
   });
@@ -539,10 +561,17 @@ export default function ScalesPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-500">{scale.location ?? '—'}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[scale.status]}`}>
-                        {STATUS_ICONS[scale.status]}
-                        {scale.status}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[scale.status]}`}>
+                          {STATUS_ICONS[scale.status]}
+                          {scale.status}
+                        </span>
+                        {scale.calibration_flagged_at && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                            <Wrench size={12} /> calibration due
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-gray-500">
                       <div className="flex flex-col gap-0.5">
@@ -587,6 +616,30 @@ export default function ScalesPage() {
                             </ConnDetailPanel>
                           )}
                         </div>
+                        {/* B4: calibration flag raised from Quality Trends */}
+                        {scale.calibration_flagged_at ? (
+                          <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2.5">
+                            <Wrench size={15} className="text-amber-600 mt-0.5 shrink-0" />
+                            <div className="flex-1 text-xs">
+                              <p className="font-semibold text-amber-800">
+                                Flagged for calibration · {formatDate(scale.calibration_flagged_at)}
+                                {scale.calibration_flagger?.full_name ? ` · by ${scale.calibration_flagger.full_name}` : ''}
+                              </p>
+                              {scale.calibration_flag_reason && (
+                                <p className="text-amber-700 mt-0.5">{scale.calibration_flag_reason}</p>
+                              )}
+                            </div>
+                            <button
+                              onClick={e => { e.stopPropagation(); markCalibratedMutation.mutate(scale.id); }}
+                              disabled={markCalibratedMutation.isPending}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50 shrink-0"
+                            >
+                              <CheckCircle2 size={13} /> Mark calibrated
+                            </button>
+                          </div>
+                        ) : scale.last_calibrated_at ? (
+                          <p className="mt-3 text-xs text-gray-400">Last calibrated: {formatDate(scale.last_calibrated_at)}</p>
+                        ) : null}
                         {scale.notes && (
                           <p className="mt-3 text-xs text-gray-500 italic">{scale.notes}</p>
                         )}
