@@ -25,6 +25,7 @@ import ReagentDeliveryPage from './pages/ReagentDeliveryPage';
 import ReagentOrderDetailPage from './pages/ReagentOrderDetailPage';
 import UnscheduledOrdersPage from './pages/UnscheduledOrdersPage';
 import PlannedProductionOrdersPage from './pages/PlannedProductionOrdersPage';
+import ProductionSchedulePage from './pages/ProductionSchedulePage';
 import RocketLoader from './components/RocketLoader';
 
 // Charts (recharts) are heavy and only used here — load this route lazily so a
@@ -60,6 +61,9 @@ export default function App() {
                 </Route>
                 <Route path="/production-orders/:id" element={<ProductionOrderExecutionPage />} />
                 <Route path="/production-orders/:id/certificate" element={<ProductionOrderCertificatePage />} />
+                <Route element={<ProtectedRoute allowedRoles={['author', 'approver', 'operator']} />}>
+                  <Route path="/schedule" element={<ProductionSchedulePage />} />
+                </Route>
                 <Route element={<ProtectedRoute allowedRoles={['author', 'approver']} />}>
                   <Route path="/quality-trends" element={
                     <Suspense fallback={<RocketLoader />}>

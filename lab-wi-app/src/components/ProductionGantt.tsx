@@ -1,32 +1,18 @@
 import { useMemo, useState, useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Calendar, CalendarPlus, GripHorizontal } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
+import {
+  useGanttOrders, deriveSpan, startOfDay, addDays, DAY_MS, STATUS_DOT_CLASS,
+  type GanttOrderRow,
+} from '../lib/ganttData';
 
 /* -------------------------------------------------------------------------- */
 /*  Types                                                                     */
 /* -------------------------------------------------------------------------- */
-
-interface GanttOrderRow {
-  id: string;
-  lot_number: string;
-  status: 'pending' | 'in_progress' | 'awaiting_qc' | 'completed' | 'failed' | 'cancelled';
-  batch_size: number | null;
-  batch_size_unit: string | null;
-  created_at: string;
-  started_at: string | null;
-  completed_at: string | null;
-  scheduled_start: string | null;
-  scheduled_end: string | null;
-  assigned_to: string | null;
-  created_by: string;
-  assignee: { id: string; full_name: string; role: string } | null;
-  creator: { id: string; full_name: string; role: string } | null;
-  work_instruction: { title: string; product_name: string; scheduled_minutes: number | null } | null;
-}
 
 interface GanttBar {
   order: GanttOrderRow;
@@ -45,24 +31,11 @@ interface GanttRow {
 /*  Helpers                                                                   */
 /* -------------------------------------------------------------------------- */
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const QUARTER_MS = 15 * 60 * 1000;
 
 /** Snap a timestamp (ms) to the nearest 15 minutes. */
 function snap15(ms: number): number {
   return Math.round(ms / QUARTER_MS) * QUARTER_MS;
-}
-
-function startOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-function addDays(d: Date, days: number): Date {
-  const x = new Date(d);
-  x.setDate(x.getDate() + days);
-  return x;
 }
 
 function fmtDay(d: Date): string {
@@ -82,44 +55,6 @@ function diffDays(a: Date, b: Date): number {
   return (a.getTime() - b.getTime()) / DAY_MS;
 }
 
-/** Pick start/end for a production order.
- *  Priority:
- *   1. scheduled_start / scheduled_end (the explicit "blocked time")
- *   2. started_at + WI.scheduled_minutes (or completed_at)
- *   3. created_at + 1 day fallback for pending orders
- */
-function deriveSpan(order: GanttOrderRow): { start: Date; end: Date } {
-  // 1) Explicit schedule wins.
-  if (order.scheduled_start && order.scheduled_end) {
-    return {
-      start: new Date(order.scheduled_start),
-      end:   new Date(order.scheduled_end),
-    };
-  }
-
-  const rawStart = order.scheduled_start ?? order.started_at ?? order.created_at;
-  const start = new Date(rawStart);
-  let end: Date;
-  if (order.completed_at) {
-    end = new Date(order.completed_at);
-  } else if (order.scheduled_end) {
-    end = new Date(order.scheduled_end);
-  } else if (order.work_instruction?.scheduled_minutes) {
-    end = new Date(start.getTime() + order.work_instruction.scheduled_minutes * 60_000);
-  } else if (order.status === 'in_progress') {
-    // running bar — extend to "now" with a small forward buffer
-    end = addDays(new Date(), 0.5);
-  } else {
-    // pending / future — show a default 1-day window
-    end = addDays(start, 1);
-  }
-  // Guarantee a minimum visible width (4 hours)
-  if (end.getTime() - start.getTime() < DAY_MS / 6) {
-    end = new Date(start.getTime() + DAY_MS / 6);
-  }
-  return { start, end };
-}
-
 const STATUS_BAR_CLASS: Record<GanttOrderRow['status'], string> = {
   pending:     'bg-blue-500   hover:bg-blue-600   ring-blue-300',
   in_progress: 'bg-amber-500  hover:bg-amber-600  ring-amber-300',
@@ -127,15 +62,6 @@ const STATUS_BAR_CLASS: Record<GanttOrderRow['status'], string> = {
   completed:   'bg-emerald-500 hover:bg-emerald-600 ring-emerald-300',
   failed:      'bg-rose-500   hover:bg-rose-600   ring-rose-300',
   cancelled:   'bg-gray-400   hover:bg-gray-500   ring-gray-300',
-};
-
-const STATUS_DOT_CLASS: Record<GanttOrderRow['status'], string> = {
-  pending:     'bg-blue-500',
-  in_progress: 'bg-amber-500',
-  awaiting_qc: 'bg-violet-500',
-  completed:   'bg-emerald-500',
-  failed:      'bg-rose-500',
-  cancelled:   'bg-gray-400',
 };
 
 /* -------------------------------------------------------------------------- */
@@ -153,14 +79,31 @@ const WINDOW_OPTIONS = [
   { label: '30 days', days: 30 },
 ];
 
-export default function ProductionGantt() {
+export interface ProductionGanttProps {
+  /** Controlled range — the Production Schedule page drives these four so its
+   *  day-by-day breakdown follows the same window. Omit all of them for the
+   *  self-contained dashboard card. */
+  windowDays?: number;
+  anchor?: Date;
+  onWindowDaysChange?: (days: number) => void;
+  onAnchorChange?: (anchor: Date) => void;
+}
+
+export default function ProductionGantt(props: ProductionGanttProps = {}) {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  // Window anchor — start date of the visible range. Defaults to 1 day before today.
-  const [windowDays, setWindowDays] = useState<number>(7);
-  const [anchor, setAnchor] = useState<Date>(() => addDays(startOfDay(new Date()), -1));
+  // Window anchor — start date of the visible range. Defaults to 1 day before
+  // today. Either value may be controlled by a parent page via props.
+  const [ownWindowDays, setOwnWindowDays] = useState<number>(7);
+  const [ownAnchor, setOwnAnchor] = useState<Date>(() => addDays(startOfDay(new Date()), -1));
+  const windowDays = props.windowDays ?? ownWindowDays;
+  const anchor = props.anchor ?? ownAnchor;
+  const setWindowDays = (d: number) =>
+    props.onWindowDaysChange ? props.onWindowDaysChange(d) : setOwnWindowDays(d);
+  const setAnchor = (a: Date) =>
+    props.onAnchorChange ? props.onAnchorChange(a) : setOwnAnchor(a);
   // Live drag preview ({orderId, dx px}) while an admin drags a bar.
   const [dragPreview, setDragPreview] = useState<{ orderId: string; dx: number } | null>(null);
   const suppressClick = useRef(false);
@@ -169,38 +112,7 @@ export default function ProductionGantt() {
   const rangeEnd   = useMemo(() => addDays(rangeStart, windowDays), [rangeStart, windowDays]);
 
   /* ----- Data fetch ----- */
-  const { data: orders, isLoading } = useQuery<GanttOrderRow[]>({
-    queryKey: ['gantt-orders', profile?.id, profile?.role, rangeStart.toISOString(), rangeEnd.toISOString()],
-    enabled: !!profile,
-    queryFn: async () => {
-      // Pull orders that could intersect the window. We over-fetch slightly
-      // (created up to `windowDays` before the range) so long-running pending
-      // orders still appear.
-      const fetchFromIso = addDays(rangeStart, -Math.max(windowDays, 30)).toISOString();
-
-      let q = supabase
-        .from('production_orders')
-        .select(
-          'id, lot_number, status, batch_size, batch_size_unit, ' +
-          'created_at, started_at, completed_at, scheduled_start, scheduled_end, ' +
-          'assigned_to, created_by, ' +
-          'assignee:profiles!production_orders_assigned_to_fkey(id, full_name, role), ' +
-          'creator:profiles!production_orders_created_by_fkey(id, full_name, role), ' +
-          'work_instruction:work_instructions(title, product_name, scheduled_minutes)'
-        )
-        .gte('created_at', fetchFromIso)
-        .order('created_at', { ascending: false });
-
-      // Non-admins: only their work (assigned to them OR created by them)
-      if (profile && profile.role !== 'admin') {
-        q = q.or(`assigned_to.eq.${profile.id},created_by.eq.${profile.id}`);
-      }
-
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data ?? []) as unknown as GanttOrderRow[];
-    },
-  });
+  const { data: orders, isLoading } = useGanttOrders(rangeStart, rangeEnd, windowDays);
 
   /* ----- Per-person working pattern (grey out off / PTO days) ----- */
   const { data: schedRows = [] } = useQuery({
@@ -229,6 +141,7 @@ export default function ProductionGantt() {
 
     for (const o of orders) {
       const span = deriveSpan(o);
+      if (!span) continue;   // unscheduled — lives in the Unscheduled Orders queue
       // Skip bars completely outside the window
       if (span.end < rangeStart || span.start > rangeEnd) continue;
 
@@ -418,7 +331,7 @@ export default function ProductionGantt() {
           {/* Range nav */}
           <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden">
             <button
-              onClick={() => setAnchor(d => addDays(d, -windowDays))}
+              onClick={() => setAnchor(addDays(anchor, -windowDays))}
               className="px-2 py-1.5 text-gray-600 hover:bg-gray-50"
               aria-label="Previous range"
             >
@@ -431,7 +344,7 @@ export default function ProductionGantt() {
               Today
             </button>
             <button
-              onClick={() => setAnchor(d => addDays(d, windowDays))}
+              onClick={() => setAnchor(addDays(anchor, windowDays))}
               className="px-2 py-1.5 text-gray-600 hover:bg-gray-50"
               aria-label="Next range"
             >
