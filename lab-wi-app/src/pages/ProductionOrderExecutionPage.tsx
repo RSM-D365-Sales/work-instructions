@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import type { ProductionOrder, WIStep, POStep, StepType, Scale, Profile, QCTest, QCResult, POStatus, ParameterSchema, ParameterFieldDef } from '../types';
 import { calculateTolerance, cn } from '../lib/utils';
 import { evaluateQC, formatSpec } from '../lib/qc';
+import { createNotification } from '../lib/notifications';
 import {
   ArrowLeft, CheckCircle, Circle, ChevronRight, Scale as ScaleIcon, Timer,
   FlaskConical, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings,
@@ -856,12 +857,13 @@ function initials(name: string): string {
 }
 
 function PossibleDeviationWidget({
-  params, values, onChange, locked, orderNumber, technicianName,
+  params, values, onChange, locked, orderId, orderNumber, technicianName,
 }: {
   params: Record<string, unknown>;
   values: Record<string, unknown>;
   onChange: (v: Record<string, unknown>) => void;
   locked: boolean;
+  orderId: string;
   orderNumber: string;
   technicianName: string;
 }) {
@@ -875,6 +877,20 @@ function PossibleDeviationWidget({
   function notifySupervisor() {
     onChange({ ...values, notified_supervisor: true, notified_at: new Date().toISOString(), unit });
     setShowTeams(true);
+    // E3: persist the notification so it lands in the admin inbox (the Teams
+    // modal above stays as the simulated delivery view of the same message).
+    void createNotification({
+      type: 'possible_deviation',
+      severity: 'critical',
+      title: `Production Order ${orderNumber} — technician requests assistance`,
+      body: `${technicianName || 'A technician'} flagged a possible deviation during production${
+        impacted != null ? `. Impacted quantity: ${impacted} ${unit}` : ''
+      }.`,
+      channels: ['in_app', 'teams'],
+      link: `/production-orders/${orderId}`,
+      production_order_id: orderId,
+      metadata: { impacted_quantity: impacted ?? null, unit, technician: technicianName || null },
+    });
   }
 
   return (
@@ -1157,6 +1173,7 @@ function StepCard({ wiStep, poStep, index, isActive, orderId, orderNumber, techn
               values={values}
               onChange={setValues}
               locked={locked}
+              orderId={orderId}
               orderNumber={orderNumber}
               technicianName={technicianName}
             />

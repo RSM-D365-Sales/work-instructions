@@ -25,6 +25,7 @@ import ReagentOrderNewPage from './pages/ReagentOrderNewPage';
 import ReagentDeliveryPage from './pages/ReagentDeliveryPage';
 import ReagentOrderDetailPage from './pages/ReagentOrderDetailPage';
 import UnscheduledOrdersPage from './pages/UnscheduledOrdersPage';
+import NotificationsPage from './pages/NotificationsPage';
 import PlannedProductionOrdersPage from './pages/PlannedProductionOrdersPage';
 import ProductionSchedulePage from './pages/ProductionSchedulePage';
 import CycleCountPage from './pages/CycleCountPage';
@@ -93,6 +94,7 @@ export default function App() {
                   <Route path="/planned-orders" element={<PlannedProductionOrdersPage />} />
                 </Route>
                 <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+                  <Route path="/notifications" element={<NotificationsPage />} />
                   <Route path="/scales" element={<ScalesPage />} />
                   <Route path="/users" element={<UsersPage />} />
                   <Route path="/labs" element={<LabsPage />} />

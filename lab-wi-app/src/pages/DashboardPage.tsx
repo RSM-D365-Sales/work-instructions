@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase';
 import {
   ClipboardList, PlayCircle, CheckCircle, Clock, FlaskConical,
   ShoppingCart, Plus, Calendar, Building2, Truck, AlertTriangle, Paperclip, CircleAlert,
-  ClipboardCheck, ChevronRight,
+  ClipboardCheck, ChevronRight, Bell,
 } from 'lucide-react';
 import ProductionGantt from '../components/ProductionGantt';
 import type { ReagentOrder, ReagentOrderStatus } from '../types';
@@ -79,6 +79,24 @@ function StandardDashboard() {
         .eq('insufficient_stock', true)
         .in('status', ['pending', 'in_progress']);
       return count ?? 0;
+    },
+  });
+
+  // Unread notifications from the E3 notification service (admin inbox) —
+  // surfaced here just like WIs waiting for approval.
+  const isAdmin = profile?.role === 'admin';
+  const { data: unreadNotifications = [] } = useQuery({
+    queryKey: ['notifications', 'unread-recent'],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('id, type, severity, title, body, link, created_at')
+        .is('read_at', null)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      if (error) throw error;
+      return data ?? [];
     },
   });
 
@@ -160,6 +178,43 @@ function StandardDashboard() {
           </div>
           <ChevronRight size={18} className="text-amber-400 ml-auto shrink-0" />
         </Link>
+      )}
+
+      {/* Unread notifications — deviations & high-priority requests (admins) */}
+      {isAdmin && unreadNotifications.length > 0 && (
+        <div className="bg-white rounded-xl border border-red-200 overflow-hidden">
+          <div className="p-4 border-b border-red-100 bg-red-50/60 flex items-center gap-2">
+            <Bell size={18} className="text-red-600" />
+            <h2 className="font-semibold text-gray-900">Notifications</h2>
+            <span className="text-xs font-semibold text-red-700 bg-red-100 rounded-full px-2 py-0.5">{unreadNotifications.length}</span>
+            <Link to="/notifications" className="ml-auto text-xs font-medium text-red-700 hover:underline">
+              View all
+            </Link>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {unreadNotifications.map((n: any) => (
+              <Link
+                key={n.id}
+                to={n.link ?? '/notifications'}
+                className="flex items-center justify-between px-4 py-3 hover:bg-red-50/40 transition-colors"
+              >
+                <div className="min-w-0 flex items-start gap-2.5">
+                  <span className={cn(
+                    'mt-1.5 h-2 w-2 rounded-full shrink-0',
+                    n.severity === 'critical' ? 'bg-red-500' : n.severity === 'warning' ? 'bg-amber-500' : 'bg-blue-500'
+                  )} />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{n.title}</p>
+                    {n.body && <p className="text-xs text-gray-500 truncate">{n.body}</p>}
+                  </div>
+                </div>
+                <span className="flex items-center gap-1 text-xs font-medium text-red-700 shrink-0 ml-3">
+                  View <ChevronRight size={15} />
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Pending your review — WIs you didn't author, ready to approve */}

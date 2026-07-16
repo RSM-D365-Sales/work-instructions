@@ -483,3 +483,33 @@ export interface PlannedProductionOrder {
   updated_at: string;
   item?: Pick<ReagentItem, 'id' | 'item_number' | 'product_name' | 'unit_of_measure'> | null;
 }
+
+// ── Notifications (E3) ──────────────────────────────────────
+export type NotificationSeverity = 'info' | 'warning' | 'critical';
+export type NotificationChannel = 'in_app' | 'email' | 'teams';
+
+/** A persisted notification, written by src/lib/notifications.ts at trigger
+ *  points (possible deviation, high-priority reagent order) and surfaced on
+ *  the admin Notifications page. Named AppNotification to avoid clashing
+ *  with the DOM's built-in Notification type. Read state is group-level:
+ *  the first admin to mark it read clears it for everyone. */
+export interface AppNotification {
+  id: string;
+  type: string;                    // 'possible_deviation' | 'high_priority_order' | future types
+  severity: NotificationSeverity;
+  title: string;
+  body?: string | null;
+  channels: NotificationChannel[];
+  audience: UserRole[];
+  link?: string | null;            // in-app route to the related record
+  production_order_id?: string | null;
+  reagent_order_id?: string | null;
+  work_instruction_id?: string | null;
+  metadata: Record<string, unknown>;
+  created_by?: string | null;
+  created_at: string;
+  read_at?: string | null;
+  read_by?: string | null;
+  creator?: Pick<Profile, 'id' | 'full_name'> | null;
+  reader?: Pick<Profile, 'id' | 'full_name'> | null;
+}

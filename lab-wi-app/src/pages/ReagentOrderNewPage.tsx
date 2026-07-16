@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { createNotification } from '../lib/notifications';
 import type { ReagentItem, Lab, Profile } from '../types';
 import { ArrowLeft, Save, AlertTriangle, Send, Mail, MessageSquare, X, CheckCircle, Truck, Loader2, Plus, Trash2 } from 'lucide-react';
 
@@ -246,6 +247,22 @@ export default function ReagentOrderNewPage() {
           summary: summaryParts.join(', '),
           labName: selectedLab?.name ?? '',
           requesterName: selectedRequester?.full_name ?? '',
+        });
+        // E3: persist the notification so it lands in the admin inbox (the
+        // modal above stays as the simulated email/Teams delivery view).
+        void createNotification({
+          type: 'high_priority_order',
+          severity: 'warning',
+          title: `High priority reagent order ${result.order_number}`,
+          body: `${selectedRequester?.full_name ?? 'A requester'} (${selectedLab?.name ?? 'unknown lab'}) submitted an urgent request with ${result.lineCount} item${result.lineCount === 1 ? '' : 's'}: ${summaryParts.join(', ')}.`,
+          channels: ['in_app', 'email', 'teams'],
+          link: `/reagent-orders/${result.id}`,
+          reagent_order_id: result.id,
+          metadata: {
+            order_number: result.order_number,
+            lab: selectedLab?.name ?? null,
+            requester: selectedRequester?.full_name ?? null,
+          },
         });
       }
       // Stay on the page so the user can see the transfer order result.

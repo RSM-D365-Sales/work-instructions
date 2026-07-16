@@ -1,17 +1,20 @@
 import { useState } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import {
   Rocket, LayoutDashboard, BookOpen, ClipboardList,
   PlayCircle, LogOut, ChevronRight, Beaker, Scale, Users, Building2,
   ShoppingCart, CalendarClock, TrendingUp, Boxes, PanelLeftClose, PanelLeftOpen,
-  Factory, CalendarDays, ListChecks,
+  Factory, CalendarDays, ListChecks, Bell,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 import { cn } from '../lib/utils';
 import DefaultLabSelector from './DefaultLabSelector';
 
 const mainNav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'author', 'approver', 'operator', 'lab'] },
+  { to: '/notifications', label: 'Notifications', icon: Bell, roles: ['admin'] },
   { to: '/work-instructions', label: 'Work Instructions', icon: ClipboardList, roles: ['admin', 'author', 'approver', 'operator'] },
   { to: '/production-orders', label: 'Production Orders', icon: PlayCircle, roles: ['admin', 'author', 'approver', 'operator'] },
   { to: '/schedule', label: 'Production Schedule', icon: CalendarDays, roles: ['admin', 'author', 'approver', 'operator'] },
@@ -47,10 +50,25 @@ export default function AppLayout() {
   const visibleMain  = mainNav.filter(item  => profile ? item.roles.includes(profile.role) : false);
   const visibleSetup = setupNav.filter(item => profile ? item.roles.includes(profile.role) : false);
 
+  // Unread notification count for the sidebar Bell badge (admin inbox, E3).
+  const { data: unreadCount = 0 } = useQuery({
+    queryKey: ['notifications', 'unread-count'],
+    enabled: profile?.role === 'admin',
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      const { count } = await supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .is('read_at', null);
+      return count ?? 0;
+    },
+  });
+
   const renderNavLink = (item: typeof mainNav[number]) => {
     const active = item.to === '/'
       ? location.pathname === '/'
       : location.pathname.startsWith(item.to);
+    const badge = item.to === '/notifications' ? unreadCount : 0;
     return (
       <Link
         key={item.to}
@@ -64,9 +82,19 @@ export default function AppLayout() {
             : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
         )}
       >
-        <item.icon size={18} className="shrink-0" />
+        <span className="relative shrink-0">
+          <item.icon size={18} />
+          {collapsed && badge > 0 && (
+            <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500" />
+          )}
+        </span>
         {!collapsed && item.label}
-        {!collapsed && active && <ChevronRight size={14} className="ml-auto" />}
+        {!collapsed && badge > 0 && (
+          <span className="ml-auto text-[10px] font-bold bg-red-600 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center leading-none">
+            {badge > 99 ? '99+' : badge}
+          </span>
+        )}
+        {!collapsed && badge === 0 && active && <ChevronRight size={14} className="ml-auto" />}
       </Link>
     );
   };
