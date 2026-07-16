@@ -38,6 +38,28 @@ interface ReassignOutcome {
   recipients: Record<string, number>;
 }
 
+/** One row of the cover-an-absence preview. */
+interface AbsencePreviewOrder {
+  id: string;
+  production_order_number: string | null;
+  lot_number: string;
+  required_by: string | null;
+  scheduled_start: string;
+  work_instruction: { product_name: string; title: string } | null;
+}
+
+/** Urgency chip for a requirement date — the de-facto priority of an order. */
+function urgencyOf(requiredBy: string | null): { label: string; cls: string } {
+  if (!requiredBy) return { label: 'No date', cls: 'bg-gray-100 text-gray-500' };
+  const diff = Math.round(
+    (new Date(requiredBy + 'T00:00:00').getTime() - startOfDay(new Date()).getTime()) / 86_400_000
+  );
+  if (diff < 0)   return { label: `Overdue ${Math.abs(diff)}d`, cls: 'bg-red-100 text-red-700' };
+  if (diff === 0) return { label: 'Due today', cls: 'bg-red-100 text-red-700' };
+  if (diff <= 2)  return { label: `Due in ${diff}d`, cls: 'bg-amber-100 text-amber-800' };
+  return { label: `In ${diff}d`, cls: 'bg-gray-100 text-gray-600' };
+}
+
 function fmtTime(d: Date): string {
   return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
@@ -141,22 +163,27 @@ export default function ProductionSchedulePage() {
     [schedRows]
   );
 
-  /* Preview: how many pending orders the absent person has in the range. */
-  const { data: previewCount = 0 } = useQuery({
+  /* Preview: the pending orders the absent person has in the range — shown
+   * as a brief summary (order, item, scheduled, requirement date, urgency)
+   * so the admin sees exactly what needs covering before acting. */
+  const { data: previewOrders = [] } = useQuery<AbsencePreviewOrder[]>({
     queryKey: ['absence-preview', absentId, absFrom, absTo],
     enabled: panelOpen && !!absentId && !!absFrom && !!absTo,
     queryFn: async () => {
-      const { count, error } = await supabase
+      const { data, error } = await supabase
         .from('production_orders')
-        .select('id', { count: 'exact', head: true })
+        .select('id, production_order_number, lot_number, required_by, scheduled_start, ' +
+                'work_instruction:work_instructions(product_name, title)')
         .eq('assigned_to', absentId)
         .eq('status', 'pending')
         .gte('scheduled_start', new Date(absFrom + 'T00:00:00').toISOString())
-        .lt('scheduled_start', addDays(new Date(absTo + 'T00:00:00'), 1).toISOString());
+        .lt('scheduled_start', addDays(new Date(absTo + 'T00:00:00'), 1).toISOString())
+        .order('scheduled_start');
       if (error) throw error;
-      return count ?? 0;
+      return (data ?? []) as unknown as AbsencePreviewOrder[];
     },
   });
+  const previewCount = previewOrders.length;
 
   /* Move every pending order the person is scheduled for in [from, to] to
    * other available people — never back to them — each into the earliest
@@ -439,6 +466,64 @@ export default function ProductionSchedulePage() {
               </button>
             </div>
           </div>
+
+          {/* What needs covering — order, item, schedule, requirement date, urgency */}
+          {absentId && previewOrders.length > 0 && (
+            <div className="mt-3 border border-amber-100 rounded-lg overflow-hidden">
+              <div className="max-h-56 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-amber-50/70 text-left text-[10px] uppercase text-gray-500 sticky top-0">
+                    <tr>
+                      <th className="px-3 py-1.5 font-medium">Order</th>
+                      <th className="px-3 py-1.5 font-medium">Item</th>
+                      <th className="px-3 py-1.5 font-medium whitespace-nowrap">Scheduled</th>
+                      <th className="px-3 py-1.5 font-medium whitespace-nowrap">Required by</th>
+                      <th className="px-3 py-1.5 font-medium">Priority</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 bg-white">
+                    {previewOrders.map(o => {
+                      const u = urgencyOf(o.required_by);
+                      return (
+                        <tr key={o.id}>
+                          <td className="px-3 py-1.5 whitespace-nowrap">
+                            <Link
+                              to={`/production-orders/${o.id}`}
+                              className="font-mono font-medium text-blue-600 hover:underline"
+                            >
+                              {o.production_order_number ?? o.lot_number}
+                            </Link>
+                          </td>
+                          <td className="px-3 py-1.5 text-gray-800">
+                            <span className="block truncate max-w-[18rem]">
+                              {o.work_instruction?.product_name ?? '—'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">
+                            {new Date(o.scheduled_start).toLocaleString(undefined, {
+                              month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+                            })}
+                          </td>
+                          <td className="px-3 py-1.5 text-gray-700 whitespace-nowrap">
+                            {o.required_by
+                              ? new Date(o.required_by + 'T00:00:00').toLocaleDateString(undefined, {
+                                  weekday: 'short', month: 'short', day: 'numeric',
+                                })
+                              : '—'}
+                          </td>
+                          <td className="px-3 py-1.5">
+                            <span className={cn('px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap', u.cls)}>
+                              {u.label}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
