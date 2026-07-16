@@ -3,11 +3,12 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import type { WorkInstruction, WIStep, WIApproval, StepType, ParameterSchema } from '../types';
+import type { WorkInstruction, WIStep, WIApproval, StepType, ParameterSchema, ReagentItem } from '../types';
 import {
   ArrowLeft, Pencil, CheckCircle, XCircle, RotateCcw, PlayCircle, GitBranch, GitCompare,
   FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, Trash2,
   Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, ChevronRight, SlidersHorizontal, Paperclip,
+  Copy, X, Search,
 } from 'lucide-react';
 import { formatDate, cn, wiLineageKey } from '../lib/utils';
 
@@ -100,6 +101,7 @@ export default function WorkInstructionDetailPage() {
   const [approvalError, setApprovalError] = useState('');
   const [newVersionLoading, setNewVersionLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [copyModalOpen, setCopyModalOpen] = useState(false);
 
   const { data: wi, isLoading } = useQuery<WorkInstruction>({
     queryKey: ['work-instruction-detail', id],
@@ -321,6 +323,15 @@ export default function WorkInstructionDetailPage() {
               <GitBranch size={14} /> New Version
             </button>
           )}
+          {isAuthor && (
+            <button
+              onClick={() => setCopyModalOpen(true)}
+              title="Start a work instruction for another item using this one as the template"
+              className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
+            >
+              <Copy size={14} /> Copy to New Item
+            </button>
+          )}
           {canStartProduction && (
             <Link
               to={`/production-orders/new?wi=${wi.id}`}
@@ -339,6 +350,11 @@ export default function WorkInstructionDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Copy-to-new-item modal */}
+      {copyModalOpen && (
+        <CopyToNewItemModal wi={wi} steps={steps} onClose={() => setCopyModalOpen(false)} />
+      )}
 
       {/* Delete confirmation modal */}
       {deleteConfirmOpen && (
@@ -555,6 +571,209 @@ export default function WorkInstructionDetailPage() {
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Copy-to-new-item modal ───────────────────────────────────────────────────
+// Uses an existing WI as the template for a brand-new draft (version 1) linked
+// to a different reagent item — e.g. start "1.0 M EDTA" from "0.5 M EDTA".
+// All steps are copied; source_step_id is deliberately NOT carried over, so the
+// copy starts its own version-diff lineage instead of inheriting the source's.
+function CopyToNewItemModal({ wi, steps, onClose }: { wi: WorkInstruction; steps: WIStep[]; onClose: () => void }) {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const { profile } = useAuth();
+  const [search, setSearch] = useState('');
+  const [targetItemId, setTargetItemId] = useState('');
+  const [title, setTitle] = useState('');
+  const [productName, setProductName] = useState('');
+  const [titleTouched, setTitleTouched] = useState(false);
+
+  const { data: reagents = [] } = useQuery<ReagentItem[]>({
+    queryKey: ['reagent-items-active'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('reagent_items')
+        .select('*')
+        .eq('is_active', true)
+        .order('product_name');
+      if (error) throw error;
+      return data as ReagentItem[];
+    },
+  });
+
+  const targetItem = reagents.find(r => r.id === targetItemId);
+  const q = search.trim().toLowerCase();
+  const matches = reagents
+    .filter(r => !q || r.product_name.toLowerCase().includes(q) || r.item_number.toLowerCase().includes(q))
+    .sort((a, b) => (a.item_type === 'FG' ? 0 : 1) - (b.item_type === 'FG' ? 0 : 1))
+    .slice(0, 30);
+
+  function pickItem(r: ReagentItem) {
+    setTargetItemId(r.id);
+    setProductName(r.product_name);
+    if (!titleTouched) setTitle(r.product_name);
+  }
+
+  const copyMutation = useMutation({
+    mutationFn: async () => {
+      const cleanTitle = title.trim();
+      const cleanProduct = productName.trim();
+      if (!cleanTitle) throw new Error('Give the new work instruction a title.');
+      if (!cleanProduct) throw new Error('Pick a target item or enter a product name.');
+
+      // Versions are grouped by item+title — a copy that collides with an
+      // existing lineage would merge into its version history, so block it.
+      const targetKey = wiLineageKey({ reagent_item_id: targetItemId || null, product_name: cleanProduct, title: cleanTitle });
+      const { data: sameTitle, error: e0 } = await supabase
+        .from('work_instructions')
+        .select('id, title, product_name, reagent_item_id')
+        .eq('title', cleanTitle);
+      if (e0) throw e0;
+      if ((sameTitle ?? []).some(w => wiLineageKey(w) === targetKey)) {
+        throw new Error('A work instruction with this title already exists for the target item — change the title, or open that WI and use New Version instead.');
+      }
+
+      const { data: newWI, error: e1 } = await supabase
+        .from('work_instructions')
+        .insert({
+          title: cleanTitle,
+          description: wi.description ?? null,
+          product_name: cleanProduct,
+          reagent_item_id: targetItemId || null,
+          // target_molarity intentionally not copied — the new item's
+          // concentration is what the author is here to change.
+          scheduled_minutes: wi.scheduled_minutes ?? null,
+          version: 1,
+          status: 'draft',
+          created_by: profile!.id,
+        })
+        .select()
+        .single();
+      if (e1) throw e1;
+
+      if (steps.length > 0) {
+        const newSteps = steps.map(s => ({
+          work_instruction_id: newWI.id,
+          step_template_id: s.step_template_id ?? null,
+          step_order: s.step_order,
+          name: s.name,
+          description: s.description ?? null,
+          parameters: s.parameters,
+        }));
+        const { error: e2 } = await supabase.from('wi_steps').insert(newSteps);
+        if (e2) throw e2;
+      }
+      return newWI;
+    },
+    onSuccess: (newWI) => {
+      qc.invalidateQueries({ queryKey: ['work-instructions'] });
+      navigate(`/work-instructions/${newWI.id}/edit`);
+    },
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100">
+            <Copy size={17} className="text-indigo-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-semibold text-gray-900">Copy to New Item</h2>
+            <p className="text-xs text-gray-500 truncate">
+              From {wi.title} (v{wi.version}) · {steps.length} step{steps.length === 1 ? '' : 's'} will be copied
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Target item picker */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Target item</label>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search by product name or item number…"
+                className="w-full border border-gray-300 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="mt-2 border border-gray-200 rounded-lg max-h-44 overflow-y-auto divide-y divide-gray-50">
+              {matches.length === 0 ? (
+                <p className="px-3 py-3 text-sm text-gray-400">No matching items.</p>
+              ) : matches.map(r => (
+                <button
+                  key={r.id}
+                  onClick={() => pickItem(r)}
+                  className={cn(
+                    'w-full flex items-baseline gap-2 px-3 py-2 text-left text-sm transition-colors',
+                    r.id === targetItemId ? 'bg-blue-50 text-blue-800' : 'hover:bg-gray-50 text-gray-800'
+                  )}
+                >
+                  <span className="font-medium truncate">{r.product_name}</span>
+                  <span className="text-xs text-gray-400 font-mono shrink-0">{r.item_number}</span>
+                  {r.item_type === 'FG' && <span className="ml-auto text-[10px] font-semibold text-emerald-600 shrink-0">FG</span>}
+                </button>
+              ))}
+            </div>
+            {targetItem && (
+              <p className="text-xs text-gray-500 mt-1.5">
+                Selected: <span className="font-medium text-gray-700">{targetItem.product_name}</span> · {targetItem.item_number}
+              </p>
+            )}
+          </div>
+
+          {/* Title / product name */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">New title *</label>
+            <input
+              value={title}
+              onChange={e => { setTitle(e.target.value); setTitleTouched(true); }}
+              placeholder="e.g. 1.0 M EDTA Solution, pH 8.0"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Product name *</label>
+            <input
+              value={productName}
+              onChange={e => setProductName(e.target.value)}
+              placeholder="Filled from the target item, or type your own"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {copyMutation.isError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {(copyMutation.error as Error).message}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => copyMutation.mutate()}
+              disabled={copyMutation.isPending || !title.trim() || !productName.trim()}
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+            >
+              <Copy size={14} />
+              {copyMutation.isPending ? 'Copying…' : 'Create Draft Copy'}
+            </button>
+          </div>
+          <p className="text-xs text-gray-400">
+            Creates a draft (v1) owned by you and opens it in the editor so you can adjust quantities, targets, and steps.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
