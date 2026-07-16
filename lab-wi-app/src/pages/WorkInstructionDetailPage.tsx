@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { WorkInstruction, WIStep, WIApproval, StepType, ParameterSchema } from '../types';
 import {
-  ArrowLeft, Pencil, CheckCircle, XCircle, RotateCcw, PlayCircle, GitBranch,
+  ArrowLeft, Pencil, CheckCircle, XCircle, RotateCcw, PlayCircle, GitBranch, GitCompare,
   FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, Trash2,
   Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, ChevronRight, SlidersHorizontal, Paperclip,
 } from 'lucide-react';
@@ -183,6 +183,9 @@ export default function WorkInstructionDetailPage() {
         const newSteps = steps.map(s => ({
           work_instruction_id: newWI.id,
           step_template_id: s.step_template_id ?? null,
+          // Carry the lineage token so the version diff matches steps across
+          // versions (renames diff as "modified", not removed + added).
+          source_step_id: s.source_step_id ?? s.id,
           step_order: s.step_order,
           name: s.name,
           description: s.description ?? null,
@@ -292,6 +295,15 @@ export default function WorkInstructionDetailPage() {
           {wi.description && <p className="text-sm text-gray-600 mt-1">{wi.description}</p>}
         </div>
         <div className="flex gap-2 shrink-0">
+          {versions.length > 1 && (
+            <Link
+              to={`/work-instructions/${wi.id}/diff`}
+              title="Side-by-side comparison against another version"
+              className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
+            >
+              <GitCompare size={14} /> Compare
+            </Link>
+          )}
           {canEdit && (
             <Link
               to={`/work-instructions/${wi.id}/edit`}
@@ -365,6 +377,33 @@ export default function WorkInstructionDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Reviewer shortcut: see exactly what changed instead of re-reading */}
+      {wi.status === 'pending_review' && versions.length > 1 && (() => {
+        const compareBase =
+          versions.find(v => v.id !== wi.id && v.status === 'approved') ??
+          versions.find(v => v.id !== wi.id && v.version < wi.version) ??
+          versions.find(v => v.id !== wi.id);
+        if (!compareBase) return null;
+        return (
+          <Link
+            to={`/work-instructions/${wi.id}/diff?base=${compareBase.id}`}
+            className="flex items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 hover:bg-indigo-100/70 transition-colors"
+          >
+            <GitCompare size={18} className="text-indigo-600 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-indigo-900">
+                Reviewing v{wi.version}? See exactly what changed vs v{compareBase.version}
+                {compareBase.status === 'approved' && ' (currently active)'}
+              </p>
+              <p className="text-xs text-indigo-600">
+                Added, removed, and edited steps highlighted side by side — no need to re-read the whole instruction.
+              </p>
+            </div>
+            <ChevronRight size={16} className="text-indigo-400 shrink-0" />
+          </Link>
+        );
+      })()}
 
       {/* Steps */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

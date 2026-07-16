@@ -985,6 +985,10 @@ export default function WorkInstructionEditorPage() {
         const stepsPayload = steps.map((s, i) => ({
           work_instruction_id: wiId!,
           step_template_id: s.step_template_id ?? null,
+          // Steps are deleted + reinserted on save; carry the lineage token
+          // (or seed it from the old row's id) so the version diff can match
+          // this step across versions even if it is later renamed.
+          source_step_id: s.source_step_id ?? s.id ?? null,
           step_order: i + 1,
           name: s.name || 'Unnamed Step',
           description: s.description || null,

@@ -10,6 +10,7 @@ import StepLibraryPage from './pages/StepLibraryPage';
 import WorkInstructionsListPage from './pages/WorkInstructionsListPage';
 import WorkInstructionEditorPage from './pages/WorkInstructionEditorPage';
 import WorkInstructionDetailPage from './pages/WorkInstructionDetailPage';
+import WorkInstructionDiffPage from './pages/WorkInstructionDiffPage';
 import ProductionOrdersListPage from './pages/ProductionOrdersListPage';
 import ProductionOrderNewPage from './pages/ProductionOrderNewPage';
 import ProductionOrderExecutionPage from './pages/ProductionOrderExecutionPage';
@@ -52,6 +53,7 @@ export default function App() {
                 </Route>
                 <Route path="/work-instructions" element={<WorkInstructionsListPage />} />
                 <Route path="/work-instructions/:id" element={<WorkInstructionDetailPage />} />
+                <Route path="/work-instructions/:id/diff" element={<WorkInstructionDiffPage />} />
                 <Route element={<ProtectedRoute allowedRoles={['author', 'admin']} />}>
                   <Route path="/work-instructions/new" element={<WorkInstructionEditorPage />} />
                   <Route path="/work-instructions/:id/edit" element={<WorkInstructionEditorPage />} />

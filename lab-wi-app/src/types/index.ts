@@ -163,6 +163,9 @@ export interface WIStep {
   id: string;
   work_instruction_id: string;
   step_template_id?: string;
+  /** Lineage token: id of this step's earliest ancestor across WI versions.
+   *  Carried through clones/re-saves so the version diff survives renames. */
+  source_step_id?: string | null;
   step_order: number;
   name: string;
   description?: string;
