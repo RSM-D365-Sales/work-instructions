@@ -25,6 +25,7 @@ import ReagentDeliveryPage from './pages/ReagentDeliveryPage';
 import ReagentOrderDetailPage from './pages/ReagentOrderDetailPage';
 import UnscheduledOrdersPage from './pages/UnscheduledOrdersPage';
 import PlannedProductionOrdersPage from './pages/PlannedProductionOrdersPage';
+import RocketLoader from './components/RocketLoader';
 
 // Charts (recharts) are heavy and only used here — load this route lazily so a
 // failure or the library's weight can't take down the rest of the app on boot.
@@ -61,7 +62,7 @@ export default function App() {
                 <Route path="/production-orders/:id/certificate" element={<ProductionOrderCertificatePage />} />
                 <Route element={<ProtectedRoute allowedRoles={['author', 'approver']} />}>
                   <Route path="/quality-trends" element={
-                    <Suspense fallback={<div className="text-center py-12 text-gray-400">Loading…</div>}>
+                    <Suspense fallback={<RocketLoader />}>
                       <QualityTrendsPage />
                     </Suspense>
                   } />

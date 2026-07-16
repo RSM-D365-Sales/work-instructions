@@ -27,14 +27,6 @@ interface UnscheduledOrderRow {
   } | null;
 }
 
-/** Returns a `datetime-local`-formatted string for "the next quarter-hour". */
-function nextQuarterHourLocal(): string {
-  const d = new Date();
-  d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 /* -------------------------------------------------------------------------- */
 
 export default function UnscheduledOrdersPage() {
@@ -256,7 +248,7 @@ export default function UnscheduledOrdersPage() {
   }
 
   function toggleSelect(id: string) {
-    setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelected(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }
   function toggleGroupSelect(groupRows: UnscheduledOrderRow[]) {
     setSelected(prev => {
@@ -294,7 +286,8 @@ export default function UnscheduledOrdersPage() {
   }
 
   function handleSchedule(o: UnscheduledOrderRow) {
-    const picked = pickers[o.id] ?? nextQuarterHourLocal();
+    const picked = pickers[o.id];
+    if (!picked) return;   // unscheduled = no start until one is chosen
     const startDate = new Date(picked);
     if (isNaN(startDate.getTime())) return;
     const minutes = o.work_instruction?.scheduled_minutes ?? 60;
@@ -450,7 +443,7 @@ export default function UnscheduledOrdersPage() {
             <tbody>
               {rows.map(o => {
                 const minutes = o.work_instruction?.scheduled_minutes ?? 60;
-                const picker = pickers[o.id] ?? nextQuarterHourLocal();
+                const picker = pickers[o.id] ?? '';   // blank until the admin picks a start
                 const saved  = savedFlash[o.id];
                 return (
                   <tr key={o.id} className={cn(
@@ -503,7 +496,8 @@ export default function UnscheduledOrdersPage() {
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => handleSchedule(o)}
-                        disabled={scheduleMutation.isPending}
+                        disabled={!picker || scheduleMutation.isPending}
+                        title={picker ? undefined : 'Pick a start date & time first'}
                         className={cn(
                           'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
                           saved

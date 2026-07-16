@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { FlaskConical } from 'lucide-react';
+import { Rocket } from 'lucide-react';
 
 export default function LoginPage() {
   const { signIn, signUp, session } = useAuth();
@@ -41,7 +41,7 @@ export default function LoginPage() {
       <div className="bg-white rounded-2xl shadow-lg w-full max-w-md p-8">
         <div className="flex items-center gap-3 mb-8">
           <div className="bg-blue-600 text-white p-2 rounded-xl">
-            <FlaskConical size={28} />
+            <Rocket size={28} />
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900">Lab Work Instructions</h1>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import {
-  FlaskConical, LayoutDashboard, BookOpen, ClipboardList,
+  Rocket, LayoutDashboard, BookOpen, ClipboardList,
   PlayCircle, LogOut, ChevronRight, Beaker, Scale, Users, Building2,
   ShoppingCart, CalendarClock, TrendingUp, Boxes, PanelLeftClose, PanelLeftOpen,
   Factory,
@@ -81,7 +81,7 @@ export default function AppLayout() {
         <div className={cn('border-b border-gray-200', collapsed ? 'p-3' : 'p-5')}>
           <div className={cn('flex items-center', collapsed ? 'flex-col gap-2' : 'gap-3')}>
             <div className="bg-blue-600 text-white p-1.5 rounded-lg">
-              <FlaskConical size={22} />
+              <Rocket size={22} />
             </div>
             {!collapsed && (
               <div className="min-w-0 flex-1">

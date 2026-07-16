@@ -1,5 +1,65 @@
 @import "tailwindcss";
 
+/* ── Rocket loading animation (see components/RocketLoader.tsx) ────────── */
+.rocket-loader {
+  position: relative;
+  width: 72px;
+  height: 84px;
+  overflow: hidden;
+}
+.rocket-loader-vehicle {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  animation: rocket-lift 2s ease-in infinite;
+}
+.rocket-loader-vehicle svg {
+  display: block;
+  transform: rotate(-45deg);   /* lucide's rocket points 45° — aim it straight up */
+}
+.rocket-loader-flame {
+  width: 10px;
+  height: 14px;
+  margin: 1px auto 0;
+  background: linear-gradient(to bottom, #f59e0b, #f97316 55%, transparent);
+  border-radius: 50% 50% 50% 50% / 15% 15% 85% 85%;
+  transform-origin: top center;
+  animation: rocket-flame 0.16s ease-in-out infinite alternate;
+}
+.rocket-loader-pad {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 3px;
+  border-radius: 2px;
+  background: #d1d5db;
+}
+@keyframes rocket-lift {
+  0%   { transform: translate(-50%, 0);   opacity: 1; }   /* rumble on the pad… */
+  8%   { transform: translate(-54%, 0); }
+  16%  { transform: translate(-46%, 0); }
+  24%  { transform: translate(-54%, 0); }
+  32%  { transform: translate(-46%, 0); }
+  40%  { transform: translate(-50%, 0); }
+  75%  { transform: translate(-50%, -76px); opacity: 1; } /* …blast off */
+  76%  { opacity: 0; }
+  77%  { transform: translate(-50%, 26px);  opacity: 0; } /* reset below the pad */
+  90%  { transform: translate(-50%, 0);     opacity: 1; }
+  100% { transform: translate(-50%, 0);     opacity: 1; }
+}
+@keyframes rocket-flame {
+  from { transform: scaleY(0.65); opacity: 0.8; }
+  to   { transform: scaleY(1.2);  opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rocket-loader-vehicle,
+  .rocket-loader-flame {
+    animation: none;
+  }
+}
+
 /* ── Print: isolate the certificate sheet ──────────────────────────────── */
 @media print {
   body * {
