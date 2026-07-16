@@ -108,6 +108,19 @@ export const STATUS_LETTER: Record<GanttOrderRow['status'], string> = {
   cancelled:   'X',
 };
 
+/** Last-used gantt window (1/3/7/14/30 days), shared by the dashboard card
+ *  and the Production Schedule page so the view reopens as it was left. */
+const WINDOW_DAYS_KEY = 'gantt-window-days';
+
+export function loadWindowDays(fallback = 7): number {
+  const v = Number(localStorage.getItem(WINDOW_DAYS_KEY));
+  return [1, 3, 7, 14, 30].includes(v) ? v : fallback;
+}
+
+export function saveWindowDays(days: number): void {
+  localStorage.setItem(WINDOW_DAYS_KEY, String(days));
+}
+
 /** Step progress (completed / total) for the in-progress orders in view:
  *  completed po_steps per order vs. total wi_steps on the order's WI. */
 export function useStepProgress(orders: GanttOrderRow[] | undefined) {

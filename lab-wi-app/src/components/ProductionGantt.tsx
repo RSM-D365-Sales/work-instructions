@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
 import {
   useGanttOrders, useStepProgress, deriveSpan, startOfDay, addDays,
+  loadWindowDays, saveWindowDays,
   STATUS_DOT_CLASS, STATUS_LABEL, STATUS_LETTER,
   type GanttOrderRow,
 } from '../lib/ganttData';
@@ -106,13 +107,18 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
   const qc = useQueryClient();
 
   // Window anchor — start date of the visible range. Defaults to 1 day before
-  // today. Either value may be controlled by a parent page via props.
-  const [ownWindowDays, setOwnWindowDays] = useState<number>(7);
-  const [ownAnchor, setOwnAnchor] = useState<Date>(() => addDays(startOfDay(new Date()), -1));
+  // today (or today for the 1-day view). Either value may be controlled by a
+  // parent page via props. The window size is remembered across sessions.
+  const [ownWindowDays, setOwnWindowDays] = useState<number>(() => loadWindowDays());
+  const [ownAnchor, setOwnAnchor] = useState<Date>(() =>
+    ownWindowDays === 1 ? startOfDay(new Date()) : addDays(startOfDay(new Date()), -1));
   const windowDays = props.windowDays ?? ownWindowDays;
   const anchor = props.anchor ?? ownAnchor;
-  const setWindowDays = (d: number) =>
-    props.onWindowDaysChange ? props.onWindowDaysChange(d) : setOwnWindowDays(d);
+  const setWindowDays = (d: number) => {
+    saveWindowDays(d);   // remember the last-used preset (dashboard + schedule page)
+    if (props.onWindowDaysChange) props.onWindowDaysChange(d);
+    else setOwnWindowDays(d);
+  };
   const setAnchor = (a: Date) =>
     props.onAnchorChange ? props.onAnchorChange(a) : setOwnAnchor(a);
   // Live drag preview ({orderId, dx px}) while an admin drags a bar.
@@ -407,15 +413,15 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
 
       {/* Legend — every status carries a letter (on the swatch AND on the bars)
           so colour-blind users can match by letter instead of hue. */}
-      <div className="px-4 py-2.5 border-b border-gray-100 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
+      <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-x-5 gap-y-2 text-[15px] text-gray-600">
         {(['pending', 'in_progress', 'awaiting_qc', 'completed', 'failed', 'cancelled'] as const).map(s => (
           <LegendKey key={s} status={s} />
         ))}
-        <span className="inline-flex items-center gap-1.5 text-xs">
-          <span className="w-4 h-4 rounded-sm bg-gray-200 border border-gray-300" /> Off
+        <span className="inline-flex items-center gap-1.5 text-sm">
+          <span className="w-5 h-5 rounded-sm bg-gray-200 border border-gray-300" /> Off
         </span>
-        <span className="inline-flex items-center gap-1.5 text-xs">
-          <span className="w-4 h-4 rounded-sm bg-emerald-100 border border-emerald-300" /> Time off
+        <span className="inline-flex items-center gap-1.5 text-sm">
+          <span className="w-5 h-5 rounded-sm bg-emerald-100 border border-emerald-300" /> Time off
         </span>
         {isAdmin && (
           <span className="inline-flex items-center gap-1 text-xs text-gray-400">
@@ -684,15 +690,15 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
 /* -------------------------------------------------------------------------- */
 
 /** Legend entry: a lettered swatch plus the label with the matching letter
- *  highlighted — colour-blind users match bars to letters, not hues. */
+ *  bolded — colour-blind users match bars to letters, not hues. */
 function LegendKey({ status }: { status: GanttOrderRow['status'] }) {
   const letter = STATUS_LETTER[status];
   const label = STATUS_LABEL[status];
   const idx = label.indexOf(letter);
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className="inline-flex items-center gap-2">
       <span className={cn(
-        'w-5 h-5 rounded-md text-white text-[12px] font-extrabold flex items-center justify-center shadow-sm',
+        'w-6 h-6 rounded-md text-white text-[13px] font-extrabold flex items-center justify-center shadow-sm',
         STATUS_DOT_CLASS[status]
       )}>
         {letter}
@@ -701,7 +707,7 @@ function LegendKey({ status }: { status: GanttOrderRow['status'] }) {
         {idx === -1 ? label : (
           <>
             {label.slice(0, idx)}
-            <span className="font-extrabold text-gray-900 bg-yellow-100 rounded px-0.5">{label[idx]}</span>
+            <span className="font-extrabold text-gray-900">{label[idx]}</span>
             {label.slice(idx + 1)}
           </>
         )}
