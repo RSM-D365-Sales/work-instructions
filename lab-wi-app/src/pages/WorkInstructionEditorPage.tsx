@@ -9,7 +9,7 @@ import {
   FlaskConical, Scale as ScaleIcon, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings,
   Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal, Paperclip,
   ChevronsDownUp, ChevronsUpDown, PanelLeftClose, PanelLeftOpen,
-  Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Lock, Package,
+  Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Lock, Package, Clock,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -31,6 +31,7 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   thaw:             <ThermometerSun size={15} />,
   overnight:        <Moon size={15} />,
   observe:          <Eye size={15} />,
+  record_time:      <Clock size={15} />,
   notes:            <StickyNote size={15} />,
   production_break: <Milestone size={15} />,
   print_labels:     <Printer size={15} />,
@@ -468,6 +469,30 @@ function StepParamEditor({
             className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
             placeholder="e.g. Describe the color and clarity of the solution"
           />
+        </div>
+      );
+
+    case 'record_time':
+      return (
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Timestamp Label</label>
+            <input
+              value={(params.label as string) ?? ''}
+              onChange={e => set('label', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="e.g. Start time, End time, Water bath start"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Instructions (optional)</label>
+            <input
+              value={(params.prompt as string) ?? ''}
+              onChange={e => set('prompt', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="e.g. Record the time the solutions entered the 45°C water bath"
+            />
+          </div>
         </div>
       );
 
@@ -1434,6 +1459,7 @@ export default function WorkInstructionEditorPage() {
       case 'package': return { container: '', label_ref: '', destination: '', notes: '' };
       case 'ph_adjust': return { target_ph: 7, tolerance: 0.1, reagent: '' };
       case 'observe': return { prompt: '' };
+      case 'record_time': return { label: 'Time', prompt: '' };
       case 'notes': return { prompt: '' };
       case 'production_break': return { label: '', description: '' };
       case 'possible_deviation': return { prompt: '', unit: 'L' };

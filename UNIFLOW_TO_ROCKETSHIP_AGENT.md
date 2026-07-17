@@ -113,6 +113,7 @@ scope gate). There is no third option and no guessing.
 | `materialNoQty_N` *(Q.S. / add-as-needed)* | `bring_to_volume` *(when the heading is a Q.S. / bring-to-volume cue)* else `gather_reagents` | bring_to_volume: `{material_name, target_volume, unit, diluent}` · else `gather_reagents` with `quantity: null` (see R12) |
 | `pHMeter_N` | `ph_adjust` | `{target_ph:reqPH, tolerance:reqPHRange, reagent:''}` — Rocket Ship now captures a scanned pH-meter reading + range check |
 | `textEditable_N` | `notes` | `{prompt}` — from the preceding `text_N`, else "Record observations" |
+| `currentTime_N` *(has `getTimeButton`)* | `record_time` | `{label, prompt}` — `label` from the preceding `text_N` (e.g. "Start time"), else "Time" |
 | `separator_N` (+ `separatorDay1_N`) | `production_break` | `{label, description}` |
 | `separatorDay3_N` / `separatorDay14_N` | `production_break` | `{label:'Day N – QC Instructions'}` |
 | `defectRate_N` | `observe` | `{prompt:'Record the number of defects found during QC review.'}` |
@@ -131,8 +132,8 @@ scope gate). There is no third option and no guessing.
 The full valid `_step_type` set (never emit anything outside it): `gather_reagents`,
 `gather_equipment`, `weigh`, `dispense`, `mix`, `agitate`, `transfer`,
 `bring_to_volume`, `ph_adjust`, `heat`, `cool`, `freeze`, `thaw`, `overnight`,
-`observe`, `notes`, `production_break`, `print_labels`, `cap`, `package`,
-`attachment`, `possible_deviation`, `custom`.
+`observe`, `record_time`, `notes`, `production_break`, `print_labels`, `cap`,
+`package`, `attachment`, `possible_deviation`, `custom`.
 
 > **Expanded vocabulary (migration 051).** Eight new step types were added so one
 > Uniflow action maps to one typed step instead of collapsing into `custom`:
@@ -188,7 +189,7 @@ whitespace.
    name): `waitTime`/`beginWaitTime`, `preProductionTable`, `specimenRequest`,
    `volumeRecalculation`, `sendToProductionB`, `resuspensionVolume`, `flasks`,
    `passageNumber`, `coulterCounter`, `cellConcentration`, `trypanBlue`,
-   `liquidNitrogenVials`, `absorbance`, `currentTime`/`getTimeButton`,
+   `liquidNitrogenVials`, `absorbance`,
    `currentTemperature`, `tableSampleIDTestResults`, `monolayerConfluence`,
    `monolayerMorphology`, `calculatedValueSingle`, `massVolumeCalculation`, and
    any other type not in the supported set.
@@ -212,6 +213,7 @@ whitespace.
 | `thaw` | `target_temp_c, method, until` | thaw / bring up from frozen |
 | `overnight` | `condition, temp_c` | an overnight hold / incubation |
 | `observe` | `prompt` | verify / check / inspect / record a result |
+| `record_time` | `label, prompt` | operator-recorded timestamp (`currentTime` / "Get Time") |
 | `notes` | `prompt` | free-text note entry (`textEditable`) |
 | `production_break` | `label, description` | day/part boundary (`separator*`) |
 | `print_labels` | `label_template, quantity, notes` | print labels |
@@ -227,9 +229,9 @@ whitespace.
 ### Conversion rules
 
 **R1 — Group, then classify.** Walk parts in `N` order. A `text_N` is a *heading*
-for every `material*`/`pHMeter`/`textEditable` part that follows it until the
-next `text_N`/`separator*`. Emit one step per such part; the heading becomes the
-step `name` (and `description` when several steps share one heading).
+for every `material*`/`pHMeter`/`textEditable`/`currentTime` part that follows it
+until the next `text_N`/`separator*`. Emit one step per such part; the heading
+becomes the step `name` (and `description` when several steps share one heading).
 
 A `text_N` with **no** trailing capture part is a *standalone action*. Do **not**
 default it to `custom` — classify it by its leading action verb using the table
@@ -251,6 +253,7 @@ through to `custom` only when no row matches.
 | cap / screw cap / **Parafilm** / seal / cover / stopper | `cap` | `method`, `notes` |
 | package / box / place in rack or bin / stack in rack / **deliver to** … area / **store at** … / transfer racks to bin | `package` | `container`, `label_ref`, `destination`, `notes` |
 | print label(s) / set up the label printer | `print_labels` | `label_template`, `quantity`, `notes` |
+| record / note the **start / end time**, a timestamp, or "Get Time" | `record_time` | `label` = e.g. "Start time" / "End time" |
 | verify / check / confirm / inspect / ensure / record defects / record the result | `observe` | `prompt` = the full cleaned instruction |
 | *(none of the above — a `<h2>`/`PART` header, a `NOTE:`/`CAUTION:`, or prose with no operator action)* | `custom` | `instruction_text` |
 
@@ -304,6 +307,11 @@ part rather than emitting both.
 
 **R8 — `textEditable_N`** → `notes` step; `prompt` = the preceding `text_N`
 cleaned, else "Record observations."
+
+**R8a — `currentTime_N`** (has `getTimeButton`) → `record_time` step; `label` =
+the preceding `text_N` cleaned (e.g. "Start time", "End Time"), else "Time". This
+is the operator's "Get Time" stamp — a `"Start time:"` text followed by a
+`currentTime` part is one `record_time` step, not a `custom` + a skip.
 
 **R9 — Never guess a tolerance.** `weigh.tolerance_pct` is always `2` (the
 library default) and always appears in the report's review list.
@@ -428,13 +436,18 @@ spec either way; the agent is how you validate that spec on real recipes first.
    typed steps, not `custom`: "Stir for 10 minutes" → `agitate`; "Q.S. to 950 mL
    with Methanol" → `bring_to_volume`; "Deliver the bottle to the 15-30°C QC
    area" → `package`; "Cover the beaker with a double layer of Parafilm" → `cap`;
-   a measured "900 mL" via `materialWeighed` → `dispense` (not `weigh`).
-3. **A8 Agar (A-00020)** — must **SKIP** with a report naming `pHMeter` (ok) …
-   actually it also contains `currentTime` and `textEditable`; `textEditable` is
-   supported but `currentTime` is not, so it must skip and name `currentTime`.
-   This proves the scope gate fires on a real, complex recipe.
-4. **A stocked item (empty `formPlan`)** — must skip with the "no recipe" line.
-5. **A cell-culture recipe** (any with `passageNumber`/`flasks`) — must skip and
+   a measured "900 mL" via `materialWeighed` → `dispense` (not `weigh`); a
+   `"Start time:"` text + `currentTime` part → `record_time`.
+3. **A8 Agar (A-00020) — now CONVERTS** (it was the old scope-gate skip example).
+   Every type it uses is now supported — `pHMeter`→`ph_adjust`,
+   `textEditable`→`notes`, and the `currentTime` "Start time:" / "End Time:" pair
+   →`record_time`. It should produce SQL (not skip), exercising `record_time`,
+   `heat`/`cool`, `bring_to_volume`, `cap`, `package`, and QC `observe` steps.
+4. **Scope gate still fires** — a recipe containing `waitTime`/`beginWaitTime` (or
+   `currentTemperature`, `preProductionTable`) must **SKIP** and name the
+   unsupported type. Proves the gate still refuses genuinely out-of-scope recipes.
+5. **A stocked item (empty `formPlan`)** — must skip with the "no recipe" line.
+6. **A cell-culture recipe** (any with `passageNumber`/`flasks`) — must skip and
    name the unsupported types.
 
 Passing means: covered recipes produce SQL that runs and renders in Rocket Ship,

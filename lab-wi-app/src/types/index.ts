@@ -111,6 +111,7 @@ export type StepType =
   | 'thaw'              // thaw from frozen
   | 'overnight'         // an overnight hold / incubation
   | 'observe'
+  | 'record_time'       // operator-recorded timestamp (Uniflow currentTime / Get Time)
   | 'notes'             // free-text notes about the order up to this step
   | 'production_break'  // divider marking the boundary between parts of a run
   | 'print_labels'

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { StepTemplate, StepType } from '../types';
-import { Plus, Pencil, Trash2, FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, ChevronDown, ChevronUp, Lock, Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal, Paperclip, Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Package } from 'lucide-react';
+import { Plus, Pencil, Trash2, FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, ChevronDown, ChevronUp, Lock, Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal, Paperclip, Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Package, Clock } from 'lucide-react';
 import type { ParameterSchema, ParameterFieldDef } from '../types';
 
 const STEP_TYPE_META: Record<StepType, { label: string; icon: React.ReactNode; color: string }> = {
@@ -22,6 +22,7 @@ const STEP_TYPE_META: Record<StepType, { label: string; icon: React.ReactNode; c
   freeze:           { label: 'Freeze',                 icon: <ThermometerSnowflake size={16} />, color: 'bg-sky-100 text-sky-700' },
   thaw:             { label: 'Thaw',                   icon: <ThermometerSun size={16} />, color: 'bg-orange-100 text-orange-700' },
   overnight:        { label: 'Overnight Hold',         icon: <Moon size={16} />,          color: 'bg-indigo-100 text-indigo-700' },
+  record_time:      { label: 'Record Time',            icon: <Clock size={16} />,         color: 'bg-purple-100 text-purple-700' },
   observe:          { label: 'Observe & Record',       icon: <Eye size={16} />,           color: 'bg-purple-100 text-purple-700' },
   notes:            { label: 'Notes',                  icon: <StickyNote size={16} />,    color: 'bg-amber-100 text-amber-700' },
   production_break: { label: 'Production Break',       icon: <Milestone size={16} />,     color: 'bg-rose-100 text-rose-700' },

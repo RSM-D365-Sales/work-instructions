@@ -9,7 +9,7 @@ import {
   FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, Trash2,
   Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, ChevronRight, SlidersHorizontal, Paperclip,
   Copy, X, Search,
-  Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Lock, Package,
+  Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Lock, Package, Clock,
 } from 'lucide-react';
 import { formatDate, cn, wiLineageKey } from '../lib/utils';
 
@@ -29,6 +29,7 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   freeze:           <ThermometerSnowflake size={15} />,
   thaw:             <ThermometerSun size={15} />,
   overnight:        <Moon size={15} />,
+  record_time:      <Clock size={15} />,
   observe:       <Eye size={15} />,  print_labels:     <Printer size={15} />,  custom:        <Settings size={15} />,
   cap:              <Lock size={15} />,
   package:          <Package size={15} />,
@@ -74,6 +75,8 @@ function stepSummary(step: WIStep): string {
       return `Target pH ${p.target_ph} ± ${p.tolerance} using ${p.reagent}`;
     case 'observe':
       return p.prompt as string ?? '';
+    case 'record_time':
+      return `Record timestamp: ${p.label || 'Time'}`;
     case 'transfer':
       return `From ${p.from_vessel} to ${p.to_vessel}`;
     case 'cap':

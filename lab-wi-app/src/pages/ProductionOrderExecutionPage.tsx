@@ -15,7 +15,7 @@ import {
   Wrench, Beaker, Printer, UserCog, CalendarClock, Check, StickyNote, Milestone,
   ClipboardCheck, FileText, XCircle, Send, ScanLine, MessageSquare, X, SlidersHorizontal,
   Paperclip, ExternalLink,
-  Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Lock, Package,
+  Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Lock, Package, Clock,
 } from 'lucide-react';
 
 const STEP_ICONS: Record<StepType, React.ReactNode> = {
@@ -35,6 +35,7 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   thaw:             <ThermometerSun size={16} />,
   overnight:        <Moon size={16} />,
   observe:          <Eye size={16} />,
+  record_time:      <Clock size={16} />,
   notes:            <StickyNote size={16} />,
   production_break: <Milestone size={16} />,
   print_labels:     <Printer size={16} />,
@@ -358,6 +359,50 @@ function DispenseStepWidget({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// Operator-recorded timestamp — the Uniflow "Get Time" button. Captures the
+// current time to the step result (recorded_at, ISO) so it locks with the run.
+function RecordTimeStepWidget({
+  params, values, onChange, locked,
+}: {
+  params: Record<string, unknown>;
+  values: Record<string, unknown>;
+  onChange: (v: Record<string, unknown>) => void;
+  locked: boolean;
+}) {
+  const label = (params.label as string) || 'Time';
+  const recorded = values.recorded_at as string | undefined;
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+        <p className="text-sm font-medium text-blue-900 flex items-center gap-2">
+          <Clock size={14} /> {label}
+        </p>
+        {params.prompt ? (
+          <p className="text-sm text-blue-700 mt-1">{String(params.prompt)}</p>
+        ) : (
+          <p className="text-sm text-blue-700 mt-1">Tap the button to stamp the current time.</p>
+        )}
+      </div>
+      <div className="flex items-center gap-3 flex-wrap">
+        <button
+          onClick={() => onChange({ ...values, recorded_at: new Date().toISOString() })}
+          disabled={locked}
+          className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+        >
+          <Clock size={15} />
+          {recorded ? 'Re-record time' : 'Record current time'}
+        </button>
+        {recorded && (
+          <span className="text-sm text-gray-700">
+            {label}: <strong>{new Date(recorded).toLocaleString()}</strong>
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -1385,6 +1430,9 @@ function StepCard({ wiStep, poStep, index, isActive, orderId, orderNumber, techn
     if (stepType === 'possible_deviation') {
       return values.impacted_quantity != null;
     }
+    if (stepType === 'record_time') {
+      return !!(values.recorded_at as string | undefined);
+    }
     if (stepType === 'ph_adjust') {
       // Require the meter that was used and an in-range reading — mirrors the
       // weigh step's scale + in-tolerance gate.
@@ -1444,6 +1492,9 @@ function StepCard({ wiStep, poStep, index, isActive, orderId, orderNumber, techn
           )}
           {stepType === 'notes' && (
             <NotesStepWidget params={params} values={values} onChange={setValues} locked={locked} />
+          )}
+          {stepType === 'record_time' && (
+            <RecordTimeStepWidget params={params} values={values} onChange={setValues} locked={locked} />
           )}
           {stepType === 'production_break' && (
             <ProductionBreakWidget params={params} />
