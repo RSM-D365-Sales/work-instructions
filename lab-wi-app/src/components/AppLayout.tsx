@@ -29,7 +29,7 @@ const mainNav = [
 const setupNav = [
   { to: '/users', label: 'Users', icon: Users, roles: ['admin'] },
   { to: '/labs', label: 'Labs', icon: Building2, roles: ['admin'] },
-  { to: '/scales', label: 'Scales', icon: Scale, roles: ['admin'] },
+  { to: '/scales', label: 'Equipment', icon: Scale, roles: ['admin'] },
   { to: '/reagents', label: 'Reagent Items', icon: Beaker, roles: ['admin', 'author'] },
   { to: '/library', label: 'Step Library', icon: BookOpen, roles: ['admin', 'author', 'approver'] },
 ];

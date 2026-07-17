@@ -278,6 +278,9 @@ export type POStepStatus = 'pending' | 'in_progress' | 'completed' | 'skipped';
 // ── Scales ──────────────────────────────────────────────────
 export type ScaleConnectionType = 'http_rest' | 'websocket' | 'modbus_tcp' | 'opc_ua';
 export type ScaleStatus = 'active' | 'inactive' | 'maintenance';
+/** What kind of instrument an equipment row is — drives which step can use it
+ *  (balances → Weigh, pH meters → Adjust pH). */
+export type EquipmentType = 'balance' | 'ph_meter' | 'osmometer' | 'other';
 
 export interface ScaleConnConfig {
   // http_rest / websocket
@@ -312,6 +315,7 @@ export interface Scale {
   location?: string;
   notes?: string;
   status: ScaleStatus;
+  equipment_type: EquipmentType;
   conn_a_type: ScaleConnectionType;
   conn_a_label: string;
   conn_a_config: ScaleConnConfig;

@@ -68,12 +68,12 @@ function WeighStepWidget({
   const [scanInput, setScanInput] = useState('');
   const [scanError, setScanError] = useState('');
 
-  // The operator picks the bench scale at run time — load all active scales.
+  // The operator picks the bench balance at run time — load active balances.
   const { data: scales = [] } = useQuery<Scale[]>({
-    queryKey: ['active-scales'],
+    queryKey: ['equipment', 'balance'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('scales').select('*').eq('status', 'active').order('name');
+        .from('scales').select('*').eq('status', 'active').eq('equipment_type', 'balance').order('name');
       if (error) throw error;
       return data as Scale[];
     },
@@ -829,20 +829,177 @@ function PhAdjustStepWidget({
   onChange: (v: Record<string, unknown>) => void;
   locked: boolean;
 }) {
+  const target = (params.target_ph as number) ?? 7;
+  const tolerance = (params.tolerance as number) ?? 0.1;
+  const reagent = (params.reagent as string)?.trim();
+  const lo = target - tolerance;
+  const hi = target + tolerance;
+
+  const [scanInput, setScanInput] = useState('');
+  const [scanError, setScanError] = useState('');
+
+  // The operator scans/selects the bench pH meter (equipment_type = 'ph_meter').
+  const { data: meters = [] } = useQuery<Scale[]>({
+    queryKey: ['equipment', 'ph_meter'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('scales').select('*').eq('status', 'active').eq('equipment_type', 'ph_meter').order('name');
+      if (error) throw error;
+      return data as Scale[];
+    },
+  });
+
+  const connectedMeter = meters.find(m => m.id === (values.meter_id as string | undefined)) ?? null;
+  const connected = !!connectedMeter;
+  const meterName = connectedMeter?.name ?? (values.meter_name as string | undefined);
+
+  const measured = values.measured_ph as number | undefined;
+  const inTol = measured != null ? Math.abs(measured - target) <= tolerance : null;
+
+  function connectMeter(m: Scale) {
+    onChange({ ...values, meter_id: m.id, meter_name: m.name });
+    setScanInput('');
+    setScanError('');
+  }
+  function tryScan() {
+    const match = meters.find(m => scanMatchesScale(scanInput, m));
+    if (match) connectMeter(match);
+    else setScanError('No active pH meter matches that scan. Try the meter name, barcode, or serial.');
+  }
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="bg-lime-50 border border-lime-100 rounded-xl p-4 space-y-1">
-        <p className="text-sm text-lime-900">Target pH: {String(params.target_ph)} ± {String(params.tolerance)}</p>
-        <p className="text-sm text-lime-800">Add {String(params.reagent)} dropwise with constant stirring</p>
+        <p className="text-sm font-medium text-lime-900">
+          Target pH: <strong>{target} ± {tolerance}</strong>
+          {' '}(allowed range: <strong>{lo.toFixed(2)} – {hi.toFixed(2)}</strong>)
+        </p>
+        {reagent && <p className="text-sm text-lime-800">Add {reagent} dropwise with constant stirring, then measure.</p>}
+        <p className="text-xs text-lime-700 mt-1 flex items-center gap-1">
+          <TestTube size={12} />
+          {connected
+            ? <>Reading on <strong className="ml-0.5">{meterName}</strong></>
+            : <>Scan or select the pH meter at your bench to begin.</>}
+        </p>
       </div>
+
+      {/* Select / scan the pH meter (required before entering a reading) */}
+      {!connected && !locked && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 space-y-3">
+          <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+            <ScanLine size={14} className="text-gray-500" />
+            Connect your pH meter
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              autoFocus
+              value={scanInput}
+              onChange={e => setScanInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); tryScan(); } }}
+              placeholder="Scan meter name / barcode (e.g. pH Meter 01)"
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              onClick={tryScan}
+              disabled={!scanInput.trim()}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+            >
+              <WifiOff size={15} /> Connect
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">or choose</span>
+            <select
+              value=""
+              onChange={e => { const m = meters.find(x => x.id === e.target.value); if (m) connectMeter(m); }}
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select a pH meter at your bench…</option>
+              {meters.map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.name}{m.barcode ? ` · ${m.barcode}` : ''}{m.location ? ` — ${m.location}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          {scanError
+            ? <p className="text-xs text-red-600">{scanError}</p>
+            : meters.length === 0
+              ? <p className="text-xs text-amber-700">No active pH meters registered. Add one on the Equipment page (type: pH meter).</p>
+              : <p className="text-xs text-gray-500">Scan the meter’s barcode, or pick it from the list, to start the reading.</p>}
+        </div>
+      )}
+
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">pH Adjustment Notes</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+          {connected ? 'Live pH Reading' : 'pH Reading'}
+          {connected && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-green-700">
+              <Wifi size={12} />
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+              </span>
+              Connected · {meterName}
+            </span>
+          )}
+          {connected && !locked && (
+            <button
+              onClick={() => onChange({ ...values, meter_id: undefined, meter_name: undefined })}
+              className="ml-auto text-[11px] text-gray-400 hover:text-gray-700 underline"
+            >
+              change meter
+            </button>
+          )}
+        </label>
+        <input
+          type="number"
+          step="0.01"
+          value={measured ?? ''}
+          onChange={e => {
+            const v = parseFloat(e.target.value);
+            onChange({
+              ...values,
+              measured_ph: isNaN(v) ? undefined : v,
+              in_tolerance: isNaN(v) ? undefined : Math.abs(v - target) <= tolerance,
+            });
+          }}
+          disabled={locked || !connected}
+          placeholder={connected ? `Live pH from ${meterName ?? 'meter'}` : 'Connect a pH meter to enable the reading'}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+        />
+      </div>
+
+      {inTol != null && measured != null && (
+        <div className={cn(
+          'flex items-center gap-3 p-3 rounded-xl text-sm font-medium',
+          inTol
+            ? 'bg-green-50 border border-green-200 text-green-800'
+            : 'bg-red-50 border border-red-200 text-red-800'
+        )}>
+          {inTol ? <CheckCircle size={18} /> : <AlertTriangle size={18} />}
+          <div>
+            <p>
+              {inTol ? 'In range' : 'OUT OF RANGE'} — measured pH {measured} (target {target} ± {tolerance})
+            </p>
+            {!inTol && (
+              <p className="text-xs mt-0.5 font-normal opacity-80">
+                Continue adjusting toward {target}, or contact a Reagent Lab Supervisor.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">pH Adjustment Notes (optional)</label>
         <textarea
-          rows={3}
+          rows={2}
           value={(values.ph_notes as string) ?? ''}
           onChange={e => onChange({ ...values, ph_notes: e.target.value })}
           disabled={locked}
-          placeholder="e.g. Final pH reading, volume of reagent added, observations…"
+          placeholder="e.g. volume of reagent added, observations…"
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
         />
       </div>
@@ -1088,6 +1245,12 @@ function StepCard({ wiStep, poStep, index, isActive, orderId, orderNumber, techn
     }
     if (stepType === 'possible_deviation') {
       return values.impacted_quantity != null;
+    }
+    if (stepType === 'ph_adjust') {
+      // Require the meter that was used and an in-range reading — mirrors the
+      // weigh step's scale + in-tolerance gate.
+      const meterOk = !!(values.meter_id as string | undefined);
+      return meterOk && (values.measured_ph != null) && (values.in_tolerance === true);
     }
     return true;
   }

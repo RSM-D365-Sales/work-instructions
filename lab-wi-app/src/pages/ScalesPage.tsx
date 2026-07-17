@@ -1,9 +1,23 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import type { Scale, ScaleConnectionType, ScaleStatus, ScaleConnConfig } from '../types';
-import { Scale as ScaleIcon, Plus, Pencil, Trash2, Wifi, WifiOff, Wrench, CheckCircle2, XCircle, Loader2, RefreshCw } from 'lucide-react';
+import type { Scale, ScaleConnectionType, ScaleStatus, ScaleConnConfig, EquipmentType } from '../types';
+import { Scale as ScaleIcon, Plus, Pencil, Trash2, Wifi, WifiOff, Wrench, CheckCircle2, XCircle, Loader2, RefreshCw, TestTube, Beaker, Boxes } from 'lucide-react';
 import { formatDate } from '../lib/utils';
+
+const EQUIPMENT_TYPE_LABELS: Record<EquipmentType, string> = {
+  balance:   'Balance',
+  ph_meter:  'pH Meter',
+  osmometer: 'Osmometer',
+  other:     'Other',
+};
+
+const EQUIPMENT_TYPE_ICONS: Record<EquipmentType, React.ReactNode> = {
+  balance:   <ScaleIcon size={13} />,
+  ph_meter:  <TestTube size={13} />,
+  osmometer: <Beaker size={13} />,
+  other:     <Boxes size={13} />,
+};
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -37,6 +51,7 @@ const BLANK_FORM = {
   location: '',
   notes: '',
   status: 'active' as ScaleStatus,
+  equipment_type: 'balance' as EquipmentType,
   conn_a_type: 'http_rest' as ScaleConnectionType,
   conn_a_label: 'Primary',
   conn_a_config: { ...EMPTY_CONFIG },
@@ -240,7 +255,7 @@ function ScaleModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 overflow-y-auto py-8">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 p-6 space-y-6">
-        <h2 className="text-lg font-semibold text-gray-900">{editing ? 'Edit Scale' : 'Add Scale'}</h2>
+        <h2 className="text-lg font-semibold text-gray-900">{editing ? 'Edit Equipment' : 'Add Equipment'}</h2>
 
         {/* Identity */}
         <section className="space-y-3">
@@ -278,6 +293,15 @@ function ScaleModal({
             <div className="col-span-2">
               <label className="block text-xs text-gray-500 mb-1">Notes</label>
               <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2} placeholder="Calibration notes, maintenance schedule…" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Type</label>
+              <select value={form.equipment_type} onChange={e => set('equipment_type', e.target.value as EquipmentType)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+                {(Object.keys(EQUIPMENT_TYPE_LABELS) as EquipmentType[]).map(t => (
+                  <option key={t} value={t}>{EQUIPMENT_TYPE_LABELS[t]}</option>
+                ))}
+              </select>
+              <p className="text-[11px] text-gray-400 mt-1">Balances appear in Weigh steps; pH meters in Adjust pH steps.</p>
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Status</label>
@@ -374,7 +398,7 @@ function ScaleModal({
             disabled={saving || !form.name.trim()}
             className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
-            {saving ? 'Saving…' : editing ? 'Save changes' : 'Add scale'}
+            {saving ? 'Saving…' : editing ? 'Save changes' : 'Add equipment'}
           </button>
         </div>
       </div>
@@ -435,6 +459,7 @@ export default function ScalesPage() {
         location:      form.location.trim() || null,
         notes:         form.notes.trim() || null,
         status:        form.status,
+        equipment_type: form.equipment_type,
         conn_a_type:   form.conn_a_type,
         conn_a_label:  form.conn_a_label.trim() || 'Primary',
         conn_a_config: form.conn_a_config,
@@ -497,6 +522,7 @@ export default function ScalesPage() {
       location:       editTarget.location ?? '',
       notes:          editTarget.notes ?? '',
       status:         editTarget.status,
+      equipment_type: editTarget.equipment_type ?? 'balance',
       conn_a_type:    editTarget.conn_a_type,
       conn_a_label:   editTarget.conn_a_label,
       conn_a_config:  editTarget.conn_a_config ?? {},
@@ -513,14 +539,14 @@ export default function ScalesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Scales</h1>
-          <p className="text-sm text-gray-500 mt-1">Connected lab balances and their API configurations</p>
+          <h1 className="text-2xl font-bold text-gray-900">Equipment</h1>
+          <p className="text-sm text-gray-500 mt-1">Connected lab instruments — balances, pH meters, and more</p>
         </div>
         <button
           onClick={openAdd}
           className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
         >
-          <Plus size={16} /> Add Scale
+          <Plus size={16} /> Add Equipment
         </button>
       </div>
 
@@ -530,8 +556,8 @@ export default function ScalesPage() {
       ) : scales.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
           <ScaleIcon size={32} className="mx-auto text-gray-300 mb-3" />
-          <p className="text-gray-500 mb-1">No scales configured yet</p>
-          <button onClick={openAdd} className="text-blue-600 text-sm hover:underline">Add the first scale</button>
+          <p className="text-gray-500 mb-1">No equipment configured yet</p>
+          <button onClick={openAdd} className="text-blue-600 text-sm hover:underline">Add the first instrument</button>
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -539,6 +565,7 @@ export default function ScalesPage() {
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Type</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Model</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Location</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
@@ -556,6 +583,12 @@ export default function ScalesPage() {
                     onClick={() => setExpandedId(expandedId === scale.id ? null : scale.id)}
                   >
                     <td className="px-4 py-3 font-medium text-gray-900">{scale.name}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center gap-1 text-xs text-gray-600">
+                        {EQUIPMENT_TYPE_ICONS[scale.equipment_type ?? 'balance']}
+                        {EQUIPMENT_TYPE_LABELS[scale.equipment_type ?? 'balance']}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-gray-500">
                       {[scale.manufacturer, scale.model].filter(Boolean).join(' ') || '—'}
                     </td>
@@ -605,7 +638,7 @@ export default function ScalesPage() {
                   {/* Expanded detail row */}
                   {expandedId === scale.id && (
                     <tr key={`${scale.id}-detail`} className="bg-blue-50/40">
-                      <td colSpan={7} className="px-6 py-4">
+                      <td colSpan={8} className="px-6 py-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <ConnDetailPanel label={`${scale.conn_a_label} (${CONN_TYPE_LABELS[scale.conn_a_type]})`} config={scale.conn_a_config} preferred={scale.preferred_conn === 1}>
                             <TestConnButton scale={scale} connSlot="a" />
@@ -679,12 +712,12 @@ export default function ScalesPage() {
                 <Trash2 size={20} className="text-red-600" />
               </div>
               <div>
-                <h2 className="text-base font-semibold text-gray-900">Delete scale?</h2>
+                <h2 className="text-base font-semibold text-gray-900">Delete equipment?</h2>
                 <p className="text-sm text-gray-500">{deleteTarget.name}</p>
               </div>
             </div>
             <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-              <strong>This action is irreversible.</strong> The scale record and all its connection configuration will be permanently deleted.
+              <strong>This action is irreversible.</strong> The equipment record and all its connection configuration will be permanently deleted.
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={() => setDeleteTarget(null)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
