@@ -173,6 +173,18 @@ export default function AppLayout() {
               <LogOut size={16} className="shrink-0" />
               {!collapsed && 'Sign Out'}
             </button>
+            <Link
+              to="/work-instructions/workshop-agenda"
+              title={collapsed ? 'Workshop Agenda' : undefined}
+              aria-label="Workshop Agenda"
+              className={cn(
+                'flex items-center text-sm text-gray-600 hover:text-blue-600 transition-colors mt-3',
+                collapsed ? 'justify-center p-2 rounded-lg hover:bg-gray-100 w-full' : 'gap-2 w-full'
+              )}
+            >
+              <CalendarDays size={16} className="shrink-0" />
+              {!collapsed && 'Workshop Agenda'}
+            </Link>
           </div>
         </nav>
       </aside>

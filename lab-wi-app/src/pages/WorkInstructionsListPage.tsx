@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { WorkInstruction } from '../types';
-import { Plus, ChevronRight, Trash2 } from 'lucide-react';
+import { Plus, ChevronRight, Trash2, CalendarDays } from 'lucide-react';
 import { formatDate, wiLineageKey } from '../lib/utils';
 import ListFilters, { toOptions, inDateRange } from '../components/ListFilters';
 
@@ -89,15 +89,24 @@ export default function WorkInstructionsListPage() {
           <h1 className="text-2xl font-bold text-gray-900">Work Instructions</h1>
           <p className="text-sm text-gray-500 mt-1">Production procedures for reagent manufacturing</p>
         </div>
-        {(profile?.role === 'author' || profile?.role === 'admin') && (
+        <div className="flex items-center gap-2">
           <Link
-            to="/work-instructions/new"
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            to="/work-instructions/workshop-agenda"
+            className="flex items-center gap-2 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
           >
-            <Plus size={16} />
-            New WI
+            <CalendarDays size={16} />
+            Workshop Agenda
           </Link>
-        )}
+          {(profile?.role === 'author' || profile?.role === 'admin') && (
+            <Link
+              to="/work-instructions/new"
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              <Plus size={16} />
+              New WI
+            </Link>
+          )}
+        </div>
       </div>
 
       {!isLoading && wis.length > 0 && (

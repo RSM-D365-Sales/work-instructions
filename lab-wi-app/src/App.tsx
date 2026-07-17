@@ -11,6 +11,7 @@ import WorkInstructionsListPage from './pages/WorkInstructionsListPage';
 import WorkInstructionEditorPage from './pages/WorkInstructionEditorPage';
 import WorkInstructionDetailPage from './pages/WorkInstructionDetailPage';
 import WorkInstructionDiffPage from './pages/WorkInstructionDiffPage';
+import WorkshopAgendaPage from './pages/WorkshopAgendaPage';
 import ProductionOrdersListPage from './pages/ProductionOrdersListPage';
 import ProductionOrderNewPage from './pages/ProductionOrderNewPage';
 import ProductionOrderExecutionPage from './pages/ProductionOrderExecutionPage';
@@ -53,6 +54,7 @@ export default function App() {
                   <Route path="/library" element={<StepLibraryPage />} />
                 </Route>
                 <Route path="/work-instructions" element={<WorkInstructionsListPage />} />
+                <Route path="/work-instructions/workshop-agenda" element={<WorkshopAgendaPage />} />
                 <Route path="/work-instructions/:id" element={<WorkInstructionDetailPage />} />
                 <Route path="/work-instructions/:id/diff" element={<WorkInstructionDiffPage />} />
                 <Route element={<ProtectedRoute allowedRoles={['author', 'admin']} />}>

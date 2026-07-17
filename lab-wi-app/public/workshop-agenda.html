@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tentative Agenda — Solution Review Session</title>
+<style>
+  :root{
+    --ink:#14263f;          /* deep navy */
+    --ink-soft:#425068;
+    --muted:#6b7688;
+    --line:#e5e9f0;
+    --bg:#f6f8fb;
+    --card:#ffffff;
+    --accent:#1f7a4d;       /* RSM-leaning green */
+    --accent-soft:#e7f3ec;
+    --break:#94a3b8;
+    --break-soft:#f1f4f8;
+    --lunch:#b7791f;
+    --lunch-soft:#fbf3e3;
+    --wrap:#1e3a5f;
+    --wrap-soft:#e9eff6;
+    /* role colors */
+    --r-admin:#7c3aed;   --r-admin-bg:#f1ebfd;
+    --r-author:#2563eb;  --r-author-bg:#e8f0fe;
+    --r-approver:#1f7a4d;--r-approver-bg:#e7f3ec;
+    --r-operator:#c2410c;--r-operator-bg:#fdece3;
+    --r-lab:#0e7490;     --r-lab-bg:#e2f4f8;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);
+    background:var(--bg);
+    line-height:1.5;
+    font-size:15px;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:32px 24px 64px;}
+
+  /* Header */
+  header.masthead{
+    background:linear-gradient(135deg,#14263f 0%,#1f3a5c 100%);
+    color:#fff;border-radius:16px;padding:32px 34px;position:relative;overflow:hidden;
+  }
+  header.masthead::after{
+    content:"";position:absolute;right:-40px;top:-40px;width:220px;height:220px;
+    background:radial-gradient(circle,rgba(31,122,77,.35),transparent 70%);
+  }
+  .eyebrow{text-transform:uppercase;letter-spacing:.14em;font-size:11px;font-weight:700;color:#8fd6b0;margin:0 0 10px;}
+  header.masthead h1{margin:0;font-size:30px;line-height:1.15;font-weight:800;letter-spacing:-.02em;}
+  header.masthead .sub{margin:8px 0 0;color:#c7d2e0;font-size:15px;max-width:640px;}
+  .facts{display:flex;flex-wrap:wrap;gap:10px 26px;margin-top:22px;position:relative;z-index:1;}
+  .fact{display:flex;flex-direction:column;gap:2px;}
+  .fact .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:#8aa0bd;font-weight:700;}
+  .fact .v{font-size:15px;font-weight:600;color:#fff;}
+  .tent{display:inline-block;margin-top:18px;font-size:11px;font-weight:700;letter-spacing:.08em;
+    text-transform:uppercase;background:rgba(255,255,255,.12);color:#fff;padding:5px 11px;border-radius:999px;}
+
+  /* Info strip */
+  .strip{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;margin-top:20px;}
+  @media (max-width:720px){.strip{grid-template-columns:1fr;}}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;}
+  .panel h2{margin:0 0 12px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);}
+  .flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13.5px;font-weight:600;}
+  .flow .node{background:var(--accent-soft);color:var(--accent);border-radius:8px;padding:5px 10px;}
+  .flow .arrow{color:var(--muted);font-weight:700;}
+  .note{font-size:13px;color:var(--muted);margin:12px 0 0;}
+  .logistics{list-style:none;margin:0;padding:0;font-size:13.5px;}
+  .logistics li{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--line);}
+  .logistics li:last-child{border-bottom:0;}
+  .logistics .lv{font-weight:700;color:var(--ink);}
+
+  /* Roles legend */
+  .roles{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+  .role{font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:999px;letter-spacing:.02em;}
+  .role.admin{color:var(--r-admin);background:var(--r-admin-bg);}
+  .role.author{color:var(--r-author);background:var(--r-author-bg);}
+  .role.approver{color:var(--r-approver);background:var(--r-approver-bg);}
+  .role.operator{color:var(--r-operator);background:var(--r-operator-bg);}
+  .role.lab{color:var(--r-lab);background:var(--r-lab-bg);}
+  .roledesc{font-size:12.5px;color:var(--muted);margin-top:10px;}
+
+  /* Assignment table */
+  table.assign{width:100%;border-collapse:collapse;margin-top:6px;font-size:13.5px;}
+  table.assign th,table.assign td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);}
+  table.assign th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;}
+  table.assign td.blank{color:#c3cad6;font-style:italic;}
+
+  /* Section heading */
+  h2.day{font-size:14px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-soft);
+    margin:34px 0 14px;padding-bottom:8px;border-bottom:2px solid var(--line);}
+
+  /* Timeline blocks */
+  .block{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--accent);
+    border-radius:12px;padding:18px 20px;margin:12px 0;display:grid;grid-template-columns:120px 1fr;gap:20px;}
+  @media (max-width:640px){.block{grid-template-columns:1fr;gap:8px;}}
+  .block .time{font-weight:800;color:var(--ink);font-size:15px;}
+  .block .dur{display:block;font-size:11.5px;font-weight:600;color:var(--muted);margin-top:2px;}
+  .block h3{margin:0 0 3px;font-size:18px;font-weight:750;letter-spacing:-.01em;color:var(--ink);}
+  .block .lead{font-size:13px;color:var(--muted);margin:0 0 12px;}
+  .block .lead b{color:var(--accent);font-weight:700;}
+
+  .seg{border-top:1px solid var(--line);padding-top:11px;margin-top:11px;}
+  .seg:first-of-type{border-top:0;padding-top:0;margin-top:0;}
+  .seg .lbl{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:800;
+    text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
+  .seg.overview .lbl{color:var(--accent);}
+  .seg.hands .lbl{color:#2563eb;}
+  .seg.qa .lbl{color:#b7791f;}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+  .seg.overview .dot{background:var(--accent);}
+  .seg.hands .dot{background:#2563eb;}
+  .seg.qa .dot{background:#b7791f;}
+  .seg ul{margin:4px 0 0;padding-left:20px;}
+  .seg li{margin:3px 0;font-size:14px;color:var(--ink-soft);}
+  .seg li b{color:var(--ink);font-weight:650;}
+  .inline-roles{display:inline-flex;gap:5px;flex-wrap:wrap;vertical-align:middle;margin-left:4px;}
+  .inline-roles .role{font-size:10px;padding:2px 7px;}
+
+  /* Break / lunch variants */
+  .block.break{grid-template-columns:120px 1fr;border-left-color:var(--break);background:var(--break-soft);
+    padding:12px 20px;align-items:center;}
+  .block.break h3{font-size:15px;color:var(--ink-soft);margin:0;}
+  .block.break .time{color:var(--ink-soft);}
+  .block.lunch{border-left-color:var(--lunch);background:var(--lunch-soft);align-items:center;}
+  .block.lunch h3{color:var(--lunch);}
+  .block.lunch .time{color:var(--lunch);}
+  .block.wrap{border-left-color:var(--wrap);background:var(--wrap-soft);}
+  .block.wrap h3{color:var(--wrap);}
+
+  .pill{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+    padding:3px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent);margin-left:8px;vertical-align:middle;}
+
+  /* Parking lot */
+  .parking{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-top:14px;}
+  .parking h3{margin:0 0 6px;font-size:17px;}
+  .parking p{margin:0 0 14px;font-size:13.5px;color:var(--muted);}
+  table.lot{width:100%;border-collapse:collapse;font-size:13px;}
+  table.lot th,table.lot td{border:1px solid var(--line);padding:9px 10px;text-align:left;vertical-align:top;}
+  table.lot th{background:#f4f6fa;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
+  table.lot td{height:34px;}
+  .cat{font-weight:700;font-size:12px;}
+  .cat.like{color:var(--accent);}
+  .cat.gap{color:#c2410c;}
+  .cat.q{color:#2563eb;}
+
+  footer{margin-top:34px;padding-top:18px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+
+  @media print{
+    body{background:#fff;font-size:12px;}
+    .wrap{padding:0;max-width:none;}
+    header.masthead{border-radius:0;}
+    .block,.panel,.parking{break-inside:avoid;box-shadow:none;}
+    .block{border:1px solid #d8dee8;border-left:5px solid var(--accent);}
+    h2.day{break-after:avoid;}
+    .no-print{display:none;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">RSM &nbsp;·&nbsp; VIBE — Lab Reagent Production Platform</p>
+    <h1>Solution Review Session — Working Agenda</h1>
+    <p class="sub">A hands-on walkthrough of the Work Instruction &amp; Production platform. RSM leads each area, then your team drives the system in role, and we close every topic with open discussion.</p>
+    <div class="facts">
+      <div class="fact"><span class="k">Date</span><span class="v">Monday, 20 July 2026</span></div>
+      <div class="fact"><span class="k">Time</span><span class="v">10:00 AM – 3:00 PM</span></div>
+      <div class="fact"><span class="k">Format</span><span class="v">Guided demo + hands-on</span></div>
+      <div class="fact"><span class="k">Location</span><span class="v">________________</span></div>
+    </div>
+    <span class="tent">Tentative — for internal RSM review</span>
+  </header>
+
+  <!-- HOW IT RUNS + LOGISTICS -->
+  <div class="strip">
+    <div class="panel">
+      <h2>How each section runs</h2>
+      <div class="flow">
+        <span class="node">RSM Overview</span><span class="arrow">→</span>
+        <span class="node">Hands-On (in role)</span><span class="arrow">→</span>
+        <span class="node">Q&amp;A / Wrap-up</span>
+      </div>
+      <p class="note">An RSM team member frames each area, then prospect users work the system with different roles. Every "what do you like / what's missing" item goes to the <b>Open Items</b> parking lot and is reviewed together at the end of the day.</p>
+      <div class="roles">
+        <span class="role admin">Admin</span>
+        <span class="role author">Author</span>
+        <span class="role approver">Approver</span>
+        <span class="role operator">Operator</span>
+        <span class="role lab">Lab</span>
+      </div>
+      <p class="roledesc">The platform is role-aware — menus and permissions change by role. Assigning different roles across your team is what makes the approval and production hand-offs feel real.</p>
+    </div>
+    <div class="panel">
+      <h2>Logistics</h2>
+      <ul class="logistics">
+        <li><span>Start</span><span class="lv">10:00 AM</span></li>
+        <li><span>Lunch</span><span class="lv">45 min (12:30)</span></li>
+        <li><span>Wrap-up &amp; open items</span><span class="lv">2:45 PM</span></li>
+        <li><span>Close</span><span class="lv">3:00 PM</span></li>
+      </ul>
+      <p class="note">Short breaks fall naturally between sections — the start times already allow for them. We'll flex on the areas that spark the most discussion.</p>
+    </div>
+  </div>
+
+  <!-- ROLE ASSIGNMENTS -->
+  <div class="panel" style="margin-top:16px;">
+    <h2>Suggested role assignments (fill in Monday)</h2>
+    <table class="assign">
+      <thead><tr><th style="width:33%">Prospect user</th><th style="width:33%">Role for the day</th><th>Notes / rotate to</th></tr></thead>
+      <tbody>
+        <tr><td class="blank">name…</td><td><span class="role admin">Admin</span></td><td class="blank">users, labs, equipment, notifications</td></tr>
+        <tr><td class="blank">name…</td><td><span class="role author">Author</span></td><td class="blank">builds &amp; edits work instructions</td></tr>
+        <tr><td class="blank">name…</td><td><span class="role approver">Approver</span></td><td class="blank">approves others' WIs, planned orders</td></tr>
+        <tr><td class="blank">name…</td><td><span class="role operator">Operator</span></td><td class="blank">runs production on the floor</td></tr>
+        <tr><td class="blank">name…</td><td><span class="role lab">Lab</span></td><td class="blank">reagent orders / receiving</td></tr>
+      </tbody>
+    </table>
+    <p class="note">Tip: have people <b>swap roles</b> after the Work Instructions block so everyone experiences both authoring and approving, then both operating and reviewing.</p>
+  </div>
+
+  <h2 class="day">Session Schedule</h2>
+
+  <!-- 1. WELCOME + OVERVIEW + LOGIN + SECURITY -->
+  <div class="block">
+    <div><div class="time">10:00</div><span class="dur">70 min · to 11:10</span></div>
+    <div>
+      <h3>Welcome, Overview, Login, Roles &amp; Security</h3>
+      <p class="lead">RSM Lead: <b>________________</b></p>
+      <div class="seg overview">
+        <span class="lbl"><span class="dot"></span>RSM Overview</span>
+        <ul>
+          <li>Introductions, goals for the day, and how the session will run</li>
+          <li>The big picture: <b>Dashboard</b> tour and the reagent-production lifecycle — <b>Work Instruction → Approval → Production Order → Execution → QC → Scheduling</b></li>
+          <li>How the platform maps to today's Uniflow process (and what's changing)</li>
+          <li>Login &amp; the role model — <b>Admin, Author, Approver, Operator, Lab</b> — and what each can see and do</li>
+          <li>User management, labs, and equipment setup (Admin view); the Notifications inbox; default-lab selection</li>
+        </ul>
+      </div>
+      <div class="seg hands">
+        <span class="lbl"><span class="dot"></span>Hands-On — everyone signs in, in role
+          <span class="inline-roles"><span class="role admin">Admin</span><span class="role author">Author</span><span class="role approver">Approver</span><span class="role operator">Operator</span><span class="role lab">Lab</span></span></span>
+        <ul>
+          <li>Each user logs in with their assigned role and explores which menus appear</li>
+          <li><b>Test the boundaries</b>: an Operator can't edit Work Instructions; an Author can't approve their own; only Admin sees Users / Equipment / Labs</li>
+          <li>Admin: quick look at creating a user and assigning a role</li>
+        </ul>
+      </div>
+      <div class="seg qa">
+        <span class="lbl"><span class="dot"></span>Q&amp;A / Wrap-up</span>
+        <ul>
+          <li>Set expectations — what does a successful day look like? Does this role &amp; security model fit your segregation-of-duties needs? Log gaps to Open Items.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. WORK INSTRUCTIONS -->
+  <div class="block">
+    <div><div class="time">11:20</div><span class="dur">70 min · to 12:30</span></div>
+    <div>
+      <h3>Work Instructions <span class="pill">Core</span></h3>
+      <p class="lead">RSM Lead: <b>________________</b></p>
+      <div class="seg overview">
+        <span class="lbl"><span class="dot"></span>RSM Overview</span>
+        <ul>
+          <li>Anatomy of a Work Instruction — product / reagent-item link, target molarity, scheduled time</li>
+          <li>The <b>Step Library</b> and step types: gather reagents, weigh, dispense, mix, stir/vortex/invert, pH adjust, heat/cool, transfer, bring-to-volume, cap, package, attachments, QC, and more</li>
+          <li>The editor experience — step navigator, insert-a-step-between, collapse/expand, drag-to-reorder</li>
+          <li>Versioning, the version <b>diff</b> view, and the approval workflow</li>
+        </ul>
+      </div>
+      <div class="seg hands">
+        <span class="lbl"><span class="dot"></span>Hands-On — build &amp; approve
+          <span class="inline-roles"><span class="role author">Author</span><span class="role approver">Approver</span></span></span>
+        <ul>
+          <li><b>Each user picks their own existing Work Instruction</b> (e.g. <i>Acidified Methanol</i>, <i>NSE Muscles Phosphate Buffer</i>) — or creates a new one</li>
+          <li><b>Walk through the steps</b> together; add or edit a step to see the authoring tools</li>
+          <li><b>Send for approval</b></li>
+          <li><b>Each person approves someone else's</b> — cross-review so no one approves their own work</li>
+        </ul>
+      </div>
+      <div class="seg qa">
+        <span class="lbl"><span class="dot"></span>Q&amp;A — likes &amp; gaps</span>
+        <ul>
+          <li><b>What do you like? What are you missing?</b> This is a rich discussion area — capture everything to Open Items.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- LUNCH -->
+  <div class="block lunch">
+    <div><div class="time">12:30</div><span class="dur">45 min · to 1:15</span></div>
+    <div><h3>🍽 Lunch</h3></div>
+  </div>
+
+  <!-- 3. PRODUCTION ORDERS -->
+  <div class="block">
+    <div><div class="time">1:15</div><span class="dur">60 min · to 2:15</span></div>
+    <div>
+      <h3>Production Orders — Execution <span class="pill">Core</span></h3>
+      <p class="lead">RSM Lead: <b>________________</b></p>
+      <div class="seg overview">
+        <span class="lbl"><span class="dot"></span>RSM Overview</span>
+        <ul>
+          <li>Creating a production order from an approved Work Instruction (and, later, from D365 planned orders)</li>
+          <li>The execution experience — step-by-step guidance, scale scan &amp; <b>weigh tolerance gating</b>, volumetric <b>dispense</b>, attachments</li>
+          <li><b>Possible-deviation</b> flagging → notify supervisor (Microsoft Teams)</li>
+          <li>End-of-run <b>QC tests</b>, order statuses (awaiting QC, complete), and the Certificate of Analysis</li>
+        </ul>
+      </div>
+      <div class="seg hands">
+        <span class="lbl"><span class="dot"></span>Hands-On — run a production order
+          <span class="inline-roles"><span class="role operator">Operator</span><span class="role approver">Approver</span></span></span>
+        <ul>
+          <li><b>Each user manually creates their own production order</b> for their Work Instruction</li>
+          <li><b>Happy Path</b> — execute the run end-to-end, weighing / dispensing within tolerance</li>
+          <li><b>Deviation — play with it</b> — flag a possible deviation and trigger the supervisor notification</li>
+          <li><b>QC Checks</b> — complete the quality checks and review the result / certificate</li>
+        </ul>
+      </div>
+      <div class="seg qa">
+        <span class="lbl"><span class="dot"></span>Q&amp;A — Recap</span>
+        <ul>
+          <li>Recap the run: what felt natural, what would you change on the floor? Log to Open Items.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. PLANNED / SCHEDULING -->
+  <div class="block">
+    <div><div class="time">2:25</div><span class="dur">20 min · to 2:45</span></div>
+    <div>
+      <h3>Planned Production Orders &amp; Scheduling</h3>
+      <p class="lead">RSM Lead: <b>________________</b></p>
+      <div class="seg overview">
+        <span class="lbl"><span class="dot"></span>RSM Overview</span>
+        <ul>
+          <li><b>Planned Production Orders</b> (from D365) and <b>Unscheduled Orders</b></li>
+          <li>The <b>Production Schedule</b> / Gantt — how a Work Instruction's scheduled time blocks the calendar</li>
+          <li>The surrounding modules that complete the picture: <b>Inventory</b> &amp; on-hand, <b>Cycle Count</b>, <b>Reagent Orders</b> &amp; receiving, and <b>Quality Trends</b> dashboards</li>
+        </ul>
+      </div>
+      <div class="seg hands">
+        <span class="lbl"><span class="dot"></span>Hands-On / Walkthrough
+          <span class="inline-roles"><span class="role approver">Approver</span><span class="role admin">Admin</span></span></span>
+        <ul>
+          <li>View the schedule, open a planned order, and see how it becomes a production run</li>
+        </ul>
+      </div>
+      <div class="seg qa">
+        <span class="lbl"><span class="dot"></span>Q&amp;A</span>
+        <ul>
+          <li>How does this fit your planning cadence and D365 integration? Log to Open Items.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. WRAP-UP -->
+  <div class="block wrap">
+    <div><div class="time">2:45</div><span class="dur">15 min · to 3:00</span></div>
+    <div>
+      <h3>Daily Wrap-up &amp; Open Items Review</h3>
+      <p class="lead">RSM Lead: <b>________________</b> · whole group</p>
+      <div class="seg overview" style="border-top:0;padding-top:0;margin-top:0;">
+        <span class="lbl"><span class="dot"></span>Together</span>
+        <ul>
+          <li><b>Walk the full Open Items list</b> captured during the day — likes, gaps, and questions</li>
+          <li>Confirm priorities, owners, and anything needing a follow-up answer from RSM</li>
+          <li>Agree next steps and the follow-up date</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- PARKING LOT -->
+  <div class="parking">
+    <h3>Open Items / Parking Lot</h3>
+    <p>Capture every "what I like," "what's missing," and open question here as we go — this is the list we review at 2:45.</p>
+    <table class="lot">
+      <thead><tr><th style="width:70px">#</th><th style="width:110px">Section</th><th style="width:90px">Type</th><th>Item</th><th style="width:110px">Owner</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td></td><td><span class="cat like">Like</span></td><td></td><td></td></tr>
+        <tr><td>2</td><td></td><td><span class="cat gap">Gap</span></td><td></td><td></td></tr>
+        <tr><td>3</td><td></td><td><span class="cat q">Question</span></td><td></td><td></td></tr>
+        <tr><td>4</td><td></td><td></td><td></td><td></td></tr>
+        <tr><td>5</td><td></td><td></td><td></td><td></td></tr>
+        <tr><td>6</td><td></td><td></td><td></td><td></td></tr>
+        <tr><td>7</td><td></td><td></td><td></td><td></td></tr>
+        <tr><td>8</td><td></td><td></td><td></td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    <span>Tentative agenda — prepared for internal RSM review. Times and content subject to change.</span>
+    <span>RSM · VIBE Lab Reagent Production Platform</span>
+  </footer>
+
+</div>
+</body>
+</html>
