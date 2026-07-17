@@ -32,6 +32,8 @@ dump it is one cell with `- ` continuation markers — the agent handles both.)
 
 ---
 
+<!-- ─────────── COPY — Block A (paste as the USER message) FROM HERE ─────────── -->
+
 ```
 materialId:        N-13200
 materialVersionId: N-13200-6
@@ -116,6 +118,8 @@ formPartValues
   part formParts_defectRate_17
 ```
 
+<!-- ─────────── COPY — Block A TO HERE ─────────── -->
+
 ---
 
 ## Block B — the assistant message (OUTPUT)
@@ -124,6 +128,8 @@ Everything between the rules below, verbatim. This is the agent's target: two se
 then report.
 
 ---
+
+<!-- ─────────── COPY — Block B (paste as the ASSISTANT message) FROM HERE ─────────── -->
 
 ## 1. SQL script
 
@@ -392,6 +398,8 @@ diluent in step 4 (`bring_to_volume` carries the diluent as text, not a linked i
 5. **Custom steps introduced: 0** — nothing to review here, which is the goal. (Reported for
    every recipe per R13 so the batch-level custom rate stays visible.)
 6. **WI is `status='draft'`** — route through the normal approval workflow. Do not auto-approve.
+
+<!-- ─────────── COPY — Block B TO HERE ─────────── -->
 
 ---
 
