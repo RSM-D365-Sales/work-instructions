@@ -1,10 +1,19 @@
-import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useState, useMemo, useEffect } from 'react';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { WorkInstruction, Profile } from '../types';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, Info, GitBranch } from 'lucide-react';
+import { wiLineageKey, formatDate } from '../lib/utils';
+
+/** Product-first label for a formula: "FG-PBS-1X · PBS 1X pH 7.4 — <title>".
+ *  The title is appended only when it adds something over the product name. */
+function formulaLabel(wi: WorkInstruction): string {
+  const itemNumber = (wi as any).reagent_item?.item_number as string | undefined;
+  const head = [itemNumber, wi.product_name].filter(Boolean).join(' · ');
+  return wi.title && wi.title !== wi.product_name ? `${head} — ${wi.title}` : head;
+}
 
 export default function ProductionOrderNewPage() {
   const navigate = useNavigate();
@@ -44,7 +53,7 @@ export default function ProductionOrderNewPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('work_instructions')
-        .select('*')
+        .select('*, reagent_item:reagent_items(item_number, product_name)')
         .eq('status', 'approved')
         .order('title');
       if (error) throw error;
@@ -52,11 +61,45 @@ export default function ProductionOrderNewPage() {
     },
   });
 
+  // You order a *product*, not a work instruction: collapse every approved WI
+  // into its version lineage (item + title) and offer only the newest approved
+  // version of each. Approving v2 doesn't demote v1, so without this both show
+  // up and an operator can pick a superseded formula. Matches how the planned-
+  // order firming and insufficient-stock flows already resolve a WI.
+  const currentFormulas = useMemo(() => {
+    const byLineage = new Map<string, WorkInstruction>();
+    for (const wi of approvedWIs) {
+      const key = wiLineageKey(wi);
+      const cur = byLineage.get(key);
+      if (!cur || wi.version > cur.version) byLineage.set(key, wi);
+    }
+    return [...byLineage.values()].sort((a, b) => formulaLabel(a).localeCompare(formulaLabel(b)));
+  }, [approvedWIs]);
+
+  const selectedWI = currentFormulas.find(w => w.id === wiId) ?? null;
+
+  // A ?wi= deep link (the "Start Production" button on a WI detail page) can
+  // point at a superseded version — resolve it forward to the current one and
+  // say so rather than silently producing the old formula.
+  const linkedWI = preselectedWI ? approvedWIs.find(w => w.id === preselectedWI) ?? null : null;
+  const supersededFrom =
+    linkedWI && selectedWI && linkedWI.id !== selectedWI.id ? linkedWI.version : null;
+
+  const formulasKey = currentFormulas.map(f => f.id).join(',');
+  useEffect(() => {
+    if (!linkedWI) return;
+    const latest = currentFormulas.find(f => wiLineageKey(f) === wiLineageKey(linkedWI));
+    if (latest && latest.id !== wiId) setWiId(latest.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preselectedWI, formulasKey]);
+
   const createMutation = useMutation({
     mutationFn: async () => {
-      if (!wiId || !lotNumber.trim()) throw new Error('Work instruction and lot number required');
+      if (!wiId || !lotNumber.trim()) throw new Error('Product and lot number required');
       if (!requiredBy) throw new Error('Requirement date is required');
-      const selectedWI = approvedWIs.find(w => w.id === wiId);
+      // Guard the write too, not just the picker: only the current approved
+      // version of a formula may be produced.
+      if (!selectedWI) throw new Error('Select a current approved formula to produce.');
 
       // Schedule window is optional. If a start is provided, derive end
       // as start + WI.scheduled_minutes (fallback 60). Otherwise leave
@@ -64,7 +107,7 @@ export default function ProductionOrderNewPage() {
       let startIso: string | null = null;
       let endIso:   string | null = null;
       if (scheduledStart) {
-        const minutes = selectedWI?.scheduled_minutes ?? 60;
+        const minutes = selectedWI.scheduled_minutes ?? 60;
         startIso = new Date(scheduledStart).toISOString();
         endIso   = new Date(new Date(scheduledStart).getTime() + minutes * 60_000).toISOString();
       }
@@ -72,8 +115,8 @@ export default function ProductionOrderNewPage() {
       const { data, error } = await supabase
         .from('production_orders')
         .insert({
-          work_instruction_id: wiId,
-          wi_version: selectedWI?.version ?? null,
+          work_instruction_id: selectedWI.id,
+          wi_version: selectedWI.version,
           lot_number: lotNumber.trim(),
           batch_size: batchSize ? parseFloat(batchSize) : null,
           batch_size_unit: batchUnit,
@@ -126,21 +169,57 @@ export default function ProductionOrderNewPage() {
           A production order number (<span className="font-mono">MAN######</span>) is assigned automatically on save.
         </p>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Work Instruction *</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Product *</label>
           <select
             value={wiId}
             onChange={e => setWiId(e.target.value)}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">Select an approved work instruction…</option>
-            {approvedWIs.map(wi => (
+            <option value="">Select a product to produce…</option>
+            {currentFormulas.map(wi => (
               <option key={wi.id} value={wi.id}>
-                {wi.title} v{wi.version} — {wi.product_name}{wi.target_molarity != null ? ` (${wi.target_molarity} M)` : ''}
+                {formulaLabel(wi)}{wi.target_molarity != null ? ` (${wi.target_molarity} M)` : ''}
               </option>
             ))}
           </select>
-          {approvedWIs.length === 0 && (
+          {currentFormulas.length === 0 ? (
             <p className="text-xs text-yellow-600 mt-1">No approved work instructions yet. An approver must approve one first.</p>
+          ) : (
+            <p className="text-xs text-gray-400 mt-1">
+              Each product runs against its current approved work instruction — superseded versions can't be produced.
+            </p>
+          )}
+
+          {/* Which formula this resolves to — the version is chosen for you, but
+              you should still be able to see (and open) exactly what will run. */}
+          {selectedWI && (
+            <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50/60 px-3 py-2 flex items-start gap-2">
+              <Info size={14} className="text-blue-600 mt-0.5 shrink-0" />
+              <div className="min-w-0 flex-1 text-xs">
+                <p className="text-blue-900">
+                  Producing <span className="font-semibold">{selectedWI.title} v{selectedWI.version}</span>
+                  {selectedWI.approved_at ? ` · approved ${formatDate(selectedWI.approved_at)}` : ''}
+                  {selectedWI.scheduled_minutes != null ? ` · ${selectedWI.scheduled_minutes} min` : ''}
+                </p>
+                <Link
+                  to={`/work-instructions/${selectedWI.id}`}
+                  className="text-blue-700 font-medium hover:underline"
+                >
+                  View the work instruction
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {/* Deep-linked from a superseded version's "Start Production" button */}
+          {supersededFrom != null && selectedWI && (
+            <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 flex items-start gap-2">
+              <GitBranch size={14} className="text-amber-600 mt-0.5 shrink-0" />
+              <p className="text-xs text-amber-800">
+                You came from <span className="font-semibold">v{supersededFrom}</span>, which has been superseded —
+                this order will run the current approved version, <span className="font-semibold">v{selectedWI.version}</span>.
+              </p>
+            </div>
           )}
         </div>
         <div>
@@ -184,15 +263,14 @@ export default function ProductionOrderNewPage() {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             {(() => {
-              const wi = approvedWIs.find(w => w.id === wiId);
-              const mins = wi?.scheduled_minutes ?? null;
+              const mins = selectedWI?.scheduled_minutes ?? null;
               if (!scheduledStart) return (
                 <p className="text-xs text-gray-500 mt-1">
                   Leave blank to schedule later from the <strong>Unscheduled Orders</strong> page.
                 </p>
               );
-              if (!wi) return (
-                <p className="text-xs text-gray-400 mt-1">Pick a work instruction to see its scheduled duration.</p>
+              if (!selectedWI) return (
+                <p className="text-xs text-gray-400 mt-1">Pick a product to see its scheduled duration.</p>
               );
               if (mins == null) return (
                 <p className="text-xs text-yellow-600 mt-1">

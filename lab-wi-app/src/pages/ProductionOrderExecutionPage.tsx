@@ -7,6 +7,7 @@ import type { ProductionOrder, WIStep, POStep, StepType, Scale, Profile, QCTest,
 import { calculateTolerance, cn } from '../lib/utils';
 import { evaluateQC, formatSpec } from '../lib/qc';
 import { createNotification } from '../lib/notifications';
+import OrderMaterialsSummary from '../components/OrderMaterialsSummary';
 import {
   ArrowLeft, CheckCircle, Circle, ChevronRight, Scale as ScaleIcon, Timer,
   FlaskConical, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings,
@@ -1949,6 +1950,11 @@ export default function ProductionOrderExecutionPage() {
           </div>
         </div>
       )}
+
+      {/* Materials — the bill of materials for the run, rolled up from the
+          WI's steps. Shown before the order starts so the operator can stage
+          the bench, and kept visible during the run for reference. */}
+      {wiSteps.length > 0 && <OrderMaterialsSummary steps={wiSteps} />}
 
       {/* Steps */}
       {isStarted && (

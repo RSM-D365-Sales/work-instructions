@@ -5,13 +5,12 @@ import { useAuth } from '../context/AuthContext';
 import type { ReagentItem, QCTest, QCResultType } from '../types';
 import { cn } from '../lib/utils';
 import { QC_PRESETS, formatSpec } from '../lib/qc';
+import { GHS_LABELS, GHS_COLORS } from '../lib/ghs';
 import {
   FlaskConical, Plus, Search, Pencil, Trash2, RefreshCw,
   X, ExternalLink, ChevronDown, ChevronUp, Info, Settings2,
   CheckCircle, AlertTriangle, Loader, Eye, EyeOff, ClipboardCheck,
 } from 'lucide-react';
-
-// ─── GHS pictogram labels ─────────────────────────────────────────────────────
 
 // ─── D365 config type ────────────────────────────────────────────────────────
 interface D365Config {
@@ -28,30 +27,6 @@ interface D365Config {
   last_sync_count?: number;
   last_sync_error?: string;
 }
-const GHS_LABELS: Record<string, string> = {
-  GHS01: 'Explosive',
-  GHS02: 'Flammable',
-  GHS03: 'Oxidising',
-  GHS04: 'Compressed Gas',
-  GHS05: 'Corrosive',
-  GHS06: 'Toxic',
-  GHS07: 'Harmful/Irritant',
-  GHS08: 'Health Hazard',
-  GHS09: 'Environmental',
-};
-
-const GHS_COLORS: Record<string, string> = {
-  GHS01: 'bg-red-100 text-red-800',
-  GHS02: 'bg-orange-100 text-orange-800',
-  GHS03: 'bg-yellow-100 text-yellow-800',
-  GHS04: 'bg-blue-100 text-blue-800',
-  GHS05: 'bg-purple-100 text-purple-800',
-  GHS06: 'bg-red-100 text-red-900',
-  GHS07: 'bg-amber-100 text-amber-800',
-  GHS08: 'bg-pink-100 text-pink-800',
-  GHS09: 'bg-green-100 text-green-800',
-};
-
 const PURITY_GRADES = [
   'ACS Grade',
   'HPLC Grade',
