@@ -12,21 +12,29 @@ heading like `### Worked example — study this before converting anything`, kee
 `INPUT:` / `OUTPUT:` framing.
 
 Chosen because it is small but exercises the grouping rule (R1), a merged attachment pair
-(R4), a weigh with a defaulted tolerance (R8), a Q.S. with no quantity, a merged separator
-(R5), and the defectRate tail (R7).
+(R4), a weigh with a defaulted tolerance (R9), a Q.S. with no quantity, a merged separator
+(R5), and the defectRate tail (R7). It is a representative **reagent-lab** recipe — the
+covered Phase-1 subset (Part 0 of the instructions).
+
+> Identity note: this recipe's `materialVersionId` is `N-13200-6`, so its `materialId` is
+> `N-13200` and its Uniflow version is `6`. The FG's `item_number` is the **materialId**
+> (`N-13200`), not the version-stamped code — that is the v2 correction from the Word-doc
+> era, and it's why the SQL below uses `N-13200`.
 
 ---
 
 ## Block A — the user message (INPUT)
 
-Everything between the rules below, verbatim.
+The four dump fields, verbatim. (`formPlan` is shown indented for readability; in the real
+dump it is one cell with `- ` continuation markers — the agent handles both.)
 
 ---
 
 ```
-N-13200-6 -- NSE Muscles Phosphate Buffer
-
-FormPlan for N-13200-6 -- NSE Muscles Phosphate Buffer
+materialId:        N-13200
+materialVersionId: N-13200-6
+description:       NSE Muscles Phosphate Buffer
+formPlan:
 formPartValues
   part formParts_text_0
     parameter formParts_instructions_0
@@ -137,11 +145,11 @@ BEGIN
     RAISE EXCEPTION 'No author/admin profile found to own the migrated work instruction.';
   END IF;
 
-  -- ── 1. The finished good ─────────────────────────────────────────────────
+  -- ── 1. The finished good (item_number = Uniflow materialId) ──────────────
   INSERT INTO public.reagent_items
     (item_number, item_type, product_name, unit_of_measure, is_active, lot_controlled, notes)
   VALUES
-    ('N-13200-6', 'FG', 'NSE Muscles Phosphate Buffer', 'mL', true, true,
+    ('N-13200', 'FG', 'NSE Muscles Phosphate Buffer', 'mL', true, true,
      'Migrated from Uniflow — needs D365 item mapping')
   ON CONFLICT (item_number) DO UPDATE
     SET product_name = EXCLUDED.product_name, updated_at = now()
@@ -166,14 +174,17 @@ BEGIN
      AND title = 'NSE Muscles Phosphate Buffer'
      AND description LIKE 'Migrated from Uniflow%';   -- steps cascade
 
-  -- ── 4. The work instruction (draft v1) ───────────────────────────────────
+  -- ── 4. The work instruction (draft v1, Uniflow provenance kept) ──────────
   INSERT INTO public.work_instructions
-    (title, description, product_name, reagent_item_id, version, status, scheduled_minutes, created_by)
+    (title, description, product_name, reagent_item_id, version, status, scheduled_minutes,
+     uniflow_material_id, uniflow_version_id, uniflow_version, created_by)
   VALUES
     ('NSE Muscles Phosphate Buffer',
      'Migrated from Uniflow N-13200-6.',
      'NSE Muscles Phosphate Buffer',
-     v_item, 1, 'draft', 60, v_author)
+     v_item, 1, 'draft', 60,
+     'N-13200', 'N-13200-6', 6,
+     v_author)
   RETURNING id INTO v_wi;
 
   -- ── 5. Steps ─────────────────────────────────────────────────────────────
@@ -323,14 +334,14 @@ SELECT wi.title, wi.version, wi.status, ri.item_number, count(s.id) AS steps
   FROM public.work_instructions wi
   JOIN public.reagent_items ri ON ri.id = wi.reagent_item_id
   LEFT JOIN public.wi_steps s ON s.work_instruction_id = wi.id
- WHERE ri.item_number = 'N-13200-6'
+ WHERE ri.item_number = 'N-13200'
  GROUP BY wi.title, wi.version, wi.status, ri.item_number;
 
 SELECT s.step_order, s.parameters->>'_step_type' AS step_type, s.name
   FROM public.wi_steps s
   JOIN public.work_instructions wi ON wi.id = s.work_instruction_id
   JOIN public.reagent_items ri ON ri.id = wi.reagent_item_id
- WHERE ri.item_number = 'N-13200-6'
+ WHERE ri.item_number = 'N-13200'
  ORDER BY s.step_order;
 ```
 
@@ -368,8 +379,9 @@ grid's 500.0 mL total).
    reagent lab before approving.
 2. **`scheduled_minutes = 60` is an estimate** (buffer preparation). Uniflow's `processingTime`
    was not available in this input.
-3. **4 new `reagent_items` created with Uniflow storeroom IDs as `item_number`**
-   (`N-13200-6`, `49534`, `48516`, `48364`) — all need a D365 item mapping pass.
+3. **4 new `reagent_items` created with Uniflow IDs as `item_number`**
+   (`N-13200` the FG, plus storeroom IDs `49534`, `48516`, `48364`) — all need a
+   D365 item mapping pass.
 4. **Step 4 (Q.S.) has `quantity: null`** — the "to 500 mL" target survives in the step name
    only. Rocket Ship has no Q.S. step type.
 5. **WI is `status='draft'`** — route through the normal approval workflow. Do not auto-approve.

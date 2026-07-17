@@ -33,11 +33,11 @@ BEGIN
     RAISE EXCEPTION 'No author/admin profile found to own the migrated work instruction.';
   END IF;
 
-  -- ── 1. The finished good ─────────────────────────────────────────────────
+  -- ── 1. The finished good (item_number = Uniflow materialId) ──────────────
   INSERT INTO public.reagent_items
     (item_number, item_type, product_name, unit_of_measure, is_active, lot_controlled, notes)
   VALUES
-    ('N-13200-6', 'FG', 'NSE Muscles Phosphate Buffer', 'mL', true, true,
+    ('N-13200', 'FG', 'NSE Muscles Phosphate Buffer', 'mL', true, true,
      'Migrated from Uniflow — needs D365 item mapping')
   ON CONFLICT (item_number) DO UPDATE
     SET product_name = EXCLUDED.product_name, updated_at = now()
@@ -63,14 +63,19 @@ BEGIN
      AND title = 'NSE Muscles Phosphate Buffer'
      AND description LIKE 'Migrated from Uniflow%';   -- steps cascade
 
-  -- ── 4. The work instruction (draft v1) ───────────────────────────────────
+  -- ── 4. The work instruction (draft v1, Uniflow provenance kept) ──────────
+  -- Rocket Ship version always starts at 1; the Uniflow version (6, parsed from
+  -- materialVersionId 'N-13200-6') is preserved as provenance (migration 050).
   INSERT INTO public.work_instructions
-    (title, description, product_name, reagent_item_id, version, status, scheduled_minutes, created_by)
+    (title, description, product_name, reagent_item_id, version, status, scheduled_minutes,
+     uniflow_material_id, uniflow_version_id, uniflow_version, created_by)
   VALUES
     ('NSE Muscles Phosphate Buffer',
      'Migrated from Uniflow N-13200-6.',
      'NSE Muscles Phosphate Buffer',
-     v_item, 1, 'draft', 60, v_author)
+     v_item, 1, 'draft', 60,
+     'N-13200', 'N-13200-6', 6,
+     v_author)
   RETURNING id INTO v_wi;
 
   -- ── 5. Steps ─────────────────────────────────────────────────────────────
@@ -221,7 +226,7 @@ SELECT wi.title, wi.version, wi.status, ri.item_number, count(s.id) AS steps
   FROM public.work_instructions wi
   JOIN public.reagent_items ri ON ri.id = wi.reagent_item_id
   LEFT JOIN public.wi_steps s ON s.work_instruction_id = wi.id
- WHERE ri.item_number = 'N-13200-6'
+ WHERE ri.item_number = 'N-13200'
  GROUP BY wi.title, wi.version, wi.status, ri.item_number;
 
 -- The migrated step list, in order:
@@ -229,7 +234,7 @@ SELECT s.step_order, s.parameters->>'_step_type' AS step_type, s.name
   FROM public.wi_steps s
   JOIN public.work_instructions wi ON wi.id = s.work_instruction_id
   JOIN public.reagent_items ri ON ri.id = wi.reagent_item_id
- WHERE ri.item_number = 'N-13200-6'
+ WHERE ri.item_number = 'N-13200'
  ORDER BY s.step_order;
 
 -- Materials checksum — every row from the Uniflow Materials table must appear:
@@ -238,7 +243,7 @@ SELECT s.step_order, s.parameters->>'_step_type' AS step_type, s.name
 --   49534 CLRW  500.0 mL  (400 mL + Q.S. to 500) → steps 2 + 4
 SELECT item_number, item_type, product_name, unit_of_measure, lot_controlled
   FROM public.reagent_items
- WHERE item_number IN ('N-13200-6', '49534', '48516', '48364')
+ WHERE item_number IN ('N-13200', '49534', '48516', '48364')
  ORDER BY item_type, item_number;
 
 -- ── NEEDS HUMAN REVIEW ────────────────────────────────────────────────────────
@@ -246,7 +251,7 @@ SELECT item_number, item_type, product_name, unit_of_measure, lot_controlled
 --     carries no tolerance. Out-of-tolerance BLOCKS step completion, so confirm
 --     this with the reagent lab before approving.
 --  2. scheduled_minutes = 60 is an estimate (Uniflow processingTime not mapped).
---  3. reagent_items 49534 / 48516 / 48364 / N-13200-6 were created with Uniflow
+--  3. reagent_items N-13200 (FG) / 49534 / 48516 / 48364 were created with Uniflow
 --     storeroom IDs as item_number — they need a D365 item mapping pass.
 --  4. Step 4 (Q.S.) has quantity = null; the "to 500 mL" target lives in the step
 --     name only. Rocket Ship has no Q.S. step type.

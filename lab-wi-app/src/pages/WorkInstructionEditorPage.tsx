@@ -8,6 +8,7 @@ import {
   Plus, Trash2, GripVertical, Save, Send, ChevronDown, ChevronUp, ArrowLeft,
   FlaskConical, Scale as ScaleIcon, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings,
   Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal, Paperclip,
+  ChevronsDownUp, ChevronsUpDown,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -637,8 +638,11 @@ interface StepRowProps {
   canDrag: boolean;
   isDragging: boolean;
   isDropTarget: boolean;
+  open: boolean;
+  highlight: boolean;
   gatheredInputs: { material_name: string; quantity: number; unit: string; lot_controlled?: boolean }[];
   reagentItems: { id: string; item_number: string; product_name: string; unit_of_measure: string; lot_controlled: boolean }[];
+  onToggle: (localId: string) => void;
   onMove: (idx: number, dir: 1 | -1) => void;
   onRemove: (localId: string) => void;
   onChange: (localId: string, patch: Partial<WIStep & { step_type: StepType }>) => void;
@@ -647,12 +651,13 @@ interface StepRowProps {
   onDragEnd: () => void;
 }
 
-function StepRow({ step, index, total, canDrag, isDragging, isDropTarget, gatheredInputs, reagentItems, onMove, onRemove, onChange, onDragStart, onDragEnter, onDragEnd }: StepRowProps) {
-  const [open, setOpen] = useState(true);
+function StepRow({ step, index, total, canDrag, isDragging, isDropTarget, open, highlight, gatheredInputs, reagentItems, onToggle, onMove, onRemove, onChange, onDragStart, onDragEnter, onDragEnd }: StepRowProps) {
   const fromGripRef = useRef(false);
 
   return (
     <div
+      id={`wi-step-${step._localId}`}
+      data-step-id={step._localId}
       draggable={canDrag}
       onDragStart={e => {
         if (!fromGripRef.current) { e.preventDefault(); return; }
@@ -663,8 +668,9 @@ function StepRow({ step, index, total, canDrag, isDragging, isDropTarget, gather
       onDragOver={e => e.preventDefault()}
       onDragEnd={() => { fromGripRef.current = false; onDragEnd(); }}
       className={cn(
-        'border rounded-xl bg-white overflow-hidden transition-all',
-        isDragging ? 'opacity-40' : isDropTarget ? 'border-blue-400 border-2' : 'border-gray-200'
+        'border rounded-xl bg-white overflow-hidden transition-all scroll-mt-4',
+        isDragging ? 'opacity-40' : isDropTarget ? 'border-blue-400 border-2' : 'border-gray-200',
+        highlight && 'ring-2 ring-blue-300'
       )}
     >
       <div className="flex items-center gap-2 px-4 py-3">
@@ -677,7 +683,7 @@ function StepRow({ step, index, total, canDrag, isDragging, isDropTarget, gather
         </div>
         <div
           className="flex-1 flex items-center gap-2 cursor-pointer select-none min-w-0"
-          onClick={() => setOpen(o => !o)}
+          onClick={() => onToggle(step._localId)}
         >
           <span className="text-xs font-bold text-gray-400 w-5 shrink-0">{index + 1}</span>
           <span className="text-gray-500 shrink-0">{STEP_ICONS[step.step_type]}</span>
@@ -706,7 +712,7 @@ function StepRow({ step, index, total, canDrag, isDragging, isDropTarget, gather
           >
             <Trash2 size={14} />
           </button>
-          <button onClick={() => setOpen(o => !o)} className="p-1 text-gray-400">
+          <button onClick={() => onToggle(step._localId)} className="p-1 text-gray-400">
             {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
         </div>
@@ -788,6 +794,117 @@ function AddStepPanel({ templates, onAdd }: { templates: StepTemplate[]; onAdd: 
   );
 }
 
+// ─── Insert-step divider between step cards ──────────────────────────────────
+// Sits absolutely in the gap above a step card; hovering reveals a plus button
+// that opens a template picker and inserts the new step at that position.
+function InsertStepDivider({ templates, onInsert }: { templates: StepTemplate[]; onInsert: (t: StepTemplate) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="absolute inset-x-0 -top-[13px] h-3.5 z-10 group flex items-center justify-center">
+      <div
+        className={cn(
+          'absolute inset-x-6 top-1/2 -translate-y-1/2 h-px transition-colors',
+          open ? 'bg-blue-300' : 'bg-transparent group-hover:bg-blue-200'
+        )}
+      />
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        title="Insert step here"
+        className={cn(
+          'relative z-10 flex items-center justify-center w-5 h-5 rounded-full border shadow-sm transition-all',
+          open
+            ? 'bg-blue-600 border-blue-600 text-white rotate-45'
+            : 'bg-white border-gray-300 text-gray-400 opacity-0 group-hover:opacity-100 hover:border-blue-400 hover:text-blue-600'
+        )}
+      >
+        <Plus size={12} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <div className="absolute z-30 top-full left-1/2 -translate-x-1/2 mt-1.5 w-80 bg-white border border-gray-200 rounded-xl shadow-lg p-3">
+            <p className="text-xs font-medium text-gray-500 mb-2">Insert step</p>
+            <div className="flex flex-wrap gap-1.5 max-h-56 overflow-y-auto">
+              {templates.map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => { onInsert(t); setOpen(false); }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors font-medium text-gray-700"
+                >
+                  {STEP_ICONS[t.step_type]}
+                  {t.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Left step navigator (Word-style navigation pane) ────────────────────────
+function StepNavPanel({
+  steps, activeId, canDrag, onNavigate, onReorder,
+}: {
+  steps: LocalStep[];
+  activeId: string | null;
+  canDrag: boolean;
+  onNavigate: (localId: string) => void;
+  onReorder: (from: number, to: number) => void;
+}) {
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
+
+  return (
+    <nav className="hidden xl:block w-60 shrink-0 sticky top-0 self-start">
+      <div className="flex flex-col bg-white border border-gray-200 rounded-xl overflow-hidden max-h-[calc(100vh-6rem)]">
+        <p className="px-3 py-2.5 text-xs font-semibold text-gray-500 border-b border-gray-100 shrink-0">
+          Step Navigator
+        </p>
+        <div className="overflow-y-auto p-1.5 space-y-0.5">
+          {steps.length === 0 && (
+            <p className="px-2 py-3 text-xs text-gray-400 italic">No steps yet</p>
+          )}
+          {steps.map((s, i) => (
+            <button
+              key={s._localId}
+              type="button"
+              draggable={canDrag}
+              onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDragIdx(i); }}
+              onDragEnter={e => { e.preventDefault(); setOverIdx(i); }}
+              onDragOver={e => e.preventDefault()}
+              onDragEnd={() => {
+                if (dragIdx !== null && overIdx !== null && dragIdx !== overIdx) onReorder(dragIdx, overIdx);
+                setDragIdx(null);
+                setOverIdx(null);
+              }}
+              onClick={() => onNavigate(s._localId)}
+              title={s.name || 'Untitled Step'}
+              className={cn(
+                'w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-left text-xs transition-colors group',
+                activeId === s._localId ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50',
+                dragIdx === i && 'opacity-40',
+                overIdx === i && dragIdx !== null && dragIdx !== i && 'ring-1 ring-blue-400'
+              )}
+            >
+              {canDrag && (
+                <GripVertical size={12} className="shrink-0 text-gray-300 group-hover:text-gray-400 cursor-grab" />
+              )}
+              <span className="w-5 shrink-0 text-right font-semibold text-gray-400">{i + 1}</span>
+              <span className="shrink-0 text-gray-400 [&_svg]:w-3.5 [&_svg]:h-3.5">{STEP_ICONS[s.step_type]}</span>
+              <span className="truncate font-medium">
+                {s.name || <span className="italic font-normal text-gray-400">Untitled Step</span>}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </nav>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 type LocalStep = Partial<WIStep> & { _localId: string; step_type: StepType };
 
@@ -815,6 +932,14 @@ export default function WorkInstructionEditorPage() {
   const dragIndexRef = useRef<number | null>(null);
   const hoverIndexRef = useRef<number | null>(null);
   const headerLoadedRef = useRef(false);
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const [activeStepId, setActiveStepId] = useState<string | null>(null);
+  const flashTimerRef = useRef<number | null>(null);
+  // Step order as ids, kept in a ref so the scroll-spy observer can read the
+  // current order without being torn down on every keystroke.
+  const stepOrderRef = useRef<string[]>([]);
+  stepOrderRef.current = steps.map(s => s._localId);
 
   const { data: wiData } = useQuery<WorkInstruction & { wi_steps: WIStep[] }>({
     queryKey: ['work-instruction', id],
@@ -870,9 +995,54 @@ export default function WorkInstructionEditorPage() {
   // The reagent item this WI is currently linked to (drives the item-number display).
   const linkedItem = reagentItems.find(r => r.id === reagentItemId) ?? null;
 
-  function addStepFromTemplate(t: StepTemplate) {
+  // Scroll-spy: highlight in the nav pane whichever step card is crossing the
+  // upper part of the viewport. Re-observes only when steps are added/removed
+  // or reordered (id list changes), not on every field edit.
+  const stepIdsKey = steps.map(s => s._localId).join('|');
+  useEffect(() => {
+    const visible = new Set<string>();
+    const observer = new IntersectionObserver(entries => {
+      for (const e of entries) {
+        const stepId = (e.target as HTMLElement).dataset.stepId;
+        if (!stepId) continue;
+        if (e.isIntersecting) visible.add(stepId); else visible.delete(stepId);
+      }
+      const first = stepOrderRef.current.find(sid => visible.has(sid));
+      if (first) setActiveStepId(first);
+    }, { rootMargin: '-10% 0px -55% 0px' });
+    document.querySelectorAll<HTMLElement>('[data-step-id]').forEach(el => observer.observe(el));
+    return () => observer.disconnect();
+  }, [stepIdsKey]);
+
+  function navigateToStep(localId: string) {
+    // Expand the target so the nav actually lands on its content.
+    setCollapsedIds(prev => {
+      if (!prev.has(localId)) return prev;
+      const next = new Set(prev);
+      next.delete(localId);
+      return next;
+    });
+    document.getElementById(`wi-step-${localId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setActiveStepId(localId);
+    setFlashId(localId);
+    if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
+    flashTimerRef.current = window.setTimeout(() => setFlashId(null), 1600);
+  }
+
+  function toggleStepOpen(localId: string) {
+    setCollapsedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(localId)) next.delete(localId); else next.add(localId);
+      return next;
+    });
+  }
+
+  const collapseAll = () => setCollapsedIds(new Set(steps.map(s => s._localId)));
+  const expandAll = () => setCollapsedIds(new Set());
+
+  function addStepFromTemplate(t: StepTemplate, atIndex?: number) {
     const localId = crypto.randomUUID();
-    setSteps(prev => [...prev, {
+    const newStep: LocalStep = {
       _localId: localId,
       name: t.name,
       description: t.description ?? '',
@@ -881,7 +1051,16 @@ export default function WorkInstructionEditorPage() {
       parameters: t.step_type === 'user_defined'
         ? userDefinedDefaults(t.parameter_schema)
         : getDefaultParams(t.step_type),
-    }]);
+    };
+    setSteps(prev => {
+      const next = [...prev];
+      next.splice(atIndex ?? next.length, 0, newStep);
+      return next;
+    });
+    // When inserting mid-list, bring the new card into view once it renders.
+    if (atIndex !== undefined) {
+      window.setTimeout(() => navigateToStep(localId), 60);
+    }
   }
 
   // Snapshot the template's schema into the step (like _step_type) so the
@@ -922,6 +1101,17 @@ export default function WorkInstructionEditorPage() {
       const target = idx + dir;
       if (target < 0 || target >= next.length) return prev;
       [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
+  }
+
+  function reorderSteps(from: number, to: number) {
+    if (from === to) return;
+    setSteps(prev => {
+      if (from < 0 || from >= prev.length || to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
       return next;
     });
   }
@@ -1032,7 +1222,17 @@ export default function WorkInstructionEditorPage() {
   const isDraft = isNew || wiData?.status === 'draft' || wiData?.status === 'rejected';
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto flex items-start gap-6">
+      {/* Word-style step navigator */}
+      <StepNavPanel
+        steps={steps}
+        activeId={activeStepId}
+        canDrag={!!canEdit}
+        onNavigate={navigateToStep}
+        onReorder={reorderSteps}
+      />
+
+      <div className="flex-1 min-w-0 max-w-3xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <button onClick={() => navigate('/work-instructions')} className="text-gray-400 hover:text-gray-700 transition-colors">
@@ -1215,9 +1415,29 @@ export default function WorkInstructionEditorPage() {
 
       {/* Steps editor */}
       <div className="space-y-3">
-        <h2 className="text-sm font-semibold text-gray-700">
-          Steps ({steps.length})
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-700">
+            Steps ({steps.length})
+          </h2>
+          {steps.length > 0 && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={expandAll}
+                className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors"
+                title="Expand all steps"
+              >
+                <ChevronsUpDown size={13} /> Expand all
+              </button>
+              <button
+                onClick={collapseAll}
+                className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors"
+                title="Collapse all steps"
+              >
+                <ChevronsDownUp size={13} /> Collapse all
+              </button>
+            </div>
+          )}
+        </div>
 
         {steps.length === 0 && (
           <div className="text-center py-8 bg-white rounded-xl border border-gray-200 text-sm text-gray-400">
@@ -1238,38 +1458,41 @@ export default function WorkInstructionEditorPage() {
             })
             .filter(x => x.material_name?.trim());
           return (
-            <StepRow
-              key={s._localId}
-              step={s}
-              index={i}
-              total={steps.length}
-              canDrag={!!canEdit}
-              isDragging={draggingId === s._localId}
-              isDropTarget={dragOverIndex === i && draggingId !== null && draggingId !== s._localId}
-              gatheredInputs={gatheredInputs}
-              reagentItems={reagentItems}
-              onMove={moveStep}
-              onRemove={removeStep}
-              onChange={updateStep}
-              onDragStart={() => { dragIndexRef.current = i; setDraggingId(s._localId); }}
-              onDragEnter={() => { hoverIndexRef.current = i; setDragOverIndex(i); }}
-              onDragEnd={() => {
-                const from = dragIndexRef.current;
-                const to = hoverIndexRef.current;
-                if (from !== null && to !== null && from !== to) {
-                  setSteps(prev => {
-                    const next = [...prev];
-                    const [moved] = next.splice(from, 1);
-                    next.splice(to, 0, moved);
-                    return next;
-                  });
-                }
-                dragIndexRef.current = null;
-                hoverIndexRef.current = null;
-                setDraggingId(null);
-                setDragOverIndex(null);
-              }}
-            />
+            <div key={s._localId} className="relative">
+              {canEdit && (
+                <InsertStepDivider
+                  templates={templates}
+                  onInsert={t => addStepFromTemplate(t, i)}
+                />
+              )}
+              <StepRow
+                step={s}
+                index={i}
+                total={steps.length}
+                canDrag={!!canEdit}
+                isDragging={draggingId === s._localId}
+                isDropTarget={dragOverIndex === i && draggingId !== null && draggingId !== s._localId}
+                open={!collapsedIds.has(s._localId)}
+                highlight={flashId === s._localId}
+                gatheredInputs={gatheredInputs}
+                reagentItems={reagentItems}
+                onToggle={toggleStepOpen}
+                onMove={moveStep}
+                onRemove={removeStep}
+                onChange={updateStep}
+                onDragStart={() => { dragIndexRef.current = i; setDraggingId(s._localId); }}
+                onDragEnter={() => { hoverIndexRef.current = i; setDragOverIndex(i); }}
+                onDragEnd={() => {
+                  const from = dragIndexRef.current;
+                  const to = hoverIndexRef.current;
+                  if (from !== null && to !== null) reorderSteps(from, to);
+                  dragIndexRef.current = null;
+                  hoverIndexRef.current = null;
+                  setDraggingId(null);
+                  setDragOverIndex(null);
+                }}
+              />
+            </div>
           );
         })}
 
@@ -1305,6 +1528,7 @@ export default function WorkInstructionEditorPage() {
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }
