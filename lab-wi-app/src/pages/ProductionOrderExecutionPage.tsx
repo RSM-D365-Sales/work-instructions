@@ -15,6 +15,7 @@ import {
   Wrench, Beaker, Printer, UserCog, CalendarClock, Check, StickyNote, Milestone,
   ClipboardCheck, FileText, XCircle, Send, ScanLine, MessageSquare, X, SlidersHorizontal,
   Paperclip, ExternalLink,
+  Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Lock, Package,
 } from 'lucide-react';
 
 const STEP_ICONS: Record<StepType, React.ReactNode> = {
@@ -22,15 +23,23 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   gather_equipment: <Wrench size={16} />,
   gather_reagents:  <Beaker size={16} />,
   weigh:            <ScaleIcon size={16} />,
+  dispense:         <Droplet size={16} />,
   mix:              <Timer size={16} />,
+  agitate:          <Waves size={16} />,
   transfer:         <ArrowRightLeft size={16} />,
+  bring_to_volume:  <FlaskRound size={16} />,
   ph_adjust:        <TestTube size={16} />,
   heat:             <Thermometer size={16} />,
   cool:             <Snowflake size={16} />,
+  freeze:           <ThermometerSnowflake size={16} />,
+  thaw:             <ThermometerSun size={16} />,
+  overnight:        <Moon size={16} />,
   observe:          <Eye size={16} />,
   notes:            <StickyNote size={16} />,
   production_break: <Milestone size={16} />,
   print_labels:     <Printer size={16} />,
+  cap:              <Lock size={16} />,
+  package:          <Package size={16} />,
   attachment:       <Paperclip size={16} />,
   possible_deviation: <AlertTriangle size={16} />,
   user_defined:     <SlidersHorizontal size={16} />,
@@ -244,6 +253,108 @@ function WeighStepWidget({
           />
           {!(values.lot_number as string) && (
             <p className="text-xs text-amber-600 mt-1">This reagent is lot / batch controlled — lot number is required.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Volumetric counterpart of the weigh widget. Volumes are read off a graduated
+// cylinder / pipette / dispenser rather than a wired balance, so there is no
+// scale-scan gate — just a measured-volume entry with the same tolerance check
+// and optional lot capture.
+function DispenseStepWidget({
+  params, values, onChange, locked,
+}: {
+  params: Record<string, unknown>;
+  values: Record<string, unknown>;
+  onChange: (v: Record<string, unknown>) => void;
+  locked: boolean;
+}) {
+  const target = params.target_volume as number;
+  const unit = params.unit as string ?? 'mL';
+  const tolerance = params.tolerance_pct as number ?? 2;
+  const materialName = params.material_name as string ?? 'the solution';
+  const lotControlled = (params.lot_controlled as boolean) ?? false;
+
+  const measured = values.measured_volume as number | undefined;
+  const result = measured != null ? calculateTolerance(measured, target, tolerance) : null;
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+        <p className="text-sm font-medium text-blue-900">
+          Dispense <strong>{materialName}</strong>
+        </p>
+        <p className="text-sm text-blue-700 mt-1">
+          Target: <strong>{target} {unit}</strong> &plusmn; {tolerance}%
+          {' '}(allowed range: <strong>{(target * (1 - tolerance / 100)).toFixed(3)}</strong> – <strong>{(target * (1 + tolerance / 100)).toFixed(3)} {unit}</strong>)
+        </p>
+        <p className="text-xs text-blue-600 mt-1.5 flex items-center gap-1">
+          <Droplet size={12} />
+          Measure into a graduated cylinder, pipette, or dispenser, then record the volume.
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Measured Volume ({unit})</label>
+        <input
+          type="number"
+          step="0.001"
+          value={measured ?? ''}
+          onChange={e => {
+            const v = parseFloat(e.target.value);
+            const r = isNaN(v) ? null : calculateTolerance(v, target, tolerance);
+            onChange({
+              ...values,
+              measured_volume: isNaN(v) ? undefined : v,
+              unit,
+              in_tolerance: r?.inTolerance ?? undefined,
+              deviation_pct: r?.deviationPct ?? undefined,
+            });
+          }}
+          disabled={locked}
+          placeholder={`Volume measured (${unit})`}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+        />
+      </div>
+
+      {result != null && measured != null && (
+        <div className={cn(
+          'flex items-center gap-3 p-3 rounded-xl text-sm font-medium',
+          result.inTolerance
+            ? 'bg-green-50 border border-green-200 text-green-800'
+            : 'bg-red-50 border border-red-200 text-red-800'
+        )}>
+          {result.inTolerance ? <CheckCircle size={18} /> : <AlertTriangle size={18} />}
+          <div>
+            <p>
+              {result.inTolerance ? 'In tolerance' : 'OUT OF TOLERANCE'}
+              {' '}— measured {measured} {unit} ({result.deviationPct}% deviation)
+            </p>
+            {!result.inTolerance && (
+              <p className="text-xs mt-0.5 font-normal opacity-80">Do not proceed — re-measure the volume</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {lotControlled && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Lot / Batch Number <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            value={(values.lot_number as string) ?? ''}
+            onChange={e => onChange({ ...values, lot_number: e.target.value })}
+            disabled={locked}
+            placeholder="Enter the lot or batch number from the container label"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-gray-50"
+          />
+          {!(values.lot_number as string) && (
+            <p className="text-xs text-amber-600 mt-1">This material is lot / batch controlled — lot number is required.</p>
           )}
         </div>
       )}
@@ -770,6 +881,30 @@ function GenericStepWidget({
   } else if (stepType === 'cool') {
     lines.push(`Cool to ${params.target_temp_c}°C`);
     if (params.method) lines.push(`Method: ${params.method}`);
+  } else if (stepType === 'freeze') {
+    lines.push(`Freeze to ${params.target_temp_c}°C`);
+    if (params.duration) lines.push(`Duration / until: ${params.duration}`);
+  } else if (stepType === 'thaw') {
+    lines.push(`Thaw to ${params.target_temp_c}°C`);
+    if (params.method) lines.push(`Method: ${params.method}`);
+    if (params.until) lines.push(`Until: ${params.until}`);
+  } else if (stepType === 'overnight') {
+    lines.push(`Overnight: ${params.condition || 'hold until the next working day'}`);
+    if (params.temp_c != null) lines.push(`Temperature: ${params.temp_c}°C`);
+  } else if (stepType === 'agitate') {
+    lines.push(`${params.method ?? 'Stir'} for ${params.duration_minutes} minutes at ${params.speed} speed`);
+  } else if (stepType === 'bring_to_volume') {
+    lines.push(`Bring ${params.material_name ? `${params.material_name} ` : 'the solution '}to ${params.target_volume} ${params.unit}`);
+    if (params.diluent) lines.push(`Diluent: ${params.diluent}`);
+  } else if (stepType === 'cap') {
+    lines.push(`${params.method ?? 'Cap'} the container`);
+    if (params.notes) lines.push(String(params.notes));
+  } else if (stepType === 'package') {
+    if (params.container) lines.push(`Package into: ${params.container}`);
+    if (params.label_ref) lines.push(`Label: ${params.label_ref}`);
+    if (params.destination) lines.push(`Deliver to: ${params.destination}`);
+    if (params.notes) lines.push(String(params.notes));
+    if (lines.length === 0) lines.push('Package, label, and store the finished product');
   } else if (stepType === 'ph_adjust') {
     lines.push(`Target pH: ${params.target_ph} ± ${params.tolerance}`);
     lines.push(`Add ${params.reagent} dropwise with constant stirring`);
@@ -1215,6 +1350,10 @@ function StepCard({ wiStep, poStep, index, isActive, orderId, orderNumber, techn
       const scaleOk = !!(values.scale_id as string | undefined);
       return scaleOk && (values.measured_weight != null) && (values.in_tolerance === true) && lotOk;
     }
+    if (stepType === 'dispense') {
+      const lotOk = !(params.lot_controlled as boolean) || !!(values.lot_number as string)?.trim();
+      return (values.measured_volume != null) && (values.in_tolerance === true) && lotOk;
+    }
     if (stepType === 'gather_inputs') {
       const inputs = params.inputs as { material_name: string }[] ?? [];
       const checked = (values.checked ?? []) as string[];
@@ -1294,6 +1433,9 @@ function StepCard({ wiStep, poStep, index, isActive, orderId, orderNumber, techn
           {stepType === 'weigh' && (
             <WeighStepWidget params={params} values={values} onChange={setValues} locked={locked} />
           )}
+          {stepType === 'dispense' && (
+            <DispenseStepWidget params={params} values={values} onChange={setValues} locked={locked} />
+          )}
           {stepType === 'mix' && (
             <MixStepWidget params={params} values={values} onChange={setValues} locked={locked} />
           )}
@@ -1345,7 +1487,7 @@ function StepCard({ wiStep, poStep, index, isActive, orderId, orderNumber, techn
           {stepType === 'user_defined' && (
             <UserDefinedStepWidget params={params} />
           )}
-          {['heat','cool','transfer','custom'].includes(stepType) && (
+          {['heat','cool','transfer','custom','agitate','freeze','thaw','overnight','bring_to_volume','cap','package'].includes(stepType) && (
             <GenericStepWidget params={params} stepType={stepType} />
           )}
 

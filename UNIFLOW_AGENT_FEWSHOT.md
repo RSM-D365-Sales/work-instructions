@@ -11,10 +11,12 @@ has no way to seed a conversation, append both blocks to the end of the instruct
 heading like `### Worked example — study this before converting anything`, keeping the
 `INPUT:` / `OUTPUT:` framing.
 
-Chosen because it is small but exercises the grouping rule (R1), a merged attachment pair
-(R4), a weigh with a defaulted tolerance (R9), a Q.S. with no quantity, a merged separator
-(R5), and the defectRate tail (R7). It is a representative **reagent-lab** recipe — the
-covered Phase-1 subset (Part 0 of the instructions).
+Chosen because it is small but exercises the grouping rule (R1) and its verb table (a Q.S.
+→ `bring_to_volume` via R12, a "Deliver to …" → `package`, and the "Verify …" tail →
+`observe`), a merged attachment pair (R4), a weigh with a defaulted tolerance (R9), a merged
+separator (R5), and the defectRate tail (R7). It is a representative **reagent-lab** recipe —
+the covered Phase-1 subset (Part 0 of the instructions) — and it lands **0 custom steps**,
+which is the target the custom-count metric (R13) exists to protect.
 
 > Identity note: this recipe's `materialVersionId` is `N-13200-6`, so its `materialId` is
 > `N-13200` and its Uniflow version is `6`. The FG's `item_number` is the **materialId**
@@ -231,21 +233,18 @@ BEGIN
       'tolerance_pct',  2,
       'lot_controlled', true));
 
-  -- [text_5 + materialNoQty_6] → gather_reagents (Q.S., no qty)
+  -- [text_5 + materialNoQty_6] → bring_to_volume  (Q.S. cue, R12)
   n := n + 1;
   INSERT INTO public.wi_steps (work_instruction_id, step_template_id, step_order, name, description, parameters)
   VALUES (v_wi,
-    (SELECT id FROM public.step_templates WHERE step_type = 'gather_reagents' AND is_system LIMIT 1),
+    (SELECT id FROM public.step_templates WHERE step_type = 'bring_to_volume' AND is_system LIMIT 1),
     n, 'Q.S. the solution to 500 mL with CLRW', 'Q.S. the solution to 500 mL with CLRW.',
     jsonb_build_object(
-      '_step_type', 'gather_reagents',
-      'reagents',   jsonb_build_array(jsonb_build_object(
-        'item_id',        v_clrw,
-        'item_number',    '49534',
-        'product_name',   'Clinical Laboratory Reagent Water (CLRW)',
-        'quantity',       null,
-        'unit',           'mL',
-        'lot_controlled', true))));
+      '_step_type',    'bring_to_volume',
+      'material_name', 'NSE Muscles Phosphate Buffer',
+      'target_volume', 500,
+      'unit',          'mL',
+      'diluent',       'Clinical Laboratory Reagent Water (CLRW)'));
 
   -- [text_7 + materialNotWeighed_8] → gather_reagents
   n := n + 1;
@@ -263,15 +262,18 @@ BEGIN
         'unit',           'Bottle(s)',
         'lot_controlled', false))));
 
-  -- [text_9] standalone → custom
+  -- [text_9] standalone "Deliver to … QC area" → package  (R1 verb table)
   n := n + 1;
   INSERT INTO public.wi_steps (work_instruction_id, step_template_id, step_order, name, description, parameters)
   VALUES (v_wi,
-    (SELECT id FROM public.step_templates WHERE step_type = 'custom' AND is_system LIMIT 1),
+    (SELECT id FROM public.step_templates WHERE step_type = 'package' AND is_system LIMIT 1),
     n, 'Deliver to the 15-30°C QC area', NULL,
     jsonb_build_object(
-      '_step_type',       'custom',
-      'instruction_text', 'Deliver to the 15-30°C QC area.'));
+      '_step_type',  'package',
+      'container',   '',
+      'label_ref',   '',
+      'destination', '15-30°C QC area',
+      'notes',       ''));
 
   -- [separator_10 + separatorDay1_11] → one production_break  (R5)
   n := n + 1;
@@ -284,34 +286,34 @@ BEGIN
       'label',       'QC Instructions — Day 1',
       'description', 'Everything below is performed by QC on Day 1.'));
 
-  -- [text_12 … text_15] → custom × 4
+  -- [text_12 … text_15] "Verify …" → observe × 4  (R1: verify/check → observe)
   n := n + 1;
   INSERT INTO public.wi_steps (work_instruction_id, step_template_id, step_order, name, description, parameters)
   VALUES (v_wi,
-    (SELECT id FROM public.step_templates WHERE step_type = 'custom' AND is_system LIMIT 1),
+    (SELECT id FROM public.step_templates WHERE step_type = 'observe' AND is_system LIMIT 1),
     n, 'Verify that the documentation is complete', NULL,
-    jsonb_build_object('_step_type', 'custom', 'instruction_text', 'Verify that the documentation is complete.'));
+    jsonb_build_object('_step_type', 'observe', 'prompt', 'Verify that the documentation is complete.'));
 
   n := n + 1;
   INSERT INTO public.wi_steps (work_instruction_id, step_template_id, step_order, name, description, parameters)
   VALUES (v_wi,
-    (SELECT id FROM public.step_templates WHERE step_type = 'custom' AND is_system LIMIT 1),
+    (SELECT id FROM public.step_templates WHERE step_type = 'observe' AND is_system LIMIT 1),
     n, 'Verify label matches the product', NULL,
-    jsonb_build_object('_step_type', 'custom', 'instruction_text', 'Verify label matches the product.'));
+    jsonb_build_object('_step_type', 'observe', 'prompt', 'Verify label matches the product.'));
 
   n := n + 1;
   INSERT INTO public.wi_steps (work_instruction_id, step_template_id, step_order, name, description, parameters)
   VALUES (v_wi,
-    (SELECT id FROM public.step_templates WHERE step_type = 'custom' AND is_system LIMIT 1),
+    (SELECT id FROM public.step_templates WHERE step_type = 'observe' AND is_system LIMIT 1),
     n, 'Verify volume of product', NULL,
-    jsonb_build_object('_step_type', 'custom', 'instruction_text', 'Verify volume of product.'));
+    jsonb_build_object('_step_type', 'observe', 'prompt', 'Verify volume of product.'));
 
   n := n + 1;
   INSERT INTO public.wi_steps (work_instruction_id, step_template_id, step_order, name, description, parameters)
   VALUES (v_wi,
-    (SELECT id FROM public.step_templates WHERE step_type = 'custom' AND is_system LIMIT 1),
+    (SELECT id FROM public.step_templates WHERE step_type = 'observe' AND is_system LIMIT 1),
     n, 'Verify that the proper container was used', NULL,
-    jsonb_build_object('_step_type', 'custom', 'instruction_text', 'Verify that the proper container was used.'));
+    jsonb_build_object('_step_type', 'observe', 'prompt', 'Verify that the proper container was used.'));
 
   -- [text_16 + defectRate_17] → observe  (R7)
   n := n + 1;
@@ -347,6 +349,8 @@ SELECT s.step_order, s.parameters->>'_step_type' AS step_type, s.name
 
 ## 2. Migration report
 
+**Steps: 12 total · custom: 0 (0%) · typed: 12**
+
 **N-13200-6 — NSE Muscles Phosphate Buffer** · 18 formParts → 12 steps · 0 qc_tests
 
 | formPart | Disposition |
@@ -355,22 +359,22 @@ SELECT s.step_order, s.parameters->>'_step_type' AS step_type, s.name
 | `attachments_1` | **1.** `attachment` — "Attach Supporting Documents" |
 | `text_2` | Heading — became the name/description of steps 2–3 (R1) |
 | `materialNotWeighed_3` | **2.** `gather_reagents` — CLRW 400 mL |
-| `materialWeighed_4` | **3.** `weigh` — Sodium Phosphate, Dibasic 14.2 g ⚠ |
+| `materialWeighed_4` | **3.** `weigh` — Sodium Phosphate, Dibasic 14.2 g (mass unit → weigh, R3a) ⚠ |
 | `text_5` | Heading — became the name of step 4 (R1) |
-| `materialNoQty_6` | **4.** `gather_reagents` — CLRW, quantity null (Q.S.) |
+| `materialNoQty_6` | **4.** `bring_to_volume` — to 500 mL, diluent CLRW (Q.S. cue, R12) |
 | `text_7` | Heading — became the name of step 5 (R1) |
 | `materialNotWeighed_8` | **5.** `gather_reagents` — Bottle, Glass, 500mL × 1 |
-| `text_9` | **6.** `custom` — "Deliver to the 15-30°C QC area" |
+| `text_9` | **6.** `package` — "Deliver to the 15-30°C QC area" (destination) (R1 verb table) |
 | `separator_10` + `separatorDay1_11` | **7.** `production_break` — "QC Instructions — Day 1" (merged, R5) |
-| `text_12` | **8.** `custom` — "Verify that the documentation is complete" |
-| `text_13` | **9.** `custom` — "Verify label matches the product" |
-| `text_14` | **10.** `custom` — "Verify volume of product" |
-| `text_15` | **11.** `custom` — "Verify that the proper container was used" |
+| `text_12` | **8.** `observe` — "Verify that the documentation is complete" (verify → observe, R1) |
+| `text_13` | **9.** `observe` — "Verify label matches the product" |
+| `text_14` | **10.** `observe` — "Verify volume of product" |
+| `text_15` | **11.** `observe` — "Verify that the proper container was used" |
 | `text_16` + `defectRate_17` | **12.** `observe` — "Record defects" (merged, R7) |
 
 **Materials checksum** — all 3 Materials-table rows appear in ≥1 step:
-`48364` → step 5 · `48516` → step 3 · `49534` → steps 2 + 4 (400 mL + Q.S. to 500 mL = the
-grid's 500.0 mL total).
+`48364` → step 5 · `48516` → step 3 · `49534` → step 2 (400 mL); also named as the Q.S.
+diluent in step 4 (`bring_to_volume` carries the diluent as text, not a linked item).
 
 ### Needs human review
 
@@ -382,9 +386,12 @@ grid's 500.0 mL total).
 3. **4 new `reagent_items` created with Uniflow IDs as `item_number`**
    (`N-13200` the FG, plus storeroom IDs `49534`, `48516`, `48364`) — all need a
    D365 item mapping pass.
-4. **Step 4 (Q.S.) has `quantity: null`** — the "to 500 mL" target survives in the step name
-   only. Rocket Ship has no Q.S. step type.
-5. **WI is `status='draft'`** — route through the normal approval workflow. Do not auto-approve.
+4. **Step 4 is a `bring_to_volume`** (Q.S. to 500 mL). The diluent CLRW is carried as text,
+   not a linked `reagent_items` row, so its top-up volume isn't tracked against inventory —
+   confirm that's acceptable, or add a companion `gather_reagents` if the CLRW draw must be counted.
+5. **Custom steps introduced: 0** — nothing to review here, which is the goal. (Reported for
+   every recipe per R13 so the batch-level custom rate stays visible.)
+6. **WI is `status='draft'`** — route through the normal approval workflow. Do not auto-approve.
 
 ---
 
@@ -396,6 +403,9 @@ landing:
 
 - A different step **count** or **order** — the grouping rule (R1) isn't being applied.
 - `text_0` emitted as its own `custom` step — R4 ignored.
+- The Q.S. (`materialNoQty_6`) emitted as `gather_reagents` instead of `bring_to_volume` — R12 ignored.
+- "Deliver to …" or the "Verify …" steps emitted as `custom` — R1's verb table isn't being applied.
+- A non-zero custom count, or a report missing the **`Steps: … · custom: …`** summary line — R13 ignored.
 - Two `production_break`s instead of one — R5 ignored.
 - A `_step_type` outside the library table — the hard rule is being violated.
 - Missing `_step_type` in any `jsonb_build_object` — the step won't render in Rocket Ship.

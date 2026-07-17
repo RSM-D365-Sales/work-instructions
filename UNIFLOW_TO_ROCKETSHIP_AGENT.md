@@ -106,11 +106,11 @@ scope gate). There is no third option and no guessing.
 | formPart | → `_step_type` | `parameters` |
 |---|---|---|
 | `text_N` *(with trailing material parts)* | *(not a step — its cleaned text becomes the `name`/`description` of the steps built from those material parts)* | — |
-| `text_N` *(standalone, incl. `<h2>` section headers)* | `custom` | `{instruction_text}` |
+| `text_N` *(standalone)* | **classified by action verb → a typed step** (`agitate`, `transfer`, `heat`, `cool`, `freeze`, `thaw`, `overnight`, `bring_to_volume`, `cap`, `package`, `observe`, …) — see the verb table in R1. `custom` is the **last-resort fallback only** for section headers / cautions / prose with no operator action | per the target type |
 | `attachments_N` | `attachment` | `{prompt, required:false}` — **anywhere in the recipe, not just the opener** |
-| `materialWeighed_N` *(has `getWeightButton`)* | `weigh` | `{material_name, target_weight, unit, tolerance_pct:2, lot_controlled}` |
+| `materialWeighed_N` *(has `getWeightButton`)* | `weigh` *(mass unit)* / `dispense` *(volume unit)* | weigh: `{material_name, target_weight, unit, tolerance_pct:2, lot_controlled}` · dispense: `{material_name, target_volume, unit, tolerance_pct:2, lot_controlled}` (see R3) |
 | `materialNotWeighed_N` | `gather_reagents` | `{reagents:[{item_id,item_number,product_name,quantity,unit,lot_controlled}]}` |
-| `materialNoQty_N` *(Q.S. / add-as-needed)* | `gather_reagents` | same, `quantity: null` |
+| `materialNoQty_N` *(Q.S. / add-as-needed)* | `bring_to_volume` *(when the heading is a Q.S. / bring-to-volume cue)* else `gather_reagents` | bring_to_volume: `{material_name, target_volume, unit, diluent}` · else `gather_reagents` with `quantity: null` (see R12) |
 | `pHMeter_N` | `ph_adjust` | `{target_ph:reqPH, tolerance:reqPHRange, reagent:''}` — Rocket Ship now captures a scanned pH-meter reading + range check |
 | `textEditable_N` | `notes` | `{prompt}` — from the preceding `text_N`, else "Record observations" |
 | `separator_N` (+ `separatorDay1_N`) | `production_break` | `{label, description}` |
@@ -129,9 +129,16 @@ scope gate). There is no third option and no guessing.
 > hold them, and Rocket Ship's pH step now captures the numeric reading itself.
 
 The full valid `_step_type` set (never emit anything outside it): `gather_reagents`,
-`gather_equipment`, `weigh`, `mix`, `transfer`, `ph_adjust`, `heat`, `cool`,
-`observe`, `notes`, `production_break`, `print_labels`, `attachment`,
-`possible_deviation`, `custom`.
+`gather_equipment`, `weigh`, `dispense`, `mix`, `agitate`, `transfer`,
+`bring_to_volume`, `ph_adjust`, `heat`, `cool`, `freeze`, `thaw`, `overnight`,
+`observe`, `notes`, `production_break`, `print_labels`, `cap`, `package`,
+`attachment`, `possible_deviation`, `custom`.
+
+> **Expanded vocabulary (migration 051).** Eight new step types were added so one
+> Uniflow action maps to one typed step instead of collapsing into `custom`:
+> `dispense` (volumetric measure — weigh for liquids), `agitate` (stir/vortex/invert),
+> `bring_to_volume` (Q.S./dilute), `freeze`, `thaw`, `overnight`, `cap` (cap/seal/parafilm),
+> and `package` (box/store/deliver). Prefer these over `custom` — see R1's verb table and R13.
 
 ---
 
@@ -189,28 +196,66 @@ whitespace.
 
 ### Supported Vocabulary — the ONLY valid `_step_type` values
 
-| `_step_type` | Parameters (exact keys) |
-|---|---|
-| `gather_reagents` | `reagents: [{item_id, item_number, product_name, quantity, unit, lot_controlled}]` |
-| `weigh` | `material_id, material_name, target_weight, unit, tolerance_pct, lot_controlled` |
-| `ph_adjust` | `target_ph, tolerance, reagent` |
-| `observe` | `prompt` |
-| `notes` | `prompt` |
-| `production_break` | `label, description` |
-| `attachment` | `prompt, required` (bool) |
-| `custom` | `instruction_text` |
-| *(also valid but rarely produced from Uniflow: `gather_equipment`, `mix`, `transfer`, `heat`, `cool`, `print_labels`, `possible_deviation`)* | |
+| `_step_type` | Parameters (exact keys) | Use for |
+|---|---|---|
+| `gather_reagents` | `reagents: [{item_id, item_number, product_name, quantity, unit, lot_controlled}]` | gathering/adding a catalog item |
+| `weigh` | `material_id, material_name, target_weight, unit, tolerance_pct, lot_controlled` | measured **mass** (g, mg, kg) |
+| `dispense` | `material_name, target_volume, unit, tolerance_pct, lot_controlled` | measured **volume** (mL, L, µL) — weigh for liquids |
+| `agitate` | `method` (Stir/Vortex/Invert/Shake), `duration_minutes`, `speed` | stir / vortex / invert / shake |
+| `mix` | `duration_minutes, speed` | timed mixing on a stir plate |
+| `transfer` | `from_vessel, to_vessel` | pour / aliquot / decant / elute / filter |
+| `bring_to_volume` | `material_name, target_volume, unit, diluent` | Q.S. / dilute / bring to final volume |
+| `ph_adjust` | `target_ph, tolerance, reagent` | pH adjustment / pH meter reading |
+| `heat` | `target_temp_c, duration_minutes` | heat / autoclave / water bath |
+| `cool` | `target_temp_c` | cool / chill |
+| `freeze` | `target_temp_c, duration` | freeze / frozen storage |
+| `thaw` | `target_temp_c, method, until` | thaw / bring up from frozen |
+| `overnight` | `condition, temp_c` | an overnight hold / incubation |
+| `observe` | `prompt` | verify / check / inspect / record a result |
+| `notes` | `prompt` | free-text note entry (`textEditable`) |
+| `production_break` | `label, description` | day/part boundary (`separator*`) |
+| `print_labels` | `label_template, quantity, notes` | print labels |
+| `cap` | `method` (Cap/Screw cap/Parafilm/Seal/Stopper), `notes` | cap / seal / parafilm |
+| `package` | `container, label_ref, destination, notes` | box / rack / store / deliver to a destination |
+| `attachment` | `prompt, required` (bool) | attach supporting documents |
+| `possible_deviation` | `prompt, unit` | flag a possible deviation |
+| `custom` | `instruction_text` | **last resort only** — section headers, cautions, prose with no operator action |
 
 `qc_tests` (not a step): `osmolarity` → `name='Osmolality'`, `unit='mOsm/kg'`,
 `result_type='numeric'`, `lower_limit`/`upper_limit`.
 
 ### Conversion rules
 
-**R1 — Group before you map.** Walk parts in `N` order. A `text_N` is a *heading*
+**R1 — Group, then classify.** Walk parts in `N` order. A `text_N` is a *heading*
 for every `material*`/`pHMeter`/`textEditable` part that follows it until the
 next `text_N`/`separator*`. Emit one step per such part; the heading becomes the
-step `name` (and `description` when several steps share one heading). A `text_N`
-with no trailing capture part becomes its own `custom` step.
+step `name` (and `description` when several steps share one heading).
+
+A `text_N` with **no** trailing capture part is a *standalone action*. Do **not**
+default it to `custom` — classify it by its leading action verb using the table
+below (**first match wins, top to bottom**), and emit that typed step. Fall
+through to `custom` only when no row matches.
+
+| If the cleaned instruction's action is… | → `_step_type` | fill params from the text |
+|---|---|---|
+| runs **overnight** (hold / incubate / thaw overnight) | `overnight` | `condition` = what happens; `temp_c` if stated |
+| **Q.S.** / "bring to volume" / "bring … to N mL/L" / dilute to / top up to / fill to | `bring_to_volume` | `target_volume`, `unit`, `diluent` if named |
+| **mix** on a stir plate / magnetic stirrer with a stated duration | `mix` | `duration_minutes`, `speed` |
+| stir / vortex / invert / shake / swirl / resuspend / triturate | `agitate` | `method` (Stir/Vortex/Invert/Shake), `duration_minutes` (parse "N min", else 5), `speed` (else medium) |
+| adjust the pH … with HCl / NaOH (no `pHMeter` part) | `ph_adjust` | `target_ph`, `tolerance` (else 0.1), `reagent` |
+| heat / warm / autoclave / masterclave / water bath / incubate at ≥ 37 °C / boil | `heat` | `target_temp_c`, `duration_minutes` |
+| freeze / store frozen / place in the −20/−80/−90 freezer / snap-freeze | `freeze` | `target_temp_c`, `duration` |
+| thaw / allow to thaw / bring up from frozen / equilibrate to ambient (from cold) | `thaw` | `target_temp_c`, `method`, `until` |
+| cool / chill / cool to / allow to cool / place on ice | `cool` | `target_temp_c` |
+| transfer / pour / decant / aliquot / elute / load onto column / pass through / **filter** | `transfer` | `from_vessel`, `to_vessel` (parse "from X to Y"; else blank) |
+| cap / screw cap / **Parafilm** / seal / cover / stopper | `cap` | `method`, `notes` |
+| package / box / place in rack or bin / stack in rack / **deliver to** … area / **store at** … / transfer racks to bin | `package` | `container`, `label_ref`, `destination`, `notes` |
+| print label(s) / set up the label printer | `print_labels` | `label_template`, `quantity`, `notes` |
+| verify / check / confirm / inspect / ensure / record defects / record the result | `observe` | `prompt` = the full cleaned instruction |
+| *(none of the above — a `<h2>`/`PART` header, a `NOTE:`/`CAUTION:`, or prose with no operator action)* | `custom` | `instruction_text` |
+
+When a numeric value the target type needs isn't in the text, **omit it and flag
+it** (R9-style) — never invent a temperature, duration, or volume.
 
 **R2 — Clean the text.** `instructions_N` values contain HTML (`<b>`, `<span>`,
 `<i>`, `<h2>`, `<ul>`/`<li>`, `<blockquote>`, `<div style=…>`, `<a href=…>`) and
@@ -227,6 +272,14 @@ Every referenced material gets an idempotent `reagent_items` upsert
   Filter, Cap, Plate, Petri, Flask, `Bottle(s)`/`Jar(s)`/`Tube(s)`/`Filter(s)`/`Plate(s)`).
 - `RM` otherwise. Set `lot_controlled = true` for `RM`, `false` for `PKG`. Tag
   `notes = 'Migrated from Uniflow — needs D365 item mapping'`.
+
+**R3a — Weigh vs. Dispense (by unit).** A `materialWeighed_N` is a measured
+quantity. Map it by `reqAmountUnits`:
+- **mass** (`g`, `mg`, `kg`, `µg`) → `weigh` (`target_weight`, `unit`, `tolerance_pct:2`, `lot_controlled`).
+- **volume** (`mL`, `L`, `µL`) → `dispense` (`target_volume`, `unit`, `tolerance_pct:2`, `lot_controlled`).
+
+  `dispense` is the volumetric twin of `weigh` — same tolerance gate at run time,
+  measured off a graduated cylinder / pipette / dispenser instead of a balance.
 
 **R4 — Attachments.** Each `attachments_N` → one `attachment` step. If it is the
 opening `text_0` + `attachments_1` pair, merge them: `name = "Attach Supporting
@@ -272,6 +325,22 @@ library default) and always appears in the report's review list.
 prior WI for the same `reagent_item_id` + `title` whose description starts
 "Migrated from Uniflow" (steps cascade).
 
+**R12 — `materialNoQty_N` (Q.S. / add-as-needed).** Look at its heading text:
+- If the heading is a **Q.S. / bring-to-volume** cue ("Q.S. to N mL", "bring to
+  volume", "bring the solution to N L") → emit one `bring_to_volume` step:
+  `material_name` = the solution (WI product, or "the solution"), `target_volume`
+  + `unit` parsed from the heading, `diluent` = the `selectedItem` name.
+- Otherwise (e.g. an adjusting reagent named for a pH step, or "add entire
+  contents") → `gather_reagents` with `quantity: null`, as before.
+
+**R13 — Keep `custom` to a minimum, and count it.** `custom` is the fallback of
+last resort, never a convenience. Before emitting `custom`, re-check R1's verb
+table — a step is only `custom` when it is a genuine section header (`<h2>`,
+"PART I"), a `NOTE:` / `CAUTION:`, or prose with no operator action. `production_break`
+(day/part dividers) is a separate typed step and does **not** count as custom.
+Track the number of `custom` steps you emit; the report must surface it (see the
+Output contract) so reviewers can focus on shrinking it.
+
 ### Output contract
 
 **1. SQL script** — one fenced ```sql block:
@@ -294,12 +363,22 @@ Resolve each template as `(SELECT id FROM public.step_templates WHERE
 step_type='<type>' AND is_system LIMIT 1)` and build `parameters` with
 `jsonb_build_object(...)` including `'_step_type'`.
 
-**2. Migration report** — a table of every formPart → the step it became (or why
-it was merged/dropped), then a **"Needs human review"** list containing at
-minimum: every `weigh` tolerance (defaulted to 2%), every `scheduled_minutes`
-estimate, every new `reagent_items` row (needs D365 mapping), any `custom`
-fallback, any `uniflow_version` that didn't parse, and any Q.S. step with
-`quantity: null`.
+**2. Migration report** — starts with a one-line **step-type summary**, then a
+table of every formPart → the step it became (or why it was merged/dropped),
+then a **"Needs human review"** list.
+
+- **Step-type summary line (required, first line of the report):**
+  `Steps: <M> total · custom: <C> (<C/M %>) · typed: <M-C>`. This custom count
+  is the headline metric reviewers scan for — keep `C` as low as R1/R13 allow.
+- If `C > 0`, add a **"Custom steps introduced (<C>)"** sub-list naming each one
+  by `step_order` + its source text, so a human can judge whether a typed step
+  was missed. (`production_break` is typed and is **not** counted here.)
+- **"Needs human review"** contains at minimum: every `weigh`/`dispense`
+  tolerance (defaulted to 2%), every `scheduled_minutes` estimate, every new
+  `reagent_items` row (needs D365 mapping), **every `custom` step**, any
+  `uniflow_version` that didn't parse, any `bring_to_volume` whose target volume
+  couldn't be parsed, and any typed step left missing a numeric value (temp,
+  duration, volume) because the source text didn't state one.
 
 ### Hard rules
 
@@ -308,6 +387,8 @@ fallback, any `uniflow_version` that didn't parse, and any Q.S. step with
 - Never invent material IDs, quantities, units, or spec limits. Absent → omit
   and flag.
 - Never emit a `_step_type` outside the supported set.
+- **Prefer a typed step over `custom`.** A standalone `text` part becomes `custom`
+  only after R1's verb table finds no match. Report the total custom count every time.
 - Preserve Uniflow part order; `step_order` is contiguous from 1.
 - Every migrated WI is `version = 1`, `status = 'draft'`. Never auto-approve.
 
@@ -340,14 +421,22 @@ spec either way; the agent is how you validate that spec on real recipes first.
 
 ## Part 6 — Test set
 
-1. **A covered reagent-lab recipe** (e.g. the few-shot) — must reproduce its SQL.
-2. **A8 Agar (A-00020)** — must **SKIP** with a report naming `pHMeter` (ok) …
+1. **A covered reagent-lab recipe** (e.g. the few-shot) — must reproduce its SQL,
+   including the verb-classified steps (`bring_to_volume`, `package`, `observe`)
+   and a report whose summary line shows **custom: 0**.
+2. **Verb classification** — a recipe with standalone action text must produce
+   typed steps, not `custom`: "Stir for 10 minutes" → `agitate`; "Q.S. to 950 mL
+   with Methanol" → `bring_to_volume`; "Deliver the bottle to the 15-30°C QC
+   area" → `package`; "Cover the beaker with a double layer of Parafilm" → `cap`;
+   a measured "900 mL" via `materialWeighed` → `dispense` (not `weigh`).
+3. **A8 Agar (A-00020)** — must **SKIP** with a report naming `pHMeter` (ok) …
    actually it also contains `currentTime` and `textEditable`; `textEditable` is
    supported but `currentTime` is not, so it must skip and name `currentTime`.
    This proves the scope gate fires on a real, complex recipe.
-3. **A stocked item (empty `formPlan`)** — must skip with the "no recipe" line.
-4. **A cell-culture recipe** (any with `passageNumber`/`flasks`) — must skip and
+4. **A stocked item (empty `formPlan`)** — must skip with the "no recipe" line.
+5. **A cell-culture recipe** (any with `passageNumber`/`flasks`) — must skip and
    name the unsupported types.
 
 Passing means: covered recipes produce SQL that runs and renders in Rocket Ship,
+standalone actions land as typed steps (custom count stays low and is reported),
 and every out-of-scope recipe is refused by name — never partially converted.

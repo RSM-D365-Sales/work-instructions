@@ -98,16 +98,24 @@ export type StepType =
   | 'gather_inputs'     // legacy — keep for existing saved WIs
   | 'gather_equipment'  // free-text lab equipment list
   | 'gather_reagents'   // catalog-linked reagent list
-  | 'weigh'
-  | 'mix'
-  | 'transfer'
+  | 'weigh'             // measure a solid mass to a target within tolerance
+  | 'dispense'          // measure a liquid volume to a target within tolerance (weigh for liquids)
+  | 'mix'               // timed mixing on a stir plate
+  | 'agitate'           // stir / vortex / invert (distinct from timed mix)
+  | 'transfer'          // move material between vessels (pour/aliquot/decant/elute/filter)
+  | 'bring_to_volume'   // Q.S. / dilute to a final volume
   | 'ph_adjust'
   | 'heat'
   | 'cool'
+  | 'freeze'            // freeze / frozen storage
+  | 'thaw'              // thaw from frozen
+  | 'overnight'         // an overnight hold / incubation
   | 'observe'
   | 'notes'             // free-text notes about the order up to this step
   | 'production_break'  // divider marking the boundary between parts of a run
   | 'print_labels'
+  | 'cap'               // cap / seal / parafilm the container
+  | 'package'           // package / box / store / deliver to destination
   | 'attachment'        // attach supporting documents (PDF, image, …) to the order
   | 'possible_deviation' // flag a possible deviation; capture impacted qty + notify supervisor
   | 'user_defined'      // author-built template; fields defined in parameter_schema

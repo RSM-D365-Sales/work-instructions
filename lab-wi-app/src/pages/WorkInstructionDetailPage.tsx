@@ -9,6 +9,7 @@ import {
   FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, Trash2,
   Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, ChevronRight, SlidersHorizontal, Paperclip,
   Copy, X, Search,
+  Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Lock, Package,
 } from 'lucide-react';
 import { formatDate, cn, wiLineageKey } from '../lib/utils';
 
@@ -17,12 +18,20 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   gather_equipment: <Wrench size={15} />,
   gather_reagents:  <Beaker size={15} />,
   weigh:            <Scale size={15} />,
+  dispense:         <Droplet size={15} />,
   mix:              <Timer size={15} />,
+  agitate:          <Waves size={15} />,
   transfer:         <ArrowRightLeft size={15} />,
+  bring_to_volume:  <FlaskRound size={15} />,
   ph_adjust:        <TestTube size={15} />,
   heat:             <Thermometer size={15} />,
   cool:             <Snowflake size={15} />,
+  freeze:           <ThermometerSnowflake size={15} />,
+  thaw:             <ThermometerSun size={15} />,
+  overnight:        <Moon size={15} />,
   observe:       <Eye size={15} />,  print_labels:     <Printer size={15} />,  custom:        <Settings size={15} />,
+  cap:              <Lock size={15} />,
+  package:          <Package size={15} />,
   attachment:       <Paperclip size={15} />,
   notes:            <StickyNote size={15} />,
   production_break: <Milestone size={15} />,
@@ -43,18 +52,34 @@ function stepSummary(step: WIStep): string {
   switch (type) {
     case 'weigh':
       return `Target: ${p.target_weight} ${p.unit} ± ${p.tolerance_pct}%`;
+    case 'dispense':
+      return `Dispense ${p.material_name ? `${p.material_name} — ` : ''}${p.target_volume} ${p.unit} ± ${p.tolerance_pct}%`;
     case 'mix':
       return `Mix for ${p.duration_minutes} min at ${p.speed} speed`;
+    case 'agitate':
+      return `${p.method ?? 'Stir'} for ${p.duration_minutes} min at ${p.speed} speed`;
     case 'heat':
       return `Heat to ${p.target_temp_c}°C for ${p.duration_minutes} min`;
     case 'cool':
       return `Cool to ${p.target_temp_c}°C`;
+    case 'freeze':
+      return `Freeze to ${p.target_temp_c}°C${p.duration ? ` — ${p.duration}` : ''}`;
+    case 'thaw':
+      return `Thaw to ${p.target_temp_c}°C${p.method ? ` (${p.method})` : ''}`;
+    case 'overnight':
+      return `Overnight: ${p.condition || 'hold'}${p.temp_c != null ? ` at ${p.temp_c}°C` : ''}`;
+    case 'bring_to_volume':
+      return `Bring ${p.material_name ? `${p.material_name} ` : ''}to ${p.target_volume} ${p.unit}${p.diluent ? ` with ${p.diluent}` : ''}`;
     case 'ph_adjust':
       return `Target pH ${p.target_ph} ± ${p.tolerance} using ${p.reagent}`;
     case 'observe':
       return p.prompt as string ?? '';
     case 'transfer':
       return `From ${p.from_vessel} to ${p.to_vessel}`;
+    case 'cap':
+      return `${p.method ?? 'Cap'}${p.notes ? ` — ${p.notes}` : ''}`;
+    case 'package':
+      return `${p.container || 'Package'}${p.destination ? ` → ${p.destination}` : ''}${p.label_ref ? ` (${p.label_ref})` : ''}`;
     case 'gather_inputs': {
       const inputs = p.inputs as { material_name: string; quantity: number; unit: string }[] ?? [];
       return inputs.map(i => `${i.material_name} ${i.quantity} ${i.unit}`).join(', ');

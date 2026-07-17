@@ -9,6 +9,7 @@ import {
   FlaskConical, Scale as ScaleIcon, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings,
   Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal, Paperclip,
   ChevronsDownUp, ChevronsUpDown, PanelLeftClose, PanelLeftOpen,
+  Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Lock, Package,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -18,15 +19,23 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   gather_equipment: <Wrench size={15} />,
   gather_reagents:  <Beaker size={15} />,
   weigh:            <ScaleIcon size={15} />,
+  dispense:         <Droplet size={15} />,
   mix:              <Timer size={15} />,
+  agitate:          <Waves size={15} />,
   transfer:         <ArrowRightLeft size={15} />,
+  bring_to_volume:  <FlaskRound size={15} />,
   ph_adjust:        <TestTube size={15} />,
   heat:             <Thermometer size={15} />,
   cool:             <Snowflake size={15} />,
+  freeze:           <ThermometerSnowflake size={15} />,
+  thaw:             <ThermometerSun size={15} />,
+  overnight:        <Moon size={15} />,
   observe:          <Eye size={15} />,
   notes:            <StickyNote size={15} />,
   production_break: <Milestone size={15} />,
   print_labels:     <Printer size={15} />,
+  cap:              <Lock size={15} />,
+  package:          <Package size={15} />,
   attachment:       <Paperclip size={15} />,
   possible_deviation: <AlertTriangle size={15} />,
   user_defined:     <SlidersHorizontal size={15} />,
@@ -611,6 +620,298 @@ function StepParamEditor({
         </div>
       );
 
+    case 'dispense': {
+      const volUnits = ['mL','L','µL','g'];
+      const hasGatheredInputs = gatheredInputs.length > 0;
+      function selectMaterial(name: string) {
+        const found = gatheredInputs.find(i => i.material_name === name);
+        onChange({
+          ...params,
+          material_name: name,
+          ...(found ? { target_volume: found.quantity, unit: found.unit, lot_controlled: found.lot_controlled ?? false } : {}),
+        });
+      }
+      return (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1">Material / Solution</label>
+            {hasGatheredInputs ? (
+              <select
+                value={(params.material_name as string) ?? ''}
+                onChange={e => selectMaterial(e.target.value)}
+                className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              >
+                <option value="">— Select a gathered input —</option>
+                {gatheredInputs.map((inp, i) => (
+                  <option key={i} value={inp.material_name}>{inp.material_name} ({inp.quantity} {inp.unit})</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value={(params.material_name as string) ?? ''}
+                onChange={e => set('material_name', e.target.value)}
+                className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                placeholder="e.g. Methanol"
+              />
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Unit</label>
+            <select
+              value={(params.unit as string) ?? 'mL'}
+              onChange={e => set('unit', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs"
+            >
+              {volUnits.map(u => <option key={u}>{u}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Target Volume</label>
+            <input
+              type="number"
+              value={(params.target_volume as number) ?? ''}
+              onChange={e => set('target_volume', parseFloat(e.target.value))}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="900"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Tolerance (%)</label>
+            <input
+              type="number"
+              value={(params.tolerance_pct as number) ?? 2}
+              onChange={e => set('tolerance_pct', parseFloat(e.target.value))}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+          </div>
+          <label className="col-span-2 inline-flex items-center gap-2 text-xs font-medium text-gray-600">
+            <input
+              type="checkbox"
+              checked={(params.lot_controlled as boolean) ?? false}
+              onChange={e => set('lot_controlled', e.target.checked)}
+              className="w-3.5 h-3.5 rounded accent-blue-600"
+            />
+            Lot / batch controlled (operator records lot number at run time)
+          </label>
+        </div>
+      );
+    }
+
+    case 'agitate':
+      return (
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Method</label>
+            <select
+              value={(params.method as string) ?? 'Stir'}
+              onChange={e => set('method', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs"
+            >
+              {['Stir','Vortex','Invert','Shake'].map(m => <option key={m}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Duration (min)</label>
+            <select
+              value={(params.duration_minutes as number) ?? 5}
+              onChange={e => set('duration_minutes', parseInt(e.target.value))}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs"
+            >
+              {[1, 2, 5, 10, 15, 20, 30].map(m => <option key={m} value={m}>{m} min</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Speed</label>
+            <select
+              value={(params.speed as string) ?? 'medium'}
+              onChange={e => set('speed', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs"
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+        </div>
+      );
+
+    case 'bring_to_volume': {
+      const bvUnits = ['mL','L','µL'];
+      return (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1">Solution</label>
+            <input
+              value={(params.material_name as string) ?? ''}
+              onChange={e => set('material_name', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="e.g. Masterclave solution"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Final Volume</label>
+            <input
+              type="number"
+              value={(params.target_volume as number) ?? ''}
+              onChange={e => set('target_volume', parseFloat(e.target.value))}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="3"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Unit</label>
+            <select
+              value={(params.unit as string) ?? 'mL'}
+              onChange={e => set('unit', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs"
+            >
+              {bvUnits.map(u => <option key={u}>{u}</option>)}
+            </select>
+          </div>
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1">Diluent</label>
+            <input
+              value={(params.diluent as string) ?? ''}
+              onChange={e => set('diluent', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="e.g. CLRW water"
+            />
+          </div>
+        </div>
+      );
+    }
+
+    case 'freeze':
+    case 'thaw':
+      return (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Target Temp (°C)</label>
+            <input
+              type="number"
+              value={(params.target_temp_c as number) ?? ''}
+              onChange={e => set('target_temp_c', parseFloat(e.target.value))}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder={stepType === 'freeze' ? '-20' : '4'}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              {stepType === 'freeze' ? 'Duration / Until' : 'Thaw Until'}
+            </label>
+            <input
+              value={(params[stepType === 'freeze' ? 'duration' : 'until'] as string) ?? ''}
+              onChange={e => set(stepType === 'freeze' ? 'duration' : 'until', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder={stepType === 'freeze' ? 'e.g. overnight, ≥ 2 hours' : 'e.g. fully thawed, no ice crystals'}
+            />
+          </div>
+          {stepType === 'thaw' && (
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Method (optional)</label>
+              <input
+                value={(params.method as string) ?? ''}
+                onChange={e => set('method', e.target.value)}
+                className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                placeholder="e.g. 2-8°C overnight, room temp, 37°C water bath"
+              />
+            </div>
+          )}
+        </div>
+      );
+
+    case 'overnight':
+      return (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1">What happens overnight</label>
+            <input
+              value={(params.condition as string) ?? ''}
+              onChange={e => set('condition', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="e.g. Incubate, thaw at 2-8°C, allow to equilibrate"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Temperature (°C, optional)</label>
+            <input
+              type="number"
+              value={(params.temp_c as number) ?? ''}
+              onChange={e => set('temp_c', e.target.value === '' ? null : parseFloat(e.target.value))}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="e.g. 4"
+            />
+          </div>
+        </div>
+      );
+
+    case 'cap':
+      return (
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Method</label>
+            <select
+              value={(params.method as string) ?? 'Cap'}
+              onChange={e => set('method', e.target.value)}
+              className="w-40 border border-gray-200 rounded px-2 py-1 text-xs"
+            >
+              {['Cap','Screw cap','Parafilm','Seal','Stopper'].map(m => <option key={m}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Notes (optional)</label>
+            <input
+              value={(params.notes as string) ?? ''}
+              onChange={e => set('notes', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="e.g. Double layer of Parafilm; cap tightly"
+            />
+          </div>
+        </div>
+      );
+
+    case 'package':
+      return (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Container</label>
+            <input
+              value={(params.container as string) ?? ''}
+              onChange={e => set('container', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="e.g. 1L glass bottle, grey bin"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Label Reference</label>
+            <input
+              value={(params.label_ref as string) ?? ''}
+              onChange={e => set('label_ref', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="e.g. Label #1"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Destination</label>
+            <input
+              value={(params.destination as string) ?? ''}
+              onChange={e => set('destination', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="e.g. 2-8°C QC area"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Notes (optional)</label>
+            <input
+              value={(params.notes as string) ?? ''}
+              onChange={e => set('notes', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="Handling / storage notes"
+            />
+          </div>
+        </div>
+      );
+
     case 'user_defined':
       return <UserDefinedParamEditor params={params} onChange={onChange} />;
 
@@ -1120,9 +1421,17 @@ export default function WorkInstructionEditorPage() {
       case 'print_labels': return { label_template: '', quantity: 1, notes: '' };
       case 'attachment': return { prompt: '', required: true };
       case 'weigh': return { material_name: '', target_weight: 0, unit: 'g', tolerance_pct: 2 };
+      case 'dispense': return { material_name: '', target_volume: 0, unit: 'mL', tolerance_pct: 2, lot_controlled: false };
       case 'mix': return { duration_minutes: 10, speed: 'medium' };
+      case 'agitate': return { method: 'Stir', duration_minutes: 5, speed: 'medium' };
+      case 'bring_to_volume': return { material_name: '', target_volume: 0, unit: 'mL', diluent: '' };
       case 'heat': return { target_temp_c: 80, duration_minutes: 15 };
       case 'cool': return { target_temp_c: 20 };
+      case 'freeze': return { target_temp_c: -20, duration: '' };
+      case 'thaw': return { target_temp_c: 4, method: '', until: '' };
+      case 'overnight': return { condition: '', temp_c: null };
+      case 'cap': return { method: 'Cap', notes: '' };
+      case 'package': return { container: '', label_ref: '', destination: '', notes: '' };
       case 'ph_adjust': return { target_ph: 7, tolerance: 0.1, reagent: '' };
       case 'observe': return { prompt: '' };
       case 'notes': return { prompt: '' };

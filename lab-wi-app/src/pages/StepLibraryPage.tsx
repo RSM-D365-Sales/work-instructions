@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { StepTemplate, StepType } from '../types';
-import { Plus, Pencil, Trash2, FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, ChevronDown, ChevronUp, Lock, Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal, Paperclip } from 'lucide-react';
+import { Plus, Pencil, Trash2, FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, ChevronDown, ChevronUp, Lock, Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal, Paperclip, Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Package } from 'lucide-react';
 import type { ParameterSchema, ParameterFieldDef } from '../types';
 
 const STEP_TYPE_META: Record<StepType, { label: string; icon: React.ReactNode; color: string }> = {
@@ -11,15 +11,23 @@ const STEP_TYPE_META: Record<StepType, { label: string; icon: React.ReactNode; c
   gather_equipment: { label: 'Gather Equipment',       icon: <Wrench size={16} />,       color: 'bg-slate-100 text-slate-700' },
   gather_reagents:  { label: 'Gather Reagents',        icon: <Beaker size={16} />,        color: 'bg-indigo-100 text-indigo-700' },
   weigh:            { label: 'Weigh',                  icon: <Scale size={16} />,         color: 'bg-blue-100 text-blue-700' },
+  dispense:         { label: 'Dispense',               icon: <Droplet size={16} />,       color: 'bg-blue-100 text-blue-700' },
   mix:              { label: 'Mix',                    icon: <Timer size={16} />,         color: 'bg-cyan-100 text-cyan-700' },
+  agitate:          { label: 'Stir / Vortex / Invert', icon: <Waves size={16} />,         color: 'bg-cyan-100 text-cyan-700' },
   transfer:         { label: 'Transfer',               icon: <ArrowRightLeft size={16} />, color: 'bg-orange-100 text-orange-700' },
+  bring_to_volume:  { label: 'Bring to Volume',        icon: <FlaskRound size={16} />,    color: 'bg-orange-100 text-orange-700' },
   ph_adjust:        { label: 'pH Adjust',              icon: <TestTube size={16} />,      color: 'bg-lime-100 text-lime-700' },
   heat:             { label: 'Heat',                   icon: <Thermometer size={16} />,   color: 'bg-red-100 text-red-700' },
   cool:             { label: 'Cool',                   icon: <Snowflake size={16} />,     color: 'bg-sky-100 text-sky-700' },
+  freeze:           { label: 'Freeze',                 icon: <ThermometerSnowflake size={16} />, color: 'bg-sky-100 text-sky-700' },
+  thaw:             { label: 'Thaw',                   icon: <ThermometerSun size={16} />, color: 'bg-orange-100 text-orange-700' },
+  overnight:        { label: 'Overnight Hold',         icon: <Moon size={16} />,          color: 'bg-indigo-100 text-indigo-700' },
   observe:          { label: 'Observe & Record',       icon: <Eye size={16} />,           color: 'bg-purple-100 text-purple-700' },
   notes:            { label: 'Notes',                  icon: <StickyNote size={16} />,    color: 'bg-amber-100 text-amber-700' },
   production_break: { label: 'Production Break',       icon: <Milestone size={16} />,     color: 'bg-rose-100 text-rose-700' },
   print_labels:     { label: 'Print Labels',            icon: <Printer size={16} />,       color: 'bg-teal-100 text-teal-700' },
+  cap:              { label: 'Cap / Seal',             icon: <Lock size={16} />,          color: 'bg-teal-100 text-teal-700' },
+  package:          { label: 'Package & Store',        icon: <Package size={16} />,       color: 'bg-teal-100 text-teal-700' },
   attachment:       { label: 'Add Attachment',          icon: <Paperclip size={16} />,     color: 'bg-violet-100 text-violet-700' },
   possible_deviation: { label: 'Possible Deviation',    icon: <AlertTriangle size={16} />, color: 'bg-red-100 text-red-700' },
   user_defined:     { label: 'User Defined',           icon: <SlidersHorizontal size={16} />, color: 'bg-emerald-100 text-emerald-700' },
