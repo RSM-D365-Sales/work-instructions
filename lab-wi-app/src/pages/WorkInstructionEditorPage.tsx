@@ -8,7 +8,7 @@ import {
   Plus, Trash2, GripVertical, Save, Send, ChevronDown, ChevronUp, ArrowLeft,
   FlaskConical, Scale as ScaleIcon, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings,
   Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal, Paperclip,
-  ChevronsDownUp, ChevronsUpDown,
+  ChevronsDownUp, ChevronsUpDown, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -845,12 +845,17 @@ function InsertStepDivider({ templates, onInsert }: { templates: StepTemplate[];
 }
 
 // ─── Left step navigator (Word-style navigation pane) ────────────────────────
+// Pinned flush against the app sidebar: negative margins swallow the page
+// padding, sticky + h-screen keep it in place while the page scrolls, and the
+// step list scrolls internally when it outgrows the viewport.
 function StepNavPanel({
-  steps, activeId, canDrag, onNavigate, onReorder,
+  steps, activeId, canDrag, hidden, onToggleHidden, onNavigate, onReorder,
 }: {
   steps: LocalStep[];
   activeId: string | null;
   canDrag: boolean;
+  hidden: boolean;
+  onToggleHidden: () => void;
   onNavigate: (localId: string) => void;
   onReorder: (from: number, to: number) => void;
 }) {
@@ -858,12 +863,36 @@ function StepNavPanel({
   const [overIdx, setOverIdx] = useState<number | null>(null);
 
   return (
-    <nav className="hidden xl:block w-60 shrink-0 sticky top-0 self-start">
-      <div className="flex flex-col bg-white border border-gray-200 rounded-xl overflow-hidden max-h-[calc(100vh-6rem)]">
-        <p className="px-3 py-2.5 text-xs font-semibold text-gray-500 border-b border-gray-100 shrink-0">
-          Step Navigator
-        </p>
-        <div className="overflow-y-auto p-1.5 space-y-0.5">
+    <nav
+      className={cn(
+        'hidden lg:flex flex-col sticky top-0 h-screen -my-6 -ml-6 shrink-0 bg-white border-r border-gray-200 transition-[width] duration-200',
+        hidden ? 'w-11' : 'w-60'
+      )}
+    >
+      <div
+        className={cn(
+          'flex items-center border-b border-gray-100 shrink-0 py-2.5',
+          hidden ? 'justify-center' : 'justify-between pl-3 pr-2'
+        )}
+      >
+        {!hidden && <p className="text-xs font-semibold text-gray-500">Step Navigator</p>}
+        <button
+          onClick={onToggleHidden}
+          title={hidden ? 'Show step navigator' : 'Hide step navigator'}
+          aria-label={hidden ? 'Show step navigator' : 'Hide step navigator'}
+          className="p-1 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+        >
+          {hidden ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+        </button>
+      </div>
+      {hidden ? (
+        steps.length > 0 && (
+          <p className="mt-2 text-center text-[10px] font-semibold text-gray-400" title={`${steps.length} steps`}>
+            {steps.length}
+          </p>
+        )
+      ) : (
+        <div className="flex-1 min-h-0 overflow-y-auto p-1.5 space-y-0.5">
           {steps.length === 0 && (
             <p className="px-2 py-3 text-xs text-gray-400 italic">No steps yet</p>
           )}
@@ -900,13 +929,15 @@ function StepNavPanel({
             </button>
           ))}
         </div>
-      </div>
+      )}
     </nav>
   );
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 type LocalStep = Partial<WIStep> & { _localId: string; step_type: StepType };
+
+const STEP_NAV_HIDDEN_KEY = 'wi-step-nav-hidden';
 
 export default function WorkInstructionEditorPage() {
   const { id } = useParams<{ id: string }>();
@@ -935,6 +966,7 @@ export default function WorkInstructionEditorPage() {
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [flashId, setFlashId] = useState<string | null>(null);
   const [activeStepId, setActiveStepId] = useState<string | null>(null);
+  const [navHidden, setNavHidden] = useState(() => localStorage.getItem(STEP_NAV_HIDDEN_KEY) === '1');
   const flashTimerRef = useRef<number | null>(null);
   // Step order as ids, kept in a ref so the scroll-spy observer can read the
   // current order without being torn down on every keystroke.
@@ -1039,6 +1071,12 @@ export default function WorkInstructionEditorPage() {
 
   const collapseAll = () => setCollapsedIds(new Set(steps.map(s => s._localId)));
   const expandAll = () => setCollapsedIds(new Set());
+
+  const toggleNavHidden = () =>
+    setNavHidden(prev => {
+      localStorage.setItem(STEP_NAV_HIDDEN_KEY, prev ? '0' : '1');
+      return !prev;
+    });
 
   function addStepFromTemplate(t: StepTemplate, atIndex?: number) {
     const localId = crypto.randomUUID();
@@ -1222,12 +1260,14 @@ export default function WorkInstructionEditorPage() {
   const isDraft = isNew || wiData?.status === 'draft' || wiData?.status === 'rejected';
 
   return (
-    <div className="max-w-6xl mx-auto flex items-start gap-6">
-      {/* Word-style step navigator */}
+    <div className="flex items-start gap-6">
+      {/* Word-style step navigator, pinned beside the app sidebar */}
       <StepNavPanel
         steps={steps}
         activeId={activeStepId}
         canDrag={!!canEdit}
+        hidden={navHidden}
+        onToggleHidden={toggleNavHidden}
         onNavigate={navigateToStep}
         onReorder={reorderSteps}
       />
