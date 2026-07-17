@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
@@ -12,6 +12,7 @@ import {
   Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Lock, Package, Clock,
 } from 'lucide-react';
 import { formatDate, cn, wiLineageKey } from '../lib/utils';
+import StepNavPanel, { type StepNavItem } from '../components/StepNavPanel';
 
 const STEP_ICONS: Record<StepType, React.ReactNode> = {
   gather_inputs:    <FlaskConical size={15} />,
@@ -289,6 +290,32 @@ export default function WorkInstructionDetailPage() {
     setApprovalLoading(false);
   }
 
+  // Step navigator: highlight whichever step card is crossing the upper
+  // viewport as the reader scrolls. Re-observes only when the step set changes.
+  const [activeStepId, setActiveStepId] = useState<string | null>(null);
+  const stepOrderRef = useRef<string[]>([]);
+  stepOrderRef.current = steps.map(s => s.id);
+  const stepIdsKey = steps.map(s => s.id).join('|');
+  useEffect(() => {
+    const visible = new Set<string>();
+    const observer = new IntersectionObserver(entries => {
+      for (const e of entries) {
+        const sid = (e.target as HTMLElement).dataset.detailStepId;
+        if (!sid) continue;
+        if (e.isIntersecting) visible.add(sid); else visible.delete(sid);
+      }
+      const first = stepOrderRef.current.find(sid => visible.has(sid));
+      if (first) setActiveStepId(first);
+    }, { rootMargin: '-10% 0px -55% 0px' });
+    document.querySelectorAll<HTMLElement>('[data-detail-step-id]').forEach(el => observer.observe(el));
+    return () => observer.disconnect();
+  }, [stepIdsKey]);
+
+  function navigateToStep(sid: string) {
+    document.getElementById(`wi-detail-step-${sid}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setActiveStepId(sid);
+  }
+
   if (isLoading) return <div className="text-center py-12 text-gray-400">Loading…</div>;
   if (!wi) return <div className="text-center py-12 text-gray-500">Work instruction not found</div>;
 
@@ -302,8 +329,20 @@ export default function WorkInstructionDetailPage() {
   const canStartProduction = wi.status === 'approved';
   const canCreateNewVersion = wi.status === 'approved' && (isAuthor || isAdmin);
 
+  const navItems: StepNavItem[] = steps.map(step => {
+    const t = ((step.parameters as Record<string, unknown>)._step_type ?? 'custom') as StepType;
+    return { id: step.id, name: step.name, icon: STEP_ICONS[t] };
+  });
+
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto flex items-start gap-6">
+      <StepNavPanel
+        items={navItems}
+        activeId={activeStepId}
+        onNavigate={navigateToStep}
+        storageKey="wi-detail-nav"
+      />
+      <div className="flex-1 min-w-0 max-w-3xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-start gap-3">
         <button onClick={() => navigate('/work-instructions')} className="mt-1 text-gray-400 hover:text-gray-700 transition-colors">
@@ -463,7 +502,12 @@ export default function WorkInstructionDetailPage() {
               const stepType = (p._step_type ?? 'custom') as StepType;
               const summary = stepSummary(step);
               return (
-                <li key={step.id} className="flex items-start gap-4 px-5 py-4">
+                <li
+                  key={step.id}
+                  id={`wi-detail-step-${step.id}`}
+                  data-detail-step-id={step.id}
+                  className="flex items-start gap-4 px-5 py-4 scroll-mt-4"
+                >
                   <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-xs font-bold shrink-0">
                     {i + 1}
                   </div>
@@ -599,6 +643,7 @@ export default function WorkInstructionDetailPage() {
           </ul>
         </div>
       )}
+      </div>
     </div>
   );
 }

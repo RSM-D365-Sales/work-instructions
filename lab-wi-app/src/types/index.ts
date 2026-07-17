@@ -212,6 +212,8 @@ export interface ProductionOrder {
   notes?: string;
   created_by: string;
   assigned_to?: string;
+  /** Who held this order before the last hand-off; target of a "Send back". */
+  previous_assigned_to?: string | null;
   /** Date the finished product is required by (separate from scheduled_start). */
   required_by?: string | null;
   /** Planned start time for this run (drives the gantt block). */
@@ -233,6 +235,7 @@ export interface ProductionOrder {
   work_instruction?: WorkInstruction;
   creator?: Profile;
   assignee?: Profile;
+  previous_assignee?: Profile;
 }
 
 /** D365 product classification: finished good, raw material, packaging. */

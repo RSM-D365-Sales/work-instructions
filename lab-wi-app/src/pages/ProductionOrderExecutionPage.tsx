@@ -8,6 +8,7 @@ import { calculateTolerance, cn } from '../lib/utils';
 import { evaluateQC, formatSpec } from '../lib/qc';
 import { createNotification } from '../lib/notifications';
 import OrderMaterialsSummary from '../components/OrderMaterialsSummary';
+import StepNavPanel, { type StepNavItem, type StepNavStatus } from '../components/StepNavPanel';
 import {
   ArrowLeft, CheckCircle, Circle, ChevronRight, Scale as ScaleIcon, Timer,
   FlaskConical, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings,
@@ -1444,8 +1445,9 @@ function StepCard({ wiStep, poStep, index, isActive, orderId, orderNumber, techn
 
   return (
     <div
+      id={`po-step-${wiStep.id}`}
       className={cn(
-        'rounded-xl border transition-all',
+        'rounded-xl border transition-all scroll-mt-4',
         isActive ? 'border-blue-300 shadow-md' : isDone ? 'border-gray-100 bg-gray-50' : 'border-gray-200 bg-white',
       )}
     >
@@ -1946,7 +1948,7 @@ export default function ProductionOrderExecutionPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('production_orders')
-        .select('*, work_instruction:work_instructions(title, product_name, target_molarity, version, reagent_item_id, reagent_item:reagent_items(id, item_number, product_name, unit_of_measure)), assignee:profiles!assigned_to(full_name, email)')
+        .select('*, work_instruction:work_instructions(title, product_name, target_molarity, version, reagent_item_id, reagent_item:reagent_items(id, item_number, product_name, unit_of_measure)), assignee:profiles!assigned_to(full_name, email), previous_assignee:profiles!previous_assigned_to(full_name, email)')
         .eq('id', id!)
         .single();
       if (error) throw error;
@@ -2156,13 +2158,48 @@ export default function ProductionOrderExecutionPage() {
   const isCreator = order?.created_by === profile?.id;
   const canCancel = (isAdmin || isCreator) && (order?.status === 'pending' || order?.status === 'in_progress');
   const canDelete = isAdmin || (isCreator && (order?.status === 'pending' || order?.status === 'cancelled'));
-  const canReassign = (isAdmin || isCreator) && order?.status !== 'completed' && order?.status !== 'cancelled';
+  const isAssignee = order?.assigned_to === profile?.id;
+  // The person actually holding the run can hand it off too — not just admins /
+  // the creator — so an in-progress run can be passed on and sent back.
+  const canReassign = (isAdmin || isCreator || isAssignee) && order?.status !== 'completed' && order?.status !== 'cancelled';
 
   const completedCount = poSteps.filter(s => s.status === 'completed' || s.status === 'skipped').length;
   const progress = wiSteps.length > 0 ? Math.round((completedCount / wiSteps.length) * 100) : 0;
 
+  // Step navigator items — carry each step's run status so the operator can see
+  // progress at a glance and jump to any step (activating it if the run's live).
+  const stepNavItems: StepNavItem[] = wiSteps.map((s, i) => {
+    const ps = poSteps.find(p => p.wi_step_id === s.id);
+    const status: StepNavStatus =
+      ps?.status === 'completed' ? 'completed'
+      : ps?.status === 'skipped' ? 'skipped'
+      : activeStepIdx === i ? 'active'
+      : 'pending';
+    const t = ((s.parameters as Record<string, unknown>)._step_type ?? 'custom') as StepType;
+    return { id: s.id, name: s.name, icon: STEP_ICONS[t], status };
+  });
+  const activeNavId = activeStepIdx != null ? wiSteps[activeStepIdx]?.id ?? null : null;
+
+  function navigateToPoStep(sid: string) {
+    const idx = wiSteps.findIndex(s => s.id === sid);
+    if (idx >= 0 && isStarted) setActiveStepIdx(idx);
+    // Let the accordion expand before scrolling so we land on the right offset.
+    setTimeout(() => {
+      document.getElementById(`po-step-${sid}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 30);
+  }
+
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto flex items-start gap-6">
+      {wiSteps.length > 0 && (
+        <StepNavPanel
+          items={stepNavItems}
+          activeId={activeNavId}
+          onNavigate={navigateToPoStep}
+          storageKey="po-exec-nav"
+        />
+      )}
+      <div className="flex-1 min-w-0 max-w-2xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-start gap-3">
         <button onClick={() => navigate('/production-orders')} className="mt-1 text-gray-400 hover:text-gray-700">
@@ -2365,7 +2402,7 @@ export default function ProductionOrderExecutionPage() {
               const p = s.parameters as Record<string, unknown>;
               const t = (p._step_type ?? 'custom') as StepType;
               return (
-                <li key={s.id} className="flex items-center gap-3 px-5 py-3">
+                <li key={s.id} id={`po-step-${s.id}`} className="flex items-center gap-3 px-5 py-3 scroll-mt-4">
                   <Circle size={16} className="text-gray-300 shrink-0" />
                   <span className="text-gray-400">{STEP_ICONS[t]}</span>
                   <span className="text-sm text-gray-700">{s.name}</span>
@@ -2376,6 +2413,7 @@ export default function ProductionOrderExecutionPage() {
         </div>
       )}
 
+      </div>
     </div>
   );
 }
@@ -2486,7 +2524,10 @@ function ScheduleEditor({
   );
 }
 
-// ─── Assignee editor (inline on detail page) ────────────────────────────────
+// ─── Assignee editor / hand-off control (inline on execution page) ──────────
+// Hand an in-progress run to someone else (with an optional note), and let them
+// "Send it back" to whoever handed it over. Reassigning stamps the current
+// holder into previous_assigned_to; Send back swaps the two, so it can bounce.
 function AssigneeEditor({
   order, canEdit,
 }: {
@@ -2494,8 +2535,10 @@ function AssigneeEditor({
   canEdit: boolean;
 }) {
   const qc = useQueryClient();
+  const { profile } = useAuth();
   const [val, setVal] = useState<string>(order.assigned_to ?? '');
-  const [flash, setFlash] = useState(false);
+  const [note, setNote] = useState('');
+  const [flash, setFlash] = useState('');
 
   useEffect(() => { setVal(order.assigned_to ?? ''); }, [order.assigned_to]);
 
@@ -2513,49 +2556,94 @@ function AssigneeEditor({
 
   const dirty = val !== (order.assigned_to ?? '');
 
-  const save = useMutation({
-    mutationFn: async () => {
+  // Best-effort notification to the recipient (audit trail; role-audience).
+  async function notify(recipientId: string | null, sentBack: boolean) {
+    if (!recipientId) return;
+    const u = users.find(x => x.id === recipientId);
+    if (!u) return;
+    void createNotification({
+      type: 'production_order_handoff',
+      title: `Production order ${order.production_order_number || order.lot_number} ${sentBack ? 'sent back to you' : 'handed to you'}`,
+      body: `${profile?.full_name ?? 'A colleague'} handed you lot ${order.lot_number} to continue.${note.trim() ? ` Note: ${note.trim()}` : ''}`,
+      audience: [u.role],
+      production_order_id: order.id,
+      link: `/production-orders/${order.id}`,
+    });
+  }
+
+  const handoff = useMutation({
+    mutationFn: async ({ to, sentBack }: { to: string | null; sentBack: boolean }) => {
+      const holder = order.assigned_to ?? null; // who has it right now
       const { error } = await supabase
         .from('production_orders')
-        .update({ assigned_to: val || null })
+        .update({ assigned_to: to, previous_assigned_to: holder })
         .eq('id', order.id);
       if (error) throw error;
+      await notify(to, sentBack);
     },
-    onSuccess: () => {
+    onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ['production-order', order.id] });
       qc.invalidateQueries({ queryKey: ['production-orders'] });
-      setFlash(true);
-      setTimeout(() => setFlash(false), 1200);
+      setNote('');
+      setFlash(vars.sentBack ? 'Sent back' : 'Handed off');
+      setTimeout(() => setFlash(''), 1500);
     },
   });
 
+  // Show "Send back" when there's a distinct prior holder to return the run to.
+  const prevId = order.previous_assigned_to ?? null;
+  const canSendBack = canEdit && !!prevId && prevId !== (order.assigned_to ?? null);
+  const prevName = order.previous_assignee?.full_name
+    ?? users.find(u => u.id === prevId)?.full_name
+    ?? 'previous owner';
+
   return (
-    <div className="mt-2 flex items-center gap-2 text-xs text-gray-500 flex-wrap">
-      <UserCog size={13} className="text-gray-400" />
-      <span>Assigned to</span>
-      <select
-        value={val}
-        disabled={!canEdit}
-        onChange={e => setVal(e.target.value)}
-        className="border border-gray-200 rounded-md px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50 disabled:text-gray-500"
-      >
-        <option value="">— Unassigned —</option>
-        {users.map(u => (
-          <option key={u.id} value={u.id}>
-            {u.full_name}{u.email ? ` — ${u.email}` : ''} ({u.role})
-          </option>
-        ))}
-      </select>
-      {canEdit && dirty && (
-        <button
-          onClick={() => save.mutate()}
-          disabled={save.isPending}
-          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-600 text-white text-[11px] font-medium hover:bg-blue-700 disabled:opacity-50"
+    <div className="mt-2 space-y-1.5">
+      <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+        <UserCog size={13} className="text-gray-400" />
+        <span>Assigned to</span>
+        <select
+          value={val}
+          disabled={!canEdit}
+          onChange={e => setVal(e.target.value)}
+          className="border border-gray-200 rounded-md px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50 disabled:text-gray-500"
         >
-          <Check size={12} /> Save
-        </button>
+          <option value="">— Unassigned —</option>
+          {users.map(u => (
+            <option key={u.id} value={u.id}>
+              {u.full_name}{u.email ? ` — ${u.email}` : ''} ({u.role})
+            </option>
+          ))}
+        </select>
+        {canEdit && dirty && (
+          <button
+            onClick={() => handoff.mutate({ to: val || null, sentBack: false })}
+            disabled={handoff.isPending}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-600 text-white text-[11px] font-medium hover:bg-blue-700 disabled:opacity-50"
+          >
+            <Check size={12} /> Hand off
+          </button>
+        )}
+        {canSendBack && (
+          <button
+            onClick={() => handoff.mutate({ to: prevId, sentBack: true })}
+            disabled={handoff.isPending}
+            title={`Return this run to ${prevName}`}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-amber-300 bg-amber-50 text-amber-700 text-[11px] font-medium hover:bg-amber-100 disabled:opacity-50"
+          >
+            ↩ Send back to {prevName}
+          </button>
+        )}
+        {flash && <span className="text-emerald-600 font-medium">{flash}</span>}
+      </div>
+      {canEdit && dirty && (
+        <input
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          placeholder="Optional note for them (e.g. picked up through step 6; please finish QC)"
+          className="w-full max-w-md border border-gray-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+        />
       )}
-      {flash && <span className="text-emerald-600 font-medium">Saved</span>}
     </div>
   );
 }
