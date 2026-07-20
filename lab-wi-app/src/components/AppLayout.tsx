@@ -15,7 +15,6 @@ import DeviationAlert from './DeviationAlert';
 
 const mainNav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'author', 'approver', 'operator', 'lab'] },
-  { to: '/wishlist', label: 'Session Wishlist', icon: Lightbulb, roles: ['admin', 'author', 'approver', 'operator', 'lab'] },
   { to: '/notifications', label: 'Notifications', icon: Bell, roles: ['admin'] },
   { to: '/work-instructions', label: 'Work Instructions', icon: ClipboardList, roles: ['admin', 'author', 'approver', 'operator'] },
   { to: '/production-orders', label: 'Production Orders', icon: PlayCircle, roles: ['admin', 'author', 'approver', 'operator'] },
@@ -186,6 +185,18 @@ export default function AppLayout() {
             >
               <CalendarDays size={16} className="shrink-0" />
               {!collapsed && 'Workshop Agenda'}
+            </Link>
+            <Link
+              to="/wishlist"
+              title={collapsed ? 'Session Wishlist' : undefined}
+              aria-label="Session Wishlist"
+              className={cn(
+                'flex items-center text-sm text-gray-600 hover:text-amber-600 transition-colors mt-3',
+                collapsed ? 'justify-center p-2 rounded-lg hover:bg-gray-100 w-full' : 'gap-2 w-full'
+              )}
+            >
+              <Lightbulb size={16} className="shrink-0" />
+              {!collapsed && 'Session Wishlist'}
             </Link>
           </div>
         </nav>
