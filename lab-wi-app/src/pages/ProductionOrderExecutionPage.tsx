@@ -1948,7 +1948,14 @@ export default function ProductionOrderExecutionPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('production_orders')
-        .select('*, work_instruction:work_instructions(title, product_name, target_molarity, version, reagent_item_id, reagent_item:reagent_items(id, item_number, product_name, unit_of_measure)), assignee:profiles!assigned_to(full_name, email), previous_assignee:profiles!previous_assigned_to(full_name, email)')
+        // NOTE: we deliberately do NOT embed `previous_assignee` via
+        // `profiles!previous_assigned_to`. That PostgREST relationship only
+        // exists once migration 053 has added the column + FK; embedding it
+        // 400s the whole query (and hangs the page) on databases that haven't
+        // run 053 yet. `previous_assigned_to` still comes back via `*` once the
+        // column exists, and the hand-off UI resolves the name from the users
+        // list — so the page loads with or without 053 applied.
+        .select('*, work_instruction:work_instructions(title, product_name, target_molarity, version, reagent_item_id, reagent_item:reagent_items(id, item_number, product_name, unit_of_measure)), assignee:profiles!assigned_to(full_name, email)')
         .eq('id', id!)
         .single();
       if (error) throw error;
@@ -2190,7 +2197,7 @@ export default function ProductionOrderExecutionPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto flex items-start gap-6">
+    <div className="flex items-start gap-6">
       {wiSteps.length > 0 && (
         <StepNavPanel
           items={stepNavItems}

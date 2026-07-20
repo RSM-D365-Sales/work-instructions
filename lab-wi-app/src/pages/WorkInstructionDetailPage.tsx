@@ -335,7 +335,7 @@ export default function WorkInstructionDetailPage() {
   });
 
   return (
-    <div className="max-w-6xl mx-auto flex items-start gap-6">
+    <div className="flex items-start gap-6">
       <StepNavPanel
         items={navItems}
         activeId={activeStepId}
