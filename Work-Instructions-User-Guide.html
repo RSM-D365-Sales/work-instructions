@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Work Instructions — Quick Help Guide</title>
+<style>
+  :root{
+    --ink:#14263f; --ink-soft:#425068; --muted:#6b7688;
+    --line:#e5e9f0; --bg:#f6f8fb; --card:#fff;
+    --accent:#1f7a4d; --accent-soft:#e7f3ec;
+    --blue:#2563eb; --blue-soft:#e8f0fe;
+    --amber:#b7791f; --amber-soft:#fbf3e3;
+    --author:#2563eb; --author-bg:#e8f0fe;
+    --approver:#1f7a4d; --approver-bg:#e7f3ec;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.55;font-size:15px;}
+  .wrap{max-width:920px;margin:0 auto;padding:32px 24px 64px;}
+  a{color:var(--accent);}
+
+  /* Header */
+  header.masthead{background:linear-gradient(135deg,#14263f 0%,#1f3a5c 100%);color:#fff;
+    border-radius:16px;padding:30px 34px;position:relative;overflow:hidden;}
+  header.masthead::after{content:"";position:absolute;right:-40px;top:-40px;width:220px;height:220px;
+    background:radial-gradient(circle,rgba(31,122,77,.35),transparent 70%);}
+  .eyebrow{text-transform:uppercase;letter-spacing:.14em;font-size:11px;font-weight:700;color:#8fd6b0;margin:0 0 10px;}
+  header.masthead h1{margin:0;font-size:27px;line-height:1.15;font-weight:800;letter-spacing:-.02em;}
+  header.masthead .sub{margin:8px 0 0;color:#c7d2e0;font-size:15px;max-width:640px;}
+  .tent{display:inline-block;margin-top:16px;font-size:11px;font-weight:700;letter-spacing:.08em;
+    text-transform:uppercase;background:rgba(255,255,255,.12);color:#fff;padding:5px 11px;border-radius:999px;}
+
+  /* Lifecycle strip */
+  .lifecycle{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap;margin-top:18px;}
+  .lc{flex:1;min-width:120px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;position:relative;}
+  .lc .n{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+  .lc .t{font-weight:700;font-size:14px;margin-top:3px;}
+  .lc .d{font-size:12px;color:var(--muted);margin-top:2px;}
+  .lc.draft{border-left:4px solid #94a3b8;}
+  .lc.review{border-left:4px solid var(--amber);}
+  .lc.approved{border-left:4px solid var(--accent);}
+  .lc.prod{border-left:4px solid var(--blue);}
+
+  /* Roles */
+  .role{display:inline-block;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:999px;}
+  .role.author{color:var(--author);background:var(--author-bg);}
+  .role.approver{color:var(--approver);background:var(--approver-bg);}
+
+  h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-soft);
+    margin:36px 0 14px;padding-bottom:8px;border-bottom:2px solid var(--line);}
+
+  /* Task cards */
+  .task{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:14px 0;}
+  .task-head{display:flex;align-items:center;gap:12px;margin-bottom:6px;}
+  .task-num{flex-shrink:0;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;
+    font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;}
+  .task-head h3{margin:0;font-size:18px;font-weight:750;letter-spacing:-.01em;flex:1;}
+  .task-roles{display:flex;gap:5px;}
+  .task ol,.task ul{margin:10px 0 0;padding-left:22px;}
+  .task li{margin:7px 0;color:var(--ink-soft);}
+  .task li b{color:var(--ink);font-weight:650;}
+  .ui{font-weight:650;color:var(--ink);background:#eef2f7;border:1px solid #e0e6ef;border-radius:5px;
+    padding:1px 6px;font-size:13px;white-space:nowrap;}
+  .callout{background:var(--accent-soft);border:1px solid #cfe6d8;border-radius:10px;padding:10px 13px;
+    margin-top:12px;font-size:13.5px;color:#215c3e;}
+  .callout b{color:#184a31;}
+  .callout.blue{background:var(--blue-soft);border-color:#cddffb;color:#1e40af;}
+  .callout.blue b{color:#1e3a8a;}
+  .callout.amber{background:var(--amber-soft);border-color:#eddcb4;color:#8a5a12;}
+  .callout.amber b{color:#6d470e;}
+
+  /* Field list (header fields) */
+  .fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;}
+  @media (max-width:640px){.fields{grid-template-columns:1fr;}}
+  .field{border:1px solid var(--line);border-radius:10px;padding:10px 12px;}
+  .field .fn{font-weight:700;font-size:13.5px;}
+  .field .fn .req{color:#dc2626;}
+  .field .fd{font-size:12.5px;color:var(--muted);margin-top:2px;}
+
+  /* Toolbar callouts */
+  .tools{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;}
+  @media (max-width:640px){.tools{grid-template-columns:1fr;}}
+  .tool{display:flex;gap:10px;border:1px solid var(--line);border-radius:10px;padding:11px 13px;background:var(--card);}
+  .tool .ic{flex-shrink:0;width:26px;height:26px;border-radius:7px;background:var(--accent-soft);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;}
+  .tool .tn{font-weight:700;font-size:13.5px;}
+  .tool .td{font-size:12.5px;color:var(--muted);margin-top:1px;}
+
+  /* Step-type reference */
+  .steptypes{margin-top:6px;}
+  .stgroup{margin-top:16px;}
+  .stgroup h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);font-weight:800;}
+  .stgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  @media (max-width:640px){.stgrid{grid-template-columns:1fr;}}
+  .st{border:1px solid var(--line);border-radius:9px;padding:9px 12px;background:var(--card);}
+  .st .sn{font-weight:700;font-size:13.5px;}
+  .st .sd{font-size:12.5px;color:var(--muted);margin-top:1px;}
+
+  /* FAQ */
+  .faq{border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden;}
+  .faq details{border-top:1px solid var(--line);}
+  .faq details:first-child{border-top:0;}
+  .faq summary{cursor:pointer;padding:13px 16px;font-weight:650;font-size:14.5px;list-style:none;
+    display:flex;justify-content:space-between;align-items:center;gap:12px;}
+  .faq summary::-webkit-details-marker{display:none;}
+  .faq summary::after{content:"+";color:var(--muted);font-weight:700;font-size:18px;}
+  .faq details[open] summary::after{content:"–";}
+  .faq .ans{padding:0 16px 14px;font-size:13.5px;color:var(--ink-soft);}
+  .faq .ans b{color:var(--ink);}
+
+  footer{margin-top:36px;padding-top:18px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+
+  @media print{
+    body{background:#fff;font-size:12px;}
+    .wrap{padding:0;max-width:none;}
+    header.masthead{border-radius:0;}
+    .task,.faq,.tool,.st,.lc{break-inside:avoid;}
+    .faq details{display:block;}
+    .faq details:not([open]) .ans{display:block;}   /* print all answers */
+    h2.sec{break-after:avoid;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">RSM · VIBE — Lab Reagent Production Platform</p>
+    <h1>Work Instructions — Quick Help Guide</h1>
+    <p class="sub">A pocket reference for the Work Instructions section of the review session. Your host is
+      driving a live demo — this is here for when you want to try it yourself, catch up, or look something up.</p>
+    <span class="tent">Session reference</span>
+
+    <div class="lifecycle">
+      <div class="lc draft"><div class="n">Step 1</div><div class="t">Draft</div><div class="d">An author writes / edits it</div></div>
+      <div class="lc review"><div class="n">Step 2</div><div class="t">Pending Review</div><div class="d">Submitted for approval</div></div>
+      <div class="lc approved"><div class="n">Step 3</div><div class="t">Approved</div><div class="d">A different person signs off</div></div>
+      <div class="lc prod"><div class="n">Step 4</div><div class="t">Production</div><div class="d">Used to run a batch</div></div>
+    </div>
+  </header>
+
+  <!-- WHAT IS IT -->
+  <h2 class="sec">What a Work Instruction is</h2>
+  <p style="margin:0 0 4px;">
+    A <b>Work Instruction (WI)</b> is the step-by-step recipe for making one reagent product — the digital
+    replacement for the paper/Uniflow procedure. It has a <b>header</b> (what you're making and how long it takes)
+    and an ordered list of <b>steps</b> (weigh this, mix that, adjust pH, package, QC…). Once approved, a WI is what
+    an operator follows to run a production batch. Every WI is <b>versioned</b>, and no one can approve their own —
+    the two guardrails that keep it audit-ready.
+  </p>
+
+  <!-- YOUR ROLE -->
+  <h2 class="sec">Your role today</h2>
+  <div class="tools">
+    <div class="tool">
+      <div class="ic" style="background:var(--author-bg);color:var(--author);">A</div>
+      <div><div class="tn"><span class="role author">Author</span></div>
+        <div class="td">Creates and edits work instructions, builds the steps, and submits them for review. Cannot approve.</div></div>
+    </div>
+    <div class="tool">
+      <div class="ic" style="background:var(--approver-bg);color:var(--approver);">✓</div>
+      <div><div class="tn"><span class="role approver">Approver</span></div>
+        <div class="td">Reviews a submitted WI and approves it, requests changes, or rejects it — but never one they authored.</div></div>
+    </div>
+  </div>
+  <div class="callout blue" style="margin-top:12px;">
+    <b>Separation of duties.</b> You can author a WI or approve a WI — just not the same one. That's why we'll
+    pair up: you'll submit yours, and <b>approve someone else's</b>.
+  </div>
+
+  <!-- TASK 1 -->
+  <h2 class="sec">Walkthrough</h2>
+
+  <div class="task">
+    <div class="task-head">
+      <div class="task-num">1</div>
+      <h3>Open or create a Work Instruction</h3>
+      <div class="task-roles"><span class="role author">Author</span></div>
+    </div>
+    <ol>
+      <li>From the left sidebar, open <span class="ui">Work Instructions</span>. You'll see the list of existing WIs with their status.</li>
+      <li><b>Pick your own to work with</b> — e.g. <i>Acidified Methanol</i> or <i>NSE Muscles Phosphate Buffer</i> — by clicking it. Or start fresh with the <span class="ui">New WI</span> button (top right).</li>
+      <li>Fill in the header fields:</li>
+    </ol>
+    <div class="fields">
+      <div class="field"><div class="fn">Title <span class="req">*</span></div><div class="fd">What the procedure is called, e.g. "Prepare 1M Sodium Hydroxide".</div></div>
+      <div class="field"><div class="fn">Product <span class="req">*</span></div><div class="fd">Start typing to search the reagent catalog. A match shows a green <b>linked</b> badge with its item number.</div></div>
+      <div class="field"><div class="fn">Target Molarity</div><div class="fd">Optional — the concentration you're making (e.g. 1.0 M).</div></div>
+      <div class="field"><div class="fn">Scheduled Time</div><div class="fd">Expected minutes for one run. Drives how much time the batch blocks on the schedule.</div></div>
+    </div>
+    <div class="callout amber">
+      <b>"Not linked to an item" warning?</b> It means the product name doesn't match a catalog record, so D365
+      orders won't line up. Pick an item from the dropdown to link it — or leave it if you're just exploring.
+    </div>
+  </div>
+
+  <!-- TASK 2 -->
+  <div class="task">
+    <div class="task-head">
+      <div class="task-num">2</div>
+      <h3>Walk through &amp; edit the steps</h3>
+      <div class="task-roles"><span class="role author">Author</span></div>
+    </div>
+    <p style="margin:6px 0 0;color:var(--ink-soft);">Every step has a <b>Step Name</b>, a <b>Step Type</b> (which decides what it captures), an optional description, and type-specific fields. The editor gives you these tools:</p>
+    <div class="tools" style="margin-top:12px;">
+      <div class="tool"><div class="ic">☰</div><div><div class="tn">Step Navigator</div><div class="td">The pinned list on the left — click any step to jump to it. Use the panel toggle to hide/show it.</div></div></div>
+      <div class="tool"><div class="ic">+</div><div><div class="tn">Insert between</div><div class="td">Hover in the gap between two steps and click the blue + to drop a new step exactly there.</div></div></div>
+      <div class="tool"><div class="ic">⣿</div><div><div class="tn">Drag to reorder</div><div class="td">Grab a step by its grip handle (or a nav row) and drag it into a new position.</div></div></div>
+      <div class="tool"><div class="ic">⌄</div><div><div class="tn">Collapse / Expand all</div><div class="td">Buttons in the "Steps" header collapse every card to titles, or open them all back up.</div></div></div>
+    </div>
+    <ol style="margin-top:14px;">
+      <li><b>Read through the steps</b> top to bottom — the navigator shows the whole flow at a glance.</li>
+      <li><b>Edit a step</b>: open it, change its <span class="ui">Step Type</span> and watch the fields change (a Weigh asks for a target weight; a Dispense asks for a volume; a Record Time just needs a label).</li>
+      <li><b>Add a step</b> from the <span class="ui">Add from library</span> panel at the bottom (appends to the end), or the + between steps (inserts mid-list).</li>
+      <li>Reorder, rename, or delete anything until the flow reads the way the bench actually works.</li>
+    </ol>
+    <div class="callout">Nothing is live yet — a WI in <b>Draft</b> is a safe sandbox. Edits only matter once you submit and it's approved.</div>
+  </div>
+
+  <!-- TASK 3 -->
+  <div class="task">
+    <div class="task-head">
+      <div class="task-num">3</div>
+      <h3>Send it for approval</h3>
+      <div class="task-roles"><span class="role author">Author</span></div>
+    </div>
+    <ol>
+      <li>Save your work with <span class="ui">Save Draft</span> (or <span class="ui">Create Work Instruction</span> if it's brand new).</li>
+      <li>Click <span class="ui">Submit for Review</span>. The status moves from <b>Draft</b> to <b>Pending Review</b>.</li>
+      <li>It's now read-only for you and waiting for an approver. You can't take it further — that's the point.</li>
+    </ol>
+    <div class="callout blue"><b>Tip:</b> If <span class="ui">Submit for Review</span> is greyed out, the WI is brand new — create/save it once first, then the submit button turns on.</div>
+  </div>
+
+  <!-- TASK 4 -->
+  <div class="task">
+    <div class="task-head">
+      <div class="task-num">4</div>
+      <h3>Approve someone else's</h3>
+      <div class="task-roles"><span class="role approver">Approver</span></div>
+    </div>
+    <ol>
+      <li>Open a WI that is <b>Pending Review</b> — ideally the one a colleague just submitted, not your own.</li>
+      <li>Review the steps (the navigator helps you scan them). Add a comment in the <span class="ui">Review &amp; Approve</span> panel.</li>
+      <li>Choose an outcome: <b>Approve</b> (it becomes usable for production), <b>Request Changes</b> (sends it back to the author), or <b>Reject</b>.</li>
+    </ol>
+    <div class="callout amber"><b>Can't see the approve buttons?</b> If you authored this WI, the system hides them — someone else has to approve it. Swap and review a partner's instead.</div>
+  </div>
+
+  <!-- STEP TYPE REFERENCE -->
+  <h2 class="sec">Step type reference</h2>
+  <p style="margin:0 0 4px;color:var(--ink-soft);">Each step type captures the right data for that action — measurements get tolerance checks, timers run, timestamps get stamped. The common ones:</p>
+  <div class="steptypes">
+    <div class="stgroup">
+      <h4>Gather &amp; measure</h4>
+      <div class="stgrid">
+        <div class="st"><div class="sn">Gather Reagents</div><div class="sd">Pick catalog items + quantities; lot-controlled ones flag a LOT badge.</div></div>
+        <div class="st"><div class="sn">Weigh</div><div class="sd">Measure a solid mass to a target, within a tolerance % (blocks if out of range).</div></div>
+        <div class="st"><div class="sn">Dispense</div><div class="sd">The liquid version of Weigh — measure a volume (mL/L/µL) to target.</div></div>
+        <div class="st"><div class="sn">Bring to Volume</div><div class="sd">Q.S. / dilute the solution to a final volume with a named diluent.</div></div>
+      </div>
+    </div>
+    <div class="stgroup">
+      <h4>Process</h4>
+      <div class="stgrid">
+        <div class="st"><div class="sn">Mix</div><div class="sd">Timed mixing on a stir plate (duration + speed), with a live timer at run time.</div></div>
+        <div class="st"><div class="sn">Stir / Vortex / Invert</div><div class="sd">Manual agitation — pick the method, duration, and speed.</div></div>
+        <div class="st"><div class="sn">Transfer</div><div class="sd">Move material from one vessel to another (pour, aliquot, decant, filter…).</div></div>
+        <div class="st"><div class="sn">pH Adjust</div><div class="sd">Target pH ± tolerance with an adjusting reagent; captures the meter reading.</div></div>
+      </div>
+    </div>
+    <div class="stgroup">
+      <h4>Temperature</h4>
+      <div class="stgrid">
+        <div class="st"><div class="sn">Heat / Cool</div><div class="sd">Bring to a target temperature (heat adds a duration; e.g. autoclave, water bath).</div></div>
+        <div class="st"><div class="sn">Freeze / Thaw</div><div class="sd">Move to or up from frozen storage at a target temperature.</div></div>
+        <div class="st"><div class="sn">Overnight Hold</div><div class="sd">A hold or incubation that runs overnight before the next step.</div></div>
+      </div>
+    </div>
+    <div class="stgroup">
+      <h4>Finish &amp; deliver</h4>
+      <div class="stgrid">
+        <div class="st"><div class="sn">Cap / Seal</div><div class="sd">Cap, screw-cap, Parafilm, or seal the container.</div></div>
+        <div class="st"><div class="sn">Package &amp; Store</div><div class="sd">Container, label reference, and destination (e.g. "2–8 °C QC area").</div></div>
+        <div class="st"><div class="sn">Print Labels</div><div class="sd">Label template + quantity for the run.</div></div>
+      </div>
+    </div>
+    <div class="stgroup">
+      <h4>Capture &amp; QC</h4>
+      <div class="stgrid">
+        <div class="st"><div class="sn">Observe &amp; Record</div><div class="sd">A verify / check / record-the-result prompt (used for the QC verification tail).</div></div>
+        <div class="st"><div class="sn">Record Time</div><div class="sd">Operator taps to stamp a timestamp — e.g. "Start time" / "End time".</div></div>
+        <div class="st"><div class="sn">Add Attachment</div><div class="sd">Attach supporting documents (PDF, image…); can be marked required.</div></div>
+        <div class="st"><div class="sn">Production Break</div><div class="sd">A divider between parts/days of a run (e.g. "Day 1 QC").</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VERSIONING -->
+  <h2 class="sec">Versioning &amp; comparing</h2>
+  <div class="task" style="margin-top:8px;">
+    <ul>
+      <li>Every WI carries a <b>version number</b>. Once one is approved, you make edits by creating a <span class="ui">New Version</span> — the approved one keeps running until the new version is approved in turn.</li>
+      <li>When there's more than one version, <span class="ui">Compare</span> opens a side-by-side <b>diff</b> so a reviewer sees exactly what changed instead of re-reading the whole thing.</li>
+      <li><span class="ui">Copy to New Item</span> reuses a WI as the template for a different product (e.g. start "1.0 M EDTA" from "0.5 M EDTA").</li>
+    </ul>
+  </div>
+
+  <!-- FAQ -->
+  <h2 class="sec">If you get stuck</h2>
+  <div class="faq">
+    <details open>
+      <summary>Why can't I edit this Work Instruction?</summary>
+      <div class="ans">Editing is only open on WIs in <b>Draft</b> or <b>Rejected</b> status that you authored (admins can always edit). If it's <b>Pending Review</b> or <b>Approved</b>, it's locked — make a <b>New Version</b> to change an approved one.</div>
+    </details>
+    <details>
+      <summary>Why don't I see the Approve buttons?</summary>
+      <div class="ans">Three reasons: you're not an <b>Approver</b>/<b>Admin</b>; the WI isn't <b>Pending Review</b> yet; or <b>you authored it</b> (you can't approve your own — separation of duties). Have a partner submit one for you to approve.</div>
+    </details>
+    <details>
+      <summary>What's the LOT badge on a reagent?</summary>
+      <div class="ans">It marks a lot/batch-controlled material. At production time the operator must record the actual lot number before the step can be completed — the badge is just the heads-up that it'll be required.</div>
+    </details>
+    <details>
+      <summary>Weigh vs. Dispense — which do I use?</summary>
+      <div class="ans"><b>Weigh</b> is for a solid mass (g, mg, kg); <b>Dispense</b> is the same idea for a liquid volume (mL, L, µL). Both enforce a target ± tolerance and block completion if the measurement is out of range.</div>
+    </details>
+    <details>
+      <summary>How do I move a step, or drop one in the middle?</summary>
+      <div class="ans">Drag it by the grip handle (or the row in the left navigator) to reorder, or use the up/down arrows on the card. To insert mid-list, hover in the gap between two steps and click the blue <b>+</b>, then pick a step type.</div>
+    </details>
+    <details>
+      <summary>I made a mistake after submitting — can I take it back?</summary>
+      <div class="ans">Ask an approver to <b>Request Changes</b> (or <b>Reject</b>) — that returns it to an editable state so you can fix it and resubmit. The comment they leave tells you what to change.</div>
+    </details>
+  </div>
+
+  <footer>
+    <span>Quick help guide — Work Instructions. For the review session; features and labels may evolve.</span>
+    <span>RSM · VIBE Lab Reagent Production Platform</span>
+  </footer>
+
+</div>
+</body>
+</html>
