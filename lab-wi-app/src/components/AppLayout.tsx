@@ -5,7 +5,7 @@ import {
   Rocket, LayoutDashboard, BookOpen, ClipboardList,
   PlayCircle, LogOut, ChevronRight, Beaker, Scale, Users, Building2,
   ShoppingCart, CalendarClock, TrendingUp, Boxes, PanelLeftClose, PanelLeftOpen,
-  Factory, CalendarDays, ListChecks, Bell, Lightbulb,
+  Factory, CalendarDays, ListChecks, Bell, Lightbulb, Workflow,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -185,6 +185,18 @@ export default function AppLayout() {
             >
               <CalendarDays size={16} className="shrink-0" />
               {!collapsed && 'Workshop Agenda'}
+            </Link>
+            <Link
+              to="/master-planning-flow"
+              title={collapsed ? 'Master Planning Flow' : undefined}
+              aria-label="Master Planning Flow"
+              className={cn(
+                'flex items-center text-sm text-gray-600 hover:text-violet-600 transition-colors mt-3',
+                collapsed ? 'justify-center p-2 rounded-lg hover:bg-gray-100 w-full' : 'gap-2 w-full'
+              )}
+            >
+              <Workflow size={16} className="shrink-0" />
+              {!collapsed && 'Master Planning Flow'}
             </Link>
             <Link
               to="/wishlist"

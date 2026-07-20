@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>D365 Master Planning ↔ Rocket Ship — Reagent Replenishment Flow</title>
+<style>
+  :root{
+    --ink:#1b2330; --ink-soft:#4a5568; --muted:#8493a6;
+    --bg:#f5f7fa; --card:#fff; --line:#e3e8ef;
+    --other:#1d4e89;   --other-bg:#e8eef7;
+    --d365:#6d28d9;    --d365-bg:#f1ebfd;
+    --rocket:#0f6e5c;  --rocket-bg:#e4f1ee;
+    --lab:#c2410c;     --lab-bg:#fdece3;
+    --mto:#1d4e89;     --mts:#0f6e5c;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{-webkit-text-size-adjust:100%;}
+  body{font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;
+    background:var(--bg);color:var(--ink);line-height:1.5;padding-bottom:120px;}
+  .wrap{max-width:1040px;margin:0 auto;padding:28px 22px;}
+
+  /* Header */
+  header.top{background:linear-gradient(120deg,#141d2e,#25406b);color:#fff;border-radius:18px;
+    padding:26px 30px;position:relative;overflow:hidden;}
+  header.top::after{content:"";position:absolute;right:-60px;top:-60px;width:260px;height:260px;
+    background:radial-gradient(circle,rgba(109,40,217,.4),transparent 70%);}
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#a9c2e6;margin-bottom:8px;}
+  header.top h1{font-size:25px;font-weight:800;letter-spacing:-.01em;line-height:1.15;}
+  header.top p{color:#c9d6ea;font-size:15px;margin-top:8px;max-width:720px;}
+
+  /* Legend */
+  .legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:18px;position:relative;z-index:1;}
+  .lg{display:flex;align-items:center;gap:7px;font-size:12.5px;color:#dbe4f0;font-weight:600;}
+  .lg .sw{width:12px;height:12px;border-radius:4px;}
+
+  /* Schematic map */
+  .map{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px 18px 14px;margin-top:20px;}
+  .map h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:14px;}
+  .maprow{display:flex;align-items:stretch;gap:6px;flex-wrap:wrap;}
+  .mnode{flex:1;min-width:150px;border-radius:11px;padding:11px 13px;border:1.5px solid;position:relative;}
+  .mnode .mk{font-size:10px;text-transform:uppercase;letter-spacing:.05em;font-weight:700;opacity:.8;}
+  .mnode .mt{font-weight:700;font-size:14px;margin-top:2px;}
+  .mnode .md{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.35;}
+  .mnode.other{border-color:var(--other);background:var(--other-bg);}   .mnode.other .mk{color:var(--other);}
+  .mnode.d365 {border-color:var(--d365); background:var(--d365-bg);}    .mnode.d365 .mk{color:var(--d365);}
+  .mnode.rocket{border-color:var(--rocket);background:var(--rocket-bg);}.mnode.rocket .mk{color:var(--rocket);}
+  .mnode.lab  {border-color:var(--lab);  background:var(--lab-bg);}     .mnode.lab .mk{color:var(--lab);}
+  .marrow{align-self:center;color:var(--muted);font-size:20px;font-weight:700;padding:0 1px;}
+  .loopnote{margin-top:12px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--lab);
+    background:var(--lab-bg);border:1px dashed #e6b9a3;border-radius:9px;padding:7px 12px;}
+  .loopnote b{color:#9a340b;}
+
+  /* Controls */
+  .controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:22px 0 6px;}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:11px;overflow:hidden;background:var(--card);}
+  .seg button{border:0;background:transparent;padding:9px 16px;font-size:13.5px;font-weight:600;color:var(--ink-soft);
+    cursor:pointer;border-left:1px solid var(--line);transition:.15s;}
+  .seg button:first-child{border-left:0;}
+  .seg button.on{color:#fff;}
+  .seg button[data-path="all"].on{background:#334155;}
+  .seg button[data-path="mto"].on{background:var(--mto);}
+  .seg button[data-path="mts"].on{background:var(--mts);}
+  .present-btn{margin-left:auto;display:inline-flex;align-items:center;gap:7px;background:#141d2e;color:#fff;
+    border:0;border-radius:11px;padding:10px 18px;font-size:13.5px;font-weight:600;cursor:pointer;}
+  .present-btn:hover{background:#25406b;}
+  .hint{font-size:12.5px;color:var(--muted);}
+
+  /* Steps */
+  .steps{margin-top:8px;}
+  .step{display:flex;gap:16px;}
+  .rail{width:38px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;position:relative;}
+  .num{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:14px;color:#fff;flex-shrink:0;z-index:1;box-shadow:0 0 0 4px var(--bg);}
+  .rail::after{content:"";position:absolute;top:34px;bottom:-6px;width:2px;background:var(--line);}
+  .step:last-child .rail::after{display:none;}
+  .step .card{flex:1;background:var(--card);border:1px solid var(--line);border-left-width:4px;border-radius:12px;
+    margin-bottom:18px;overflow:hidden;transition:box-shadow .15s,opacity .2s,transform .15s;}
+  .step .card-head{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;}
+  .badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:3px 8px;border-radius:6px;white-space:nowrap;flex-shrink:0;}
+  .titles{flex:1;min-width:0;}
+  .title{font-weight:700;font-size:15px;}
+  .summary{font-size:13px;color:var(--muted);margin-top:1px;}
+  .ptags{display:flex;gap:4px;flex-shrink:0;}
+  .pt{font-size:9.5px;font-weight:800;letter-spacing:.03em;padding:2px 6px;border-radius:5px;}
+  .pt.mto{background:var(--other-bg);color:var(--mto);}
+  .pt.mts{background:var(--rocket-bg);color:var(--mts);}
+  .chev{color:var(--muted);font-size:13px;transition:transform .2s;flex-shrink:0;}
+  .step.open .chev{transform:rotate(180deg);}
+  .detail{max-height:0;opacity:0;padding:0 16px;font-size:14px;color:var(--ink-soft);
+    border-top:1px solid transparent;transition:max-height .25s,opacity .2s,padding .25s;}
+  .detail b{color:var(--ink);}
+  .step.open .detail{max-height:320px;opacity:1;padding:12px 16px 15px;border-top-color:var(--line);}
+  .loopback{font-size:12px;color:var(--lab);font-weight:600;margin-top:8px;display:inline-flex;align-items:center;gap:5px;}
+
+  /* system colouring */
+  .step[data-sys="other"] .num{background:var(--other);} .step[data-sys="other"] .card{border-left-color:var(--other);} .step[data-sys="other"] .badge{background:var(--other-bg);color:var(--other);}
+  .step[data-sys="d365"]  .num{background:var(--d365);}  .step[data-sys="d365"] .card{border-left-color:var(--d365);}   .step[data-sys="d365"] .badge{background:var(--d365-bg);color:var(--d365);}
+  .step[data-sys="rocket"].num{background:var(--rocket);}.step[data-sys="rocket"] .card{border-left-color:var(--rocket);}.step[data-sys="rocket"] .badge{background:var(--rocket-bg);color:var(--rocket);}
+  .step[data-sys="lab"]   .num{background:var(--lab);}   .step[data-sys="lab"] .card{border-left-color:var(--lab);}     .step[data-sys="lab"] .badge{background:var(--lab-bg);color:var(--lab);}
+
+  /* filtering */
+  .step.hidden{display:none;}
+
+  /* present mode */
+  body.presenting .step .card{opacity:.4;}
+  body.presenting .step.active .card{opacity:1;box-shadow:0 8px 30px rgba(20,29,46,.16);transform:scale(1.01);}
+  body.presenting .step.active .num{box-shadow:0 0 0 4px var(--bg),0 0 0 7px currentColor;}
+  .presentbar{position:fixed;left:0;right:0;bottom:0;background:#141d2e;color:#fff;
+    display:none;align-items:center;gap:14px;padding:12px 20px;z-index:50;box-shadow:0 -6px 24px rgba(0,0,0,.18);}
+  body.presenting .presentbar{display:flex;}
+  .presentbar .pb-step{font-size:12px;color:#a9c2e6;font-weight:700;letter-spacing:.03em;text-transform:uppercase;}
+  .presentbar .pb-title{font-weight:700;font-size:15px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .presentbar button{background:#25406b;color:#fff;border:0;border-radius:9px;padding:9px 16px;font-size:13.5px;font-weight:600;cursor:pointer;}
+  .presentbar button:hover{background:#31578f;}
+  .presentbar button.ghost{background:transparent;border:1px solid #3a527c;}
+  .presentbar .kb{font-size:11px;color:#7f93b4;}
+
+  footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+
+  @media (max-width:680px){
+    header.top h1{font-size:21px;}
+    .present-btn{margin-left:0;}
+    .marrow{display:none;}
+  }
+  @media print{
+    body{background:#fff;padding-bottom:0;}
+    .controls,.present-btn,.presentbar{display:none!important;}
+    .step .detail{max-height:none!important;opacity:1!important;padding:12px 16px 15px!important;border-top-color:var(--line)!important;}
+    .step.hidden{display:flex!important;}
+    header.top{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <p class="eyebrow">RSM · Master Planning Session</p>
+    <h1>D365 Master Planning &nbsp;↔&nbsp; Rocket Ship</h1>
+    <p>How reagent demand flows from the individual labs, through D365 master planning, into production in Rocket Ship, and back to inventory — the make-to-order and make-to-stock replenishment loop.</p>
+    <div class="legend">
+      <span class="lg"><span class="sw" style="background:var(--other)"></span>Other Labs</span>
+      <span class="lg"><span class="sw" style="background:var(--d365)"></span>D365 Master Planning</span>
+      <span class="lg"><span class="sw" style="background:var(--rocket)"></span>Rocket Ship</span>
+      <span class="lg"><span class="sw" style="background:var(--lab)"></span>Reagent Lab</span>
+    </div>
+  </header>
+
+  <!-- Schematic map -->
+  <div class="map">
+    <h2>The loop at a glance</h2>
+    <div class="maprow">
+      <div class="mnode other"><div class="mk">Other Labs</div><div class="mt">Demand</div><div class="md">Reagent order (MTO) or consumption / cycle count (MTS)</div></div>
+      <div class="marrow">→</div>
+      <div class="mnode d365"><div class="mk">D365</div><div class="mt">Master Planning</div><div class="md">Transfer order &amp; min/max → planned order</div></div>
+      <div class="marrow">→</div>
+      <div class="mnode rocket"><div class="mk">Rocket Ship</div><div class="mt">Produce</div><div class="md">Firm → run the work instruction</div></div>
+      <div class="marrow">→</div>
+      <div class="mnode lab"><div class="mk">Reagent Lab</div><div class="mt">Consume &amp; Output</div><div class="md">Materials → product, posted back to D365</div></div>
+    </div>
+    <div class="loopnote">⟲&nbsp; <span><b>Replenishment loop:</b> product ships / stocks, the other labs consume it, on-hand falls to the reorder point, and master planning triggers the next run.</span></div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="seg" id="pathSeg">
+      <button data-path="all" class="on">Full picture</button>
+      <button data-path="mto">Make to Order</button>
+      <button data-path="mts">Make to Stock</button>
+    </div>
+    <span class="hint" id="pathHint">Both demand triggers feed the same planning &amp; production backbone.</span>
+    <button class="present-btn" id="presentBtn">▶ &nbsp;Present</button>
+  </div>
+
+  <!-- Steps (rendered by JS) -->
+  <div class="steps" id="steps"></div>
+
+  <footer>
+    <span>Interactive process flow — for the master planning session. Click any step to expand; use Present to walk through live.</span>
+    <span>RSM · Lab Reagent Production Platform</span>
+  </footer>
+</div>
+
+<!-- Present control bar -->
+<div class="presentbar">
+  <span class="pb-step" id="pbStep">Step 1 / 13</span>
+  <span class="pb-title" id="pbTitle">—</span>
+  <span class="kb">← / → to move</span>
+  <button class="ghost" id="pbPrev">‹ Prev</button>
+  <button id="pbNext">Next ›</button>
+  <button class="ghost" id="pbExit">Exit</button>
+</div>
+
+<script>
+  const SYS = {
+    other:  'Other Labs',
+    d365:   'D365 Master Planning',
+    rocket: 'Rocket Ship',
+    lab:    'Reagent Lab',
+  };
+
+  // paths: 'mto' (make to order), 'mts' (make to stock). Steps in both share the production backbone.
+  const STEPS = [
+    { n:1,  sys:'other',  paths:['mto'],       title:'Raise a Reagent Order',
+      summary:'An "other" lab requests product from the Reagent Lab.',
+      detail:'An individual lab needs a reagent or prepared product it doesn\'t make itself. In Rocket Ship it raises a <b>Reagent Order</b> to the Reagent Lab — the make-to-order demand signal that starts the flow.' },
+
+    { n:2,  sys:'d365',   paths:['mto'],       title:'Transfer Order created in D365',
+      summary:'The request becomes an inter-site transfer order.',
+      detail:'The reagent order is written to D365 as an <b>inter-warehouse Transfer Order</b> (Reagent Lab site → requesting lab site). Master planning treats this transfer demand as a firm requirement to cover.' },
+
+    { n:3,  sys:'other',  paths:['mts'],       title:'Consume / cycle-count on-hand product',
+      summary:'Stocked labs draw product down day to day.',
+      detail:'For products held as stock, the other labs reduce on-hand by <b>consuming</b> it in their work or by <b>cycle counting</b> it out. Every reduction moves inventory toward the item\'s reorder point.' },
+
+    { n:4,  sys:'d365',   paths:['mts'],       title:'On-hand crosses the reorder point',
+      summary:'Min/max detects a replenishment need.',
+      detail:'D365 compares on-hand to each item\'s <b>min/max</b>. When consumption drops it below the <b>reorder point</b>, a replenishment requirement is created — or a planner raises a <b>manual order</b> for items not managed by min/max.' },
+
+    { n:5,  sys:'d365',   paths:['mto','mts'], title:'Master Planning run',
+      summary:'Planning nets all demand against supply.',
+      detail:'<b>Master planning</b> runs (scheduled or on demand). It nets every demand — transfer orders (make-to-order) and reorder-point shortfalls (make-to-stock) — against on-hand and open supply, applying lead times and coverage rules.' },
+
+    { n:6,  sys:'d365',   paths:['mto','mts'], title:'Planned order generated',
+      summary:'Planning proposes what to make.',
+      detail:'Planning emits a <b>Planned Order</b> per product. Make-to-order orders are <b>pegged</b> to the originating transfer order; make-to-stock orders are sized to bring inventory back up to max.' },
+
+    { n:7,  sys:'rocket', paths:['mto','mts'], title:'Planned order lands in Rocket Ship',
+      summary:'It appears as a Planned Production Order.',
+      detail:'The planned order flows into Rocket Ship\'s <b>Planned Production Orders</b> queue, carrying the item, quantity and requirement date — ready for the Reagent Lab to action.' },
+
+    { n:8,  sys:'lab',    paths:['mto','mts'], title:'Firm &amp; schedule',
+      summary:'Reagent Lab turns the plan into a real run.',
+      detail:'The Reagent Lab reviews and <b>firms</b> the planned order into a <b>Production Order</b> built from the item\'s approved <b>Work Instruction (default formula)</b>, then schedules it to a person and day.' },
+
+    { n:9,  sys:'lab',    paths:['mto','mts'], title:'Execute the Work Instruction',
+      summary:'Operators consume materials into product.',
+      detail:'An operator runs the production order step by step in Rocket Ship — gather, weigh, dispense, mix, QC — <b>consuming raw materials and producing finished product</b>.' },
+
+    { n:10, sys:'d365',   paths:['mto','mts'], title:'Consumption &amp; output posted to D365',
+      summary:'Inventory updates drive future planning.',
+      detail:'Rocket Ship posts back to D365: <b>raw materials consumed</b> (inventory down) and <b>finished product produced</b> (inventory up). This posting is exactly what keeps <b>min/max and reorder points</b> accurate for the next planning run.' },
+
+    { n:11, sys:'d365',   paths:['mto'],       title:'Product ships on the Transfer Order',
+      summary:'Make-to-order request fulfilled.',
+      detail:'The finished product moves against the original <b>Transfer Order</b> to the requesting lab, closing the request. Demand met directly from a specific order.' },
+
+    { n:12, sys:'d365',   paths:['mts'],       title:'Product received into stock',
+      summary:'Make-to-stock replenished.',
+      detail:'The finished product is received into <b>Reagent Lab stock</b>, lifting on-hand back above the reorder point — ready for the next lab that needs it.' },
+
+    { n:13, sys:'other',  paths:['mts'], loop:true, title:'Labs consume the stock → loop',
+      summary:'Consumption restarts the cycle.',
+      detail:'The other labs use the stocked product; that consumption (or the next cycle count) draws inventory down again toward the reorder point — returning to steps 3–4 and triggering the next planning run. The <b>replenishment loop</b> closes.' },
+  ];
+
+  const stepsEl = document.getElementById('steps');
+  stepsEl.innerHTML = STEPS.map(s => `
+    <div class="step" data-sys="${s.sys}" data-paths="${s.paths.join(' ')}" data-n="${s.n}">
+      <div class="rail"><span class="num">${s.n}</span></div>
+      <div class="card">
+        <div class="card-head">
+          <span class="badge">${SYS[s.sys]}</span>
+          <div class="titles">
+            <div class="title">${s.title}</div>
+            <div class="summary">${s.summary}</div>
+          </div>
+          <div class="ptags">${s.paths.map(p=>`<span class="pt ${p}">${p.toUpperCase()}</span>`).join('')}</div>
+          <span class="chev">▾</span>
+        </div>
+        <div class="detail">${s.detail}${s.loop?'<div class="loopback">⟲ loops back to step 3</div>':''}</div>
+      </div>
+    </div>`).join('');
+
+  const stepNodes = Array.from(stepsEl.querySelectorAll('.step'));
+
+  // Expand / collapse on click
+  stepNodes.forEach(node => {
+    node.querySelector('.card-head').addEventListener('click', () => {
+      if (document.body.classList.contains('presenting')) { goToNode(node); return; }
+      node.classList.toggle('open');
+    });
+  });
+
+  // Path filter
+  let curPath = 'all';
+  const HINTS = {
+    all: 'Both demand triggers feed the same planning &amp; production backbone.',
+    mto: 'Demand-driven: a specific reagent order pulls a pegged production run.',
+    mts: 'Stock-driven: consumption &amp; min/max keep the shelf replenished on a loop.',
+  };
+  function applyFilter(){
+    stepNodes.forEach(n => {
+      const paths = n.dataset.paths.split(' ');
+      const show = curPath === 'all' || paths.includes(curPath);
+      n.classList.toggle('hidden', !show);
+    });
+    document.getElementById('pathHint').innerHTML = HINTS[curPath];
+    if (document.body.classList.contains('presenting')) { idx = 0; showPresent(); }
+  }
+  document.getElementById('pathSeg').addEventListener('click', e => {
+    const b = e.target.closest('button'); if(!b) return;
+    curPath = b.dataset.path;
+    document.querySelectorAll('#pathSeg button').forEach(x => x.classList.toggle('on', x===b));
+    applyFilter();
+  });
+
+  // Present mode
+  let idx = 0;
+  const visible = () => stepNodes.filter(n => !n.classList.contains('hidden'));
+  function showPresent(){
+    const vis = visible();
+    idx = Math.max(0, Math.min(idx, vis.length-1));
+    stepNodes.forEach(n => n.classList.remove('active','open'));
+    const node = vis[idx];
+    if(!node) return;
+    node.classList.add('active','open');
+    node.scrollIntoView({behavior:'smooth', block:'center'});
+    document.getElementById('pbStep').textContent = `Step ${idx+1} / ${vis.length}`;
+    document.getElementById('pbTitle').innerHTML = node.querySelector('.title').innerHTML;
+  }
+  function goToNode(node){ const vis = visible(); const i = vis.indexOf(node); if(i>=0){ idx=i; showPresent(); } }
+  function enterPresent(){ document.body.classList.add('presenting'); idx=0; showPresent(); }
+  function exitPresent(){
+    document.body.classList.remove('presenting');
+    stepNodes.forEach(n => n.classList.remove('active'));
+  }
+  document.getElementById('presentBtn').addEventListener('click', enterPresent);
+  document.getElementById('pbExit').addEventListener('click', exitPresent);
+  document.getElementById('pbNext').addEventListener('click', () => { idx++; showPresent(); });
+  document.getElementById('pbPrev').addEventListener('click', () => { idx--; showPresent(); });
+  document.addEventListener('keydown', e => {
+    if(!document.body.classList.contains('presenting')) return;
+    if(e.key==='ArrowRight'||e.key===' '){ e.preventDefault(); idx++; showPresent(); }
+    else if(e.key==='ArrowLeft'){ e.preventDefault(); idx--; showPresent(); }
+    else if(e.key==='Escape'){ exitPresent(); }
+  });
+</script>
+</body>
+</html>
