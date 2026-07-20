@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Production Orders — Quick Help Guide</title>
+<style>
+  :root{
+    --ink:#1c2430; --ink-soft:#4a5568; --muted:#8492a6;
+    --line:#e2e7ee; --bg:#f6f7f9; --card:#fff;
+    --accent:#0f6e5c; --accent-soft:#e4f1ee;          /* teal-green (matches agenda) */
+    --blue:#1d4e89; --blue-soft:#e8eef7;              /* slate blue */
+    --amber:#b7791f; --amber-soft:#fbf1de;
+    --operator:#c2410c; --operator-bg:#fdece3;
+    --approver:#0f6e5c; --approver-bg:#e4f1ee;
+    --admin:#7c3aed; --admin-bg:#f1ebfd;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{margin:0;font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.55;font-size:15px;}
+  .wrap{max-width:920px;margin:0 auto;padding:32px 24px 64px;}
+  a{color:var(--accent);}
+
+  header.masthead{background:linear-gradient(90deg,#0d3b33,#0f6e5c);color:#fff;
+    border-radius:16px;padding:30px 34px;position:relative;overflow:hidden;}
+  header.masthead::after{content:"";position:absolute;right:-40px;top:-40px;width:220px;height:220px;
+    background:radial-gradient(circle,rgba(29,78,137,.4),transparent 70%);}
+  .eyebrow{text-transform:uppercase;letter-spacing:.14em;font-size:11px;font-weight:700;color:#9fe0d3;margin:0 0 10px;}
+  header.masthead h1{margin:0;font-size:27px;line-height:1.15;font-weight:800;letter-spacing:-.02em;}
+  header.masthead .sub{margin:8px 0 0;color:#cfe0dc;font-size:15px;max-width:660px;}
+  .tent{display:inline-block;margin-top:16px;font-size:11px;font-weight:700;letter-spacing:.08em;
+    text-transform:uppercase;background:rgba(255,255,255,.14);color:#fff;padding:5px 11px;border-radius:999px;}
+
+  /* Lifecycle strip */
+  .lifecycle{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap;margin-top:18px;}
+  .lc{flex:1;min-width:120px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;}
+  .lc .n{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+  .lc .t{font-weight:700;font-size:14px;margin-top:3px;}
+  .lc .d{font-size:12px;color:var(--muted);margin-top:2px;}
+  .lc.pending{border-left:4px solid #94a3b8;}
+  .lc.progress{border-left:4px solid var(--blue);}
+  .lc.qc{border-left:4px solid var(--amber);}
+  .lc.done{border-left:4px solid var(--accent);}
+
+  .role{display:inline-block;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:999px;}
+  .role.operator{color:var(--operator);background:var(--operator-bg);}
+  .role.approver{color:var(--approver);background:var(--approver-bg);}
+  .role.admin{color:var(--admin);background:var(--admin-bg);}
+
+  h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-soft);
+    margin:36px 0 14px;padding-bottom:8px;border-bottom:2px solid var(--line);}
+
+  .task{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:14px 0;}
+  .task-head{display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap;}
+  .task-num{flex-shrink:0;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;
+    font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;}
+  .task-head h3{margin:0;font-size:18px;font-weight:750;letter-spacing:-.01em;flex:1;min-width:180px;}
+  .task-roles{display:flex;gap:5px;}
+  .task ol,.task ul{margin:10px 0 0;padding-left:22px;}
+  .task li{margin:7px 0;color:var(--ink-soft);}
+  .task li b{color:var(--ink);font-weight:650;}
+  .ui{font-weight:650;color:var(--ink);background:#eef2f7;border:1px solid #e0e6ef;border-radius:5px;
+    padding:1px 6px;font-size:13px;white-space:nowrap;}
+  .callout{background:var(--accent-soft);border:1px solid #cfe6df;border-radius:10px;padding:10px 13px;
+    margin-top:12px;font-size:13.5px;color:#0d4f43;}
+  .callout b{color:#0a3d34;}
+  .callout.blue{background:var(--blue-soft);border-color:#cdd9ee;color:#1a3f6e;}
+  .callout.blue b{color:#14315a;}
+  .callout.amber{background:var(--amber-soft);border-color:#eddcb4;color:#8a5a12;}
+  .callout.amber b{color:#6d470e;}
+
+  .tools{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;}
+  @media (max-width:640px){.tools{grid-template-columns:1fr;}}
+  .tool{display:flex;gap:10px;border:1px solid var(--line);border-radius:10px;padding:11px 13px;background:var(--card);}
+  .tool .ic{flex-shrink:0;width:26px;height:26px;border-radius:7px;background:var(--accent-soft);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;}
+  .tool .tn{font-weight:700;font-size:13.5px;}
+  .tool .td{font-size:12.5px;color:var(--muted);margin-top:1px;}
+
+  /* Step widget reference */
+  .stgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;}
+  @media (max-width:640px){.stgrid{grid-template-columns:1fr;}}
+  .st{border:1px solid var(--line);border-radius:9px;padding:9px 12px;background:var(--card);}
+  .st .sn{font-weight:700;font-size:13.5px;}
+  .st .sd{font-size:12.5px;color:var(--muted);margin-top:1px;}
+
+  /* Status table */
+  table.status{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px;}
+  table.status td{border:1px solid var(--line);padding:9px 12px;vertical-align:top;}
+  table.status td:first-child{width:150px;font-weight:700;white-space:nowrap;}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:middle;}
+  .dot.pending{background:#94a3b8;} .dot.progress{background:var(--blue);}
+  .dot.qc{background:var(--amber);} .dot.done{background:var(--accent);} .dot.cancel{background:#dc2626;}
+
+  .faq{border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden;}
+  .faq details{border-top:1px solid var(--line);}
+  .faq details:first-child{border-top:0;}
+  .faq summary{cursor:pointer;padding:13px 16px;font-weight:650;font-size:14.5px;list-style:none;
+    display:flex;justify-content:space-between;align-items:center;gap:12px;}
+  .faq summary::-webkit-details-marker{display:none;}
+  .faq summary::after{content:"+";color:var(--muted);font-weight:700;font-size:18px;}
+  .faq details[open] summary::after{content:"–";}
+  .faq .ans{padding:0 16px 14px;font-size:13.5px;color:var(--ink-soft);}
+  .faq .ans b{color:var(--ink);}
+
+  footer{margin-top:36px;padding-top:18px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+
+  @media print{
+    body{background:#fff;font-size:12px;}
+    .wrap{padding:0;max-width:none;}
+    header.masthead{border-radius:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .task,.faq,.tool,.st,.lc{break-inside:avoid;}
+    .faq details:not([open]) .ans{display:block;}
+    h2.sec{break-after:avoid;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">RSM · Lab Reagent Production Platform</p>
+    <h1>Production Orders — Quick Help Guide</h1>
+    <p class="sub">A pocket reference for running a production order. Your host is driving a live demo — this is
+      here for when you want to run one yourself, catch up, or look something up on the floor.</p>
+    <span class="tent">Session reference</span>
+
+    <div class="lifecycle">
+      <div class="lc pending"><div class="n">Step 1</div><div class="t">Pending</div><div class="d">Order created, not started</div></div>
+      <div class="lc progress"><div class="n">Step 2</div><div class="t">In Progress</div><div class="d">Working the steps</div></div>
+      <div class="lc qc"><div class="n">Step 3</div><div class="t">Awaiting QC</div><div class="d">Steps done, QC to enter</div></div>
+      <div class="lc done"><div class="n">Step 4</div><div class="t">Completed</div><div class="d">QC passed · certificate ready</div></div>
+    </div>
+  </header>
+
+  <!-- WHAT -->
+  <h2 class="sec">What a Production Order is</h2>
+  <p style="margin:0;">
+    A <b>Production Order</b> is one <b>run</b> of an approved Work Instruction — making a specific <b>lot</b> of a
+    reagent. The order turns the WI's steps into a guided, step-by-step checklist the operator works through on the
+    bench: it captures real weights and volumes, enforces tolerances, times mixes, records timestamps, flags
+    deviations, and finishes with QC and a Certificate of Analysis. Everything you do is logged against the lot for
+    a complete production record.
+  </p>
+
+  <!-- ROLES -->
+  <h2 class="sec">Your role today</h2>
+  <div class="tools">
+    <div class="tool">
+      <div class="ic" style="background:var(--operator-bg);color:var(--operator);">▶</div>
+      <div><div class="tn"><span class="role operator">Operator</span></div>
+        <div class="td">Runs the order on the floor — works each step, weighs/dispenses, records QC, flags deviations.</div></div>
+    </div>
+    <div class="tool">
+      <div class="ic" style="background:var(--approver-bg);color:var(--approver);">＋</div>
+      <div><div class="tn"><span class="role approver">Approver</span> / <span class="role admin">Admin</span></div>
+        <div class="td">Creates production orders from approved WIs (and, later, from D365 planned orders); can assign, cancel, or delete.</div></div>
+    </div>
+  </div>
+  <div class="callout blue" style="margin-top:12px;">
+    <b>Only an <u>approved</u> Work Instruction can be produced.</b> If you can't start a run, check that its WI has
+    cleared the approval workflow first.
+  </div>
+
+  <!-- WALKTHROUGH -->
+  <h2 class="sec">Walkthrough</h2>
+
+  <div class="task">
+    <div class="task-head">
+      <div class="task-num">1</div>
+      <h3>Create the production order</h3>
+      <div class="task-roles"><span class="role approver">Approver</span><span class="role admin">Admin</span></div>
+    </div>
+    <ol>
+      <li><b>From an approved Work Instruction:</b> open it and click <span class="ui">Start Production</span> — the fastest route, since it pre-links the WI.</li>
+      <li><b>Or from the Production Orders list:</b> use <span class="ui">New Production Order</span> and pick the approved WI.</li>
+      <li>Enter the <b>lot number</b> and the <b>batch size</b> + unit for this run. (Orders pulled from D365 planned orders arrive pre-filled.)</li>
+      <li>Create it — the order starts in <b>Pending</b>, ready to run.</li>
+    </ol>
+    <div class="callout">Each attendee makes their <b>own</b> order for their WI, so everyone has a run to drive.</div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <div class="task-num">2</div>
+      <h3>Stage the bench &amp; start the run</h3>
+      <div class="task-roles"><span class="role operator">Operator</span></div>
+    </div>
+    <ol>
+      <li>Review the <b>Materials summary</b> — the bill of materials rolled up from every step, shown up top so you can gather everything before you begin.</li>
+      <li>Confirm who's running it in <span class="ui">Assigned to</span> (you can hand it off later — see Task 6).</li>
+      <li>Click <span class="ui">Start Production</span>. The status moves to <b>In Progress</b>, a progress bar appears, and the steps unlock.</li>
+    </ol>
+    <div class="callout blue"><b>D365-linked orders</b> post a <i>ProductionOrderStart</i> message to D365 when you start — you'll see a small status panel confirm it sent (manual orders skip this).</div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <div class="task-num">3</div>
+      <h3>Work the steps — the Happy Path</h3>
+      <div class="task-roles"><span class="role operator">Operator</span></div>
+    </div>
+    <p style="margin:6px 0 0;color:var(--ink-soft);">Steps run one at a time. The <b>step navigator</b> on the left shows the whole run with a status dot per step — click any step to jump to it. Open a step, do what it asks, then <span class="ui">Complete Step</span> (or <span class="ui">Skip</span>). Guided steps:</p>
+    <div class="tools" style="margin-top:12px;">
+      <div class="tool"><div class="ic">⚖</div><div><div class="tn">Weigh</div><div class="td">Scan/select your bench scale, take the live reading — it must be <b>in tolerance</b> or it won't let you continue. Enter the lot number if it's lot-controlled.</div></div></div>
+      <div class="tool"><div class="ic">💧</div><div><div class="tn">Dispense</div><div class="td">Same idea for a volume — measure to target ± tolerance; out-of-range is blocked.</div></div></div>
+      <div class="tool"><div class="ic">⏱</div><div><div class="tn">Mix</div><div class="td">Run the built-in timer to the target duration before completing.</div></div></div>
+      <div class="tool"><div class="ic">🕐</div><div><div class="tn">Record Time</div><div class="td">Tap to stamp the current time (e.g. water-bath start / end).</div></div></div>
+      <div class="tool"><div class="ic">👁</div><div><div class="tn">Observe / Notes</div><div class="td">Record a verification result or free-text note.</div></div></div>
+      <div class="tool"><div class="ic">📎</div><div><div class="tn">Attachment</div><div class="td">Upload supporting docs; if marked required, you must attach one to finish.</div></div></div>
+    </div>
+    <div class="callout">Went too fast? <span class="ui">Reopen</span> a completed step to correct it — the run drops back to <b>In Progress</b> if it had finished.</div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <div class="task-num">4</div>
+      <h3>Flag a deviation</h3>
+      <div class="task-roles"><span class="role operator">Operator</span></div>
+    </div>
+    <ol>
+      <li>On a <b>Possible Deviation</b> step (or when something looks off-spec), record the <b>impacted quantity</b>.</li>
+      <li>Hit <span class="ui">Notify Supervisor</span> — the platform fires a <b>Microsoft Teams</b> message to the supervisor ("technician requests assistance" for this order).</li>
+      <li>Carry on, or wait for guidance — the deviation is captured on the production record either way.</li>
+    </ol>
+    <div class="callout amber"><b>Demo tip:</b> this is the "play with it" moment — trigger a deviation to see the supervisor notification fire end-to-end.</div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <div class="task-num">5</div>
+      <h3>QC checks &amp; finishing the run</h3>
+      <div class="task-roles"><span class="role operator">Operator</span><span class="role approver">Approver</span></div>
+    </div>
+    <ol>
+      <li>When the steps are done, the <b>Quality Control</b> panel lists the product's release tests. Enter each result — the system checks it against the spec limits (pass / fail / in-range) as you go.</li>
+      <li>All steps + all QC results in → the order flips to <b>Completed</b>. If QC results are still outstanding, it sits at <b>Awaiting QC</b> until they're entered.</li>
+      <li>Open the <b>Certificate of Analysis</b> to see the finished, signed-off record for the lot.</li>
+    </ol>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <div class="task-num">6</div>
+      <h3>Hand off &amp; send back <span style="font-size:13px;font-weight:500;color:var(--muted);">(optional)</span></h3>
+      <div class="task-roles"><span class="role operator">Operator</span></div>
+    </div>
+    <ol>
+      <li>Pulled away mid-run? In <span class="ui">Assigned to</span>, pick another person, add an optional note (e.g. "picked up through step 6, please finish QC"), and <span class="ui">Hand off</span>. They get notified and the run keeps its progress.</li>
+      <li>When they're done with their part, they click <span class="ui">↩ Send back</span> to return the run to whoever handed it over. It can bounce back and forth.</li>
+    </ol>
+    <div class="callout">Every step still records <b>who</b> actually completed it, so the production record stays accurate across hand-offs.</div>
+  </div>
+
+  <!-- STATUS REFERENCE -->
+  <h2 class="sec">Order statuses at a glance</h2>
+  <table class="status">
+    <tr><td><span class="dot pending"></span>Pending</td><td>Created but not started. Materials can be staged; nothing captured yet.</td></tr>
+    <tr><td><span class="dot progress"></span>In Progress</td><td>Started — steps are being worked. The progress bar tracks steps completed.</td></tr>
+    <tr><td><span class="dot qc"></span>Awaiting QC</td><td>All production steps finished, but one or more QC release results are still outstanding.</td></tr>
+    <tr><td><span class="dot done"></span>Completed</td><td>Steps and QC all done. Certificate of Analysis available.</td></tr>
+    <tr><td><span class="dot cancel"></span>Cancelled</td><td>Stopped by an admin or the creator. No longer runnable.</td></tr>
+  </table>
+
+  <!-- FAQ -->
+  <h2 class="sec">If you get stuck</h2>
+  <div class="faq">
+    <details open>
+      <summary>The "Complete Step" button is greyed out — why?</summary>
+      <div class="ans">The step's requirement isn't met yet. Common causes: a <b>Weigh</b> with no scale connected, or a reading <b>out of tolerance</b>; a <b>lot-controlled</b> material missing its lot number; a <b>required attachment</b> not uploaded; or a <b>pH</b> reading not in range. Fix the flagged item and the button turns on.</div>
+    </details>
+    <details>
+      <summary>My weight is out of tolerance and I can't continue.</summary>
+      <div class="ans">That's by design — an out-of-tolerance measurement <b>blocks completion</b> so an off-spec batch can't move forward. Re-weigh until you're inside the allowed range, or raise a deviation if the material itself is the problem.</div>
+    </details>
+    <details>
+      <summary>I can't start a run.</summary>
+      <div class="ans">Two things to check: the underlying <b>Work Instruction must be Approved</b>, and the order must be in <b>Pending</b> status. A run that's already In Progress won't show the Start button.</div>
+    </details>
+    <details>
+      <summary>Who can create a production order?</summary>
+      <div class="ans"><b>Approvers</b> and <b>Admins</b> (and authors) create orders — from an approved WI's <b>Start Production</b> button or the <b>New Production Order</b> screen. <b>Operators</b> run the orders once they exist.</div>
+    </details>
+    <details>
+      <summary>I completed a step by mistake.</summary>
+      <div class="ans">Open that step and click <span class="ui">Reopen</span>. It returns to editable, and if the whole order had been marked complete it drops back to <b>In Progress</b> so you can redo it.</div>
+    </details>
+    <details>
+      <summary>How do I get help from a supervisor mid-run?</summary>
+      <div class="ans">Use a <b>Possible Deviation</b> step (or flag one), record the impacted quantity, and press <b>Notify Supervisor</b> — it sends a Microsoft Teams message so they can weigh in without you leaving the bench.</div>
+    </details>
+  </div>
+
+  <footer>
+    <span>Quick help guide — Production Orders. For the review session; features and labels may evolve.</span>
+    <span>RSM · Lab Reagent Production Platform</span>
+  </footer>
+
+</div>
+</body>
+</html>
