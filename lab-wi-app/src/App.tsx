@@ -32,6 +32,7 @@ import ProductionSchedulePage from './pages/ProductionSchedulePage';
 import CycleCountPage from './pages/CycleCountPage';
 import WishlistPage from './pages/WishlistPage';
 import MasterPlanningFlowPage from './pages/MasterPlanningFlowPage';
+import IntegrationMapPage from './pages/IntegrationMapPage';
 import RocketLoader from './components/RocketLoader';
 
 // Charts (recharts) are heavy and only used here — load this route lazily so a
@@ -54,6 +55,7 @@ export default function App() {
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/wishlist" element={<WishlistPage />} />
                 <Route path="/master-planning-flow" element={<MasterPlanningFlowPage />} />
+                <Route path="/integration-map" element={<IntegrationMapPage />} />
                 <Route element={<ProtectedRoute allowedRoles={['author', 'approver']} />}>
                   <Route path="/library" element={<StepLibraryPage />} />
                 </Route>

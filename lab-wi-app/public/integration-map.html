@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>D365 ↔ Rocket Ship — System Responsibilities &amp; Integration</title>
+<style>
+  :root{
+    --bg:#F5F9F8; --surface:#FFFFFF; --surface-2:#EDF4F2;
+    --ink:#17282A; --ink-soft:#566C6B; --line:#D9E4E1; --line-strong:#9FB6B2;
+    --firm:#0E7C7B; --firm-ink:#0B6362; --firm-tint:#E3F1F0;
+    --planned:#C1700F; --planned-ink:#94560C; --planned-tint:#FBF1E2;
+    --engine-bg:#10393B; --engine-ink:#E2F1EF; --engine-soft:#9CC4BF; --engine-line:#2A5456;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0D1616; --surface:#142021; --surface-2:#1A2A2B;
+      --ink:#E4EEEC; --ink-soft:#94AAA7; --line:#24393A; --line-strong:#446463;
+      --firm:#55C2B9; --firm-ink:#7BD4CC; --firm-tint:#123231;
+      --planned:#E2A355; --planned-ink:#ECBA7C; --planned-tint:#2C2213;
+      --engine-bg:#0A2B2D; --engine-ink:#D8ECE9; --engine-soft:#8FBAB4; --engine-line:#1F4A4C;
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#F5F9F8; --surface:#FFFFFF; --surface-2:#EDF4F2;
+    --ink:#17282A; --ink-soft:#566C6B; --line:#D9E4E1; --line-strong:#9FB6B2;
+    --firm:#0E7C7B; --firm-ink:#0B6362; --firm-tint:#E3F1F0;
+    --planned:#C1700F; --planned-ink:#94560C; --planned-tint:#FBF1E2;
+    --engine-bg:#10393B; --engine-ink:#E2F1EF; --engine-soft:#9CC4BF; --engine-line:#2A5456;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0D1616; --surface:#142021; --surface-2:#1A2A2B;
+    --ink:#E4EEEC; --ink-soft:#94AAA7; --line:#24393A; --line-strong:#446463;
+    --firm:#55C2B9; --firm-ink:#7BD4CC; --firm-tint:#123231;
+    --planned:#E2A355; --planned-ink:#ECBA7C; --planned-tint:#2C2213;
+    --engine-bg:#0A2B2D; --engine-ink:#D8ECE9; --engine-soft:#8FBAB4; --engine-line:#1F4A4C;
+  }
+  *{box-sizing:border-box;}
+  html{background:var(--bg);}
+  body{margin:0;background:var(--bg);color:var(--ink);line-height:1.5;
+    font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;}
+  .page{max-width:1060px;margin:0 auto;padding:48px 24px 64px;}
+  .mono{font-family:"Cascadia Code","Consolas","SFMono-Regular",monospace;font-size:.82em;}
+
+  .eyebrow{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--firm);margin:0 0 10px;}
+  h1{font-family:"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;font-size:clamp(26px,4vw,37px);
+    font-weight:700;letter-spacing:-.015em;line-height:1.15;margin:0 0 12px;text-wrap:balance;}
+  .lede{max-width:64ch;color:var(--ink-soft);font-size:16px;margin:0 0 22px;}
+  .lede strong{color:var(--ink);font-weight:600;}
+
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:44px;}
+  .legend-chip{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;
+    padding:6px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--ink-soft);}
+  .legend-swatch{width:22px;height:12px;border-radius:3px;flex:none;}
+  .legend-swatch.d365{background:var(--engine-bg);border:2px solid var(--engine-line);}
+  .legend-swatch.rs{background:var(--firm-tint);border:2px solid var(--firm);}
+  .legend-swatch.msg{background:var(--planned-tint);border:2px dashed var(--planned);}
+
+  .section{margin-top:48px;}
+  .section:first-of-type{margin-top:0;}
+  .section-title{display:flex;align-items:baseline;gap:12px;margin:0 0 6px;}
+  .section-title h2{font-size:20px;font-weight:700;letter-spacing:-.01em;margin:0;text-wrap:balance;}
+  .section-num{font-family:"Cascadia Code","Consolas",monospace;font-size:13px;font-weight:600;color:var(--firm);flex:none;}
+  .section-sub{color:var(--ink-soft);font-size:14.5px;max-width:70ch;margin:0 0 20px;}
+
+  /* ---------- two systems ---------- */
+  .systems{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:stretch;}
+  .sys{border-radius:14px;padding:22px 22px 18px;display:flex;flex-direction:column;}
+  .sys-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:3px;}
+  .sys-head h3{font-size:18px;font-weight:700;margin:0;letter-spacing:-.01em;}
+  .sys-badge{font-family:"Cascadia Code","Consolas",monospace;font-size:10.5px;font-weight:600;letter-spacing:.1em;
+    border-radius:4px;padding:3px 8px;}
+  .sys-role{font-size:13px;margin:0 0 16px;}
+  .sys-cells{display:grid;gap:9px;}
+  .cell{border-radius:9px;padding:11px 13px;font-size:13.5px;}
+  .cell b{display:block;font-size:13.5px;margin-bottom:2px;}
+  .cell span{font-size:12.5px;}
+
+  /* D365 = dark planning engine */
+  .sys.d365{background:var(--engine-bg);color:var(--engine-ink);}
+  .sys.d365 .sys-badge{color:var(--engine-soft);border:1px solid var(--engine-line);}
+  .sys.d365 .sys-role{color:var(--engine-soft);}
+  .sys.d365 .cell{border:1px solid var(--engine-line);}
+  .sys.d365 .cell b{color:var(--engine-ink);}
+  .sys.d365 .cell span{color:var(--engine-soft);}
+
+  /* Rocket Ship = teal execution */
+  .sys.rs{background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--firm);}
+  .sys.rs .sys-badge{color:var(--firm-ink);border:1px solid var(--firm);}
+  .sys.rs .sys-role{color:var(--ink-soft);}
+  .sys.rs .cell{background:var(--firm-tint);border:1px solid var(--firm);}
+  .sys.rs .cell b{color:var(--ink);}
+  .sys.rs .cell span{color:var(--ink-soft);}
+
+  /* ---------- integration exchange ---------- */
+  .exchange{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+  .flow-col{border-radius:14px;border:1px solid var(--line);background:var(--surface);padding:18px 18px 16px;}
+  .flow-head{display:flex;align-items:center;gap:9px;font-weight:700;font-size:14.5px;margin-bottom:4px;}
+  .flow-dir{font-family:"Cascadia Code","Consolas",monospace;font-size:11px;font-weight:700;letter-spacing:.06em;
+    padding:3px 9px;border-radius:5px;white-space:nowrap;}
+  .flow-col.down{border-top:3px solid var(--firm);}
+  .flow-col.down .flow-dir{color:var(--firm-ink);background:var(--firm-tint);border:1px solid var(--firm);}
+  .flow-col.up{border-top:3px solid var(--planned);}
+  .flow-col.up .flow-dir{color:var(--planned-ink);background:var(--planned-tint);border:1px dashed var(--planned);}
+  .flow-note{font-size:12.5px;color:var(--ink-soft);margin:2px 0 14px;}
+  .msg{position:relative;border-radius:9px;padding:11px 13px 11px 34px;margin-top:9px;font-size:13.5px;background:var(--surface-2);border:1px solid var(--line);}
+  .msg::before{position:absolute;left:11px;top:11px;font-weight:800;font-size:14px;}
+  .flow-col.down .msg::before{content:"▶";color:var(--firm);}
+  .flow-col.up .msg::before{content:"◀";color:var(--planned);}
+  .msg b{display:block;font-size:13.5px;margin-bottom:1px;color:var(--ink);}
+  .msg span{color:var(--ink-soft);font-size:12.5px;}
+  .msg .trig{display:block;margin-top:3px;}
+  .msg .trig .mono{color:var(--firm-ink);}
+
+  /* ---------- handoff timeline ---------- */
+  .timeline{list-style:none;counter-reset:exec;display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin:0;padding:0;}
+  .timeline li{counter-increment:exec;background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--line-strong);
+    border-radius:10px;padding:13px 12px 12px;font-size:12.5px;position:relative;}
+  .timeline li.d365{border-top-color:var(--engine-bg);}
+  .timeline li.rs{border-top-color:var(--firm);}
+  .timeline li.hand{border-top-color:var(--planned);border-top-style:dashed;}
+  .timeline li::before{content:counter(exec,decimal-leading-zero);font-family:"Cascadia Code","Consolas",monospace;
+    font-size:10.5px;font-weight:700;color:var(--ink-soft);display:block;margin-bottom:6px;}
+  .timeline .tag{display:inline-block;font-family:"Cascadia Code","Consolas",monospace;font-size:9px;font-weight:700;
+    letter-spacing:.06em;padding:2px 6px;border-radius:4px;margin-bottom:6px;}
+  .tag.d365{color:var(--engine-ink);background:var(--engine-bg);}
+  .tag.rs{color:var(--firm-ink);background:var(--firm-tint);border:1px solid var(--firm);}
+  .tag.hand{color:var(--planned-ink);background:var(--planned-tint);border:1px dashed var(--planned);}
+  .timeline b{display:block;font-size:12.5px;margin-bottom:2px;line-height:1.3;}
+  .timeline span{color:var(--ink-soft);}
+  .loop-note{margin:16px 0 0;font-size:13.5px;color:var(--ink-soft);background:var(--surface-2);
+    border:1px dashed var(--line-strong);border-radius:8px;padding:10px 14px;}
+  .loop-note b{color:var(--ink);}
+
+  footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--line);color:var(--ink-soft);font-size:12.5px;
+    display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+
+  @media (max-width:860px){
+    .systems{grid-template-columns:1fr;}
+    .exchange{grid-template-columns:1fr;}
+    .timeline{grid-template-columns:1fr 1fr;}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <p class="eyebrow">Integration Architecture · D365 Supply Chain ↔ Rocket Ship</p>
+    <h1>Who does the work — and how the two systems talk</h1>
+    <p class="lede">
+      <strong>D365</strong> is the system of record for planning and inventory; <strong>Rocket Ship</strong> is where
+      the Reagent Lab actually makes product. Planning flows <strong>down</strong> to the shop floor, and actuals flow
+      <strong>back up</strong> — a continuous hand-off that keeps demand, supply, and on-hand in lock-step.
+    </p>
+    <div class="legend">
+      <span class="legend-chip"><span class="legend-swatch d365"></span> D365 — plan &amp; inventory (system of record)</span>
+      <span class="legend-chip"><span class="legend-swatch rs"></span> Rocket Ship — production &amp; quality execution</span>
+      <span class="legend-chip"><span class="legend-swatch msg"></span> Integration message — data passed between them</span>
+    </div>
+  </header>
+
+  <!-- 01 — WHO OWNS WHAT -->
+  <section class="section">
+    <div class="section-title"><span class="section-num">01</span><h2>Who owns what</h2></div>
+    <p class="section-sub">Each system is authoritative for its own half. D365 decides <em>what</em> to make and holds the inventory truth; Rocket Ship governs <em>how</em> it's made and proven.</p>
+
+    <div class="systems">
+      <div class="sys d365">
+        <div class="sys-head"><h3>D365 Supply Chain Management</h3><span class="sys-badge">SYSTEM OF RECORD</span></div>
+        <p class="sys-role">Demand, planning, inventory &amp; costing</p>
+        <div class="sys-cells">
+          <div class="cell"><b>Demand capture</b><span>Reagent order → inter-site <b>transfer order</b>; forecast &amp; safety stock.</span></div>
+          <div class="cell"><b>Item coverage · min/max</b><span>Reorder points per warehouse — the trigger for make-to-stock.</span></div>
+          <div class="cell"><b>Master planning run</b><span>Nets demand vs. on-hand &amp; supply; emits <b>planned orders</b>.</span></div>
+          <div class="cell"><b>Inventory &amp; costing</b><span>On-hand, batch/lot, valuation — updated by every posting.</span></div>
+          <div class="cell"><b>Fulfilment</b><span>Ships transfer orders / receives finished product to stock.</span></div>
+        </div>
+      </div>
+
+      <div class="sys rs">
+        <div class="sys-head"><h3>Rocket Ship</h3><span class="sys-badge">PRODUCTION EXECUTION</span></div>
+        <p class="sys-role">Make the product &amp; prove the quality</p>
+        <div class="sys-cells">
+          <div class="cell"><b>Planned order intake</b><span>Receives planned production orders from D365 planning.</span></div>
+          <div class="cell"><b>Firm &amp; schedule</b><span>Turns a plan into a real production order and books the bench.</span></div>
+          <div class="cell"><b>Work Instructions</b><span>Authoring, versioning, approval — the executable formula.</span></div>
+          <div class="cell"><b>Guided execution</b><span>Weigh / dispense / mix with scale scan &amp; tolerance gating.</span></div>
+          <div class="cell"><b>Consumption &amp; output capture</b><span>Actual materials used and finished product produced.</span></div>
+          <div class="cell"><b>QC &amp; Certificate of Analysis</b><span>Release testing and the signed batch record.</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 — HOW THEY COMMUNICATE -->
+  <section class="section">
+    <div class="section-title"><span class="section-num">02</span><h2>How they communicate — back &amp; forth</h2></div>
+    <p class="section-sub">The plan is pushed down to Rocket Ship; every actual is posted back up to D365 so the inventory and planning picture stays true.</p>
+
+    <div class="exchange">
+      <div class="flow-col down">
+        <div class="flow-head"><span class="flow-dir">D365 ▶ ROCKET SHIP</span> Plan hands off work</div>
+        <p class="flow-note">Downstream — planning tells the shop floor what to make.</p>
+        <div class="msg">
+          <b>Item master sync</b>
+          <span>Products, item type (FG / RM / PKG), unit of measure, vendor.</span>
+          <span class="trig">Trigger: <span class="mono">D365 sync</span> — keeps Rocket Ship's catalog aligned.</span>
+        </div>
+        <div class="msg">
+          <b>Planned production order</b>
+          <span>Item · quantity · requirement date, pegged to its demand.</span>
+          <span class="trig">Trigger: master planning run → Rocket Ship's Planned Orders queue.</span>
+        </div>
+      </div>
+
+      <div class="flow-col up">
+        <div class="flow-head"><span class="flow-dir">ROCKET SHIP ◀ D365</span> Execution reports back</div>
+        <p class="flow-note">Upstream — the shop floor tells the record what actually happened.</p>
+        <div class="msg">
+          <b>Production order started</b>
+          <span>Order firmed &amp; run begins.</span>
+          <span class="trig">Message: <span class="mono">ProdProductionOrderStart</span> → D365.</span>
+        </div>
+        <div class="msg">
+          <b>Material consumption posted</b>
+          <span>Actual raw materials &amp; lots consumed against the formula.</span>
+          <span class="trig">Drives on-hand down &amp; keeps reorder points honest.</span>
+        </div>
+        <div class="msg">
+          <b>Finished output — report as finished</b>
+          <span>Product quantity produced, with QC status.</span>
+          <span class="trig">Drives on-hand up → available to ship / stock.</span>
+        </div>
+      </div>
+    </div>
+    <p class="loop-note"><b>Net effect:</b> D365 stays the single source of truth for demand and inventory, while Rocket Ship owns the execution and quality record — neither duplicates the other's job.</p>
+  </section>
+
+  <!-- 03 — END TO END HANDOFF -->
+  <section class="section">
+    <div class="section-title"><span class="section-num">03</span><h2>End to end — where the baton passes</h2></div>
+    <p class="section-sub">One run, coloured by the system that owns each step. The dashed steps are the integration hand-offs.</p>
+
+    <ol class="timeline">
+      <li class="d365"><span class="tag d365">D365</span><b>Demand raised</b><span>Reagent order → transfer order, or reorder point tripped.</span></li>
+      <li class="d365"><span class="tag d365">D365</span><b>Master planning</b><span>Nets demand → planned production order.</span></li>
+      <li class="hand"><span class="tag hand">D365 ▶ RS</span><b>Plan handed off</b><span>Planned order lands in Rocket Ship.</span></li>
+      <li class="rs"><span class="tag rs">ROCKET SHIP</span><b>Firm &amp; execute</b><span>Firm, schedule, run the work instruction.</span></li>
+      <li class="rs"><span class="tag rs">ROCKET SHIP</span><b>Consume → output</b><span>Materials into product; QC &amp; certificate.</span></li>
+      <li class="hand"><span class="tag hand">RS ▶ D365</span><b>Actuals posted</b><span>Start, consumption &amp; report-as-finished.</span></li>
+      <li class="d365"><span class="tag d365">D365</span><b>Inventory &amp; fulfil</b><span>On-hand updated → ship / stock → replenished.</span></li>
+    </ol>
+    <p class="loop-note"><b>Then it loops:</b> the labs consume the replenished stock, on-hand falls back toward the reorder point, and the next master planning run starts the cycle again.</p>
+  </section>
+
+  <footer>
+    <span>System responsibilities &amp; integration — D365 Supply Chain Management ↔ Rocket Ship</span>
+    <span>RSM · Master Planning Session</span>
+  </footer>
+</div>
+</body>
+</html>

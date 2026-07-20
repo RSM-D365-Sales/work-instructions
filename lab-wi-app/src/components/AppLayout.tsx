@@ -5,7 +5,7 @@ import {
   Rocket, LayoutDashboard, BookOpen, ClipboardList,
   PlayCircle, LogOut, ChevronRight, Beaker, Scale, Users, Building2,
   ShoppingCart, CalendarClock, TrendingUp, Boxes, PanelLeftClose, PanelLeftOpen,
-  Factory, CalendarDays, ListChecks, Bell, Lightbulb, Workflow,
+  Factory, CalendarDays, ListChecks, Bell, Lightbulb, Workflow, ArrowLeftRight,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -197,6 +197,18 @@ export default function AppLayout() {
             >
               <Workflow size={16} className="shrink-0" />
               {!collapsed && 'Master Planning Flow'}
+            </Link>
+            <Link
+              to="/integration-map"
+              title={collapsed ? 'Integration Map' : undefined}
+              aria-label="Integration Map"
+              className={cn(
+                'flex items-center text-sm text-gray-600 hover:text-teal-600 transition-colors mt-3',
+                collapsed ? 'justify-center p-2 rounded-lg hover:bg-gray-100 w-full' : 'gap-2 w-full'
+              )}
+            >
+              <ArrowLeftRight size={16} className="shrink-0" />
+              {!collapsed && 'Integration Map'}
             </Link>
             <Link
               to="/wishlist"
