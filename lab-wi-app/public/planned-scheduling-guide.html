@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Planned Production &amp; Scheduling — Quick Help Guide</title>
+<style>
+  :root{
+    --ink:#1c2430; --ink-soft:#4a5568; --muted:#8492a6;
+    --line:#e2e7ee; --bg:#f6f7f9; --card:#fff;
+    --accent:#0f6e5c; --accent-soft:#e4f1ee;          /* teal-green (matches agenda) */
+    --blue:#1d4e89; --blue-soft:#e8eef7;              /* slate blue */
+    --amber:#b7791f; --amber-soft:#fbf1de;
+    --approver:#0f6e5c; --approver-bg:#e4f1ee;
+    --admin:#7c3aed; --admin-bg:#f1ebfd;
+    --operator:#c2410c; --operator-bg:#fdece3;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{margin:0;font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.55;font-size:15px;}
+  .wrap{max-width:920px;margin:0 auto;padding:32px 24px 64px;}
+  a{color:var(--accent);}
+
+  header.masthead{background:linear-gradient(90deg,#0d3b33,#0f6e5c);color:#fff;
+    border-radius:16px;padding:30px 34px;position:relative;overflow:hidden;}
+  header.masthead::after{content:"";position:absolute;right:-40px;top:-40px;width:220px;height:220px;
+    background:radial-gradient(circle,rgba(29,78,137,.4),transparent 70%);}
+  .eyebrow{text-transform:uppercase;letter-spacing:.14em;font-size:11px;font-weight:700;color:#9fe0d3;margin:0 0 10px;}
+  header.masthead h1{margin:0;font-size:26px;line-height:1.15;font-weight:800;letter-spacing:-.02em;}
+  header.masthead .sub{margin:8px 0 0;color:#cfe0dc;font-size:15px;max-width:660px;}
+  .tent{display:inline-block;margin-top:16px;font-size:11px;font-weight:700;letter-spacing:.08em;
+    text-transform:uppercase;background:rgba(255,255,255,.14);color:#fff;padding:5px 11px;border-radius:999px;}
+
+  /* Pipeline strip */
+  .pipe{display:flex;align-items:stretch;gap:6px;flex-wrap:wrap;margin-top:18px;}
+  .pi{flex:1;min-width:104px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 13px;position:relative;}
+  .pi .n{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
+  .pi .t{font-weight:700;font-size:13.5px;margin-top:2px;}
+  .pi .d{font-size:11.5px;color:var(--muted);margin-top:1px;line-height:1.35;}
+  .pi{border-left:4px solid var(--accent);}
+
+  .role{display:inline-block;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:999px;}
+  .role.approver{color:var(--approver);background:var(--approver-bg);}
+  .role.admin{color:var(--admin);background:var(--admin-bg);}
+  .role.operator{color:var(--operator);background:var(--operator-bg);}
+
+  h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-soft);
+    margin:36px 0 14px;padding-bottom:8px;border-bottom:2px solid var(--line);}
+
+  .task{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:14px 0;}
+  .task-head{display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap;}
+  .task-num{flex-shrink:0;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;
+    font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;}
+  .task-head h3{margin:0;font-size:18px;font-weight:750;letter-spacing:-.01em;flex:1;min-width:180px;}
+  .task-roles{display:flex;gap:5px;flex-wrap:wrap;}
+  .task ol,.task ul{margin:10px 0 0;padding-left:22px;}
+  .task li{margin:7px 0;color:var(--ink-soft);}
+  .task li b{color:var(--ink);font-weight:650;}
+  .ui{font-weight:650;color:var(--ink);background:#eef2f7;border:1px solid #e0e6ef;border-radius:5px;
+    padding:1px 6px;font-size:13px;white-space:nowrap;}
+  .callout{background:var(--accent-soft);border:1px solid #cfe6df;border-radius:10px;padding:10px 13px;
+    margin-top:12px;font-size:13.5px;color:#0d4f43;}
+  .callout b{color:#0a3d34;}
+  .callout.blue{background:var(--blue-soft);border-color:#cdd9ee;color:#1a3f6e;}
+  .callout.blue b{color:#14315a;}
+  .callout.amber{background:var(--amber-soft);border-color:#eddcb4;color:#8a5a12;}
+  .callout.amber b{color:#6d470e;}
+
+  /* two-choice split (Firm vs Firm & Schedule, etc.) */
+  .choose{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;}
+  @media (max-width:640px){.choose{grid-template-columns:1fr;}}
+  .opt{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--card);}
+  .opt .on{font-weight:700;font-size:14px;color:var(--accent);}
+  .opt .od{font-size:12.5px;color:var(--muted);margin-top:3px;}
+
+  /* module cards */
+  .mods{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;}
+  @media (max-width:640px){.mods{grid-template-columns:1fr;}}
+  .mod{border:1px solid var(--line);border-radius:10px;padding:11px 13px;background:var(--card);}
+  .mod .mn{font-weight:700;font-size:13.5px;}
+  .mod .md{font-size:12.5px;color:var(--muted);margin-top:1px;}
+
+  .faq{border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden;}
+  .faq details{border-top:1px solid var(--line);}
+  .faq details:first-child{border-top:0;}
+  .faq summary{cursor:pointer;padding:13px 16px;font-weight:650;font-size:14.5px;list-style:none;
+    display:flex;justify-content:space-between;align-items:center;gap:12px;}
+  .faq summary::-webkit-details-marker{display:none;}
+  .faq summary::after{content:"+";color:var(--muted);font-weight:700;font-size:18px;}
+  .faq details[open] summary::after{content:"–";}
+  .faq .ans{padding:0 16px 14px;font-size:13.5px;color:var(--ink-soft);}
+  .faq .ans b{color:var(--ink);}
+
+  footer{margin-top:36px;padding-top:18px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+
+  @media print{
+    body{background:#fff;font-size:12px;}
+    .wrap{padding:0;max-width:none;}
+    header.masthead{border-radius:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .task,.faq,.opt,.mod,.pi{break-inside:avoid;}
+    .faq details:not([open]) .ans{display:block;}
+    h2.sec{break-after:avoid;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">RSM · Lab Reagent Production Platform</p>
+    <h1>Planned Production &amp; Scheduling — Quick Help Guide</h1>
+    <p class="sub">A pocket reference for turning demand into scheduled runs — from a D365 planned order all the way
+      to a slot on someone's calendar. Here for when you want to try it, catch up, or look something up.</p>
+    <span class="tent">Session reference</span>
+
+    <div class="pipe">
+      <div class="pi"><div class="n">From D365</div><div class="t">Planned Order</div><div class="d">Demand, with a requirement date</div></div>
+      <div class="pi"><div class="n">You firm it</div><div class="t">Production Order</div><div class="d">A real run, against the WI</div></div>
+      <div class="pi"><div class="n">Needs a slot</div><div class="t">Unscheduled</div><div class="d">Waiting to be scheduled</div></div>
+      <div class="pi"><div class="n">Placed</div><div class="t">Scheduled</div><div class="d">On a person's calendar</div></div>
+      <div class="pi"><div class="n">Execute</div><div class="t">Run</div><div class="d">Operator produces the lot</div></div>
+    </div>
+  </header>
+
+  <!-- WHAT -->
+  <h2 class="sec">What this section covers</h2>
+  <p style="margin:0;">
+    This is the <b>planning &amp; scheduling</b> side of the platform — how demand becomes scheduled work. Planned
+    orders flow in from <b>D365</b>; you <b>firm</b> them into real production orders (against each item's approved
+    Work Instruction), then <b>schedule</b> them onto the calendar — by hand or with the auto-scheduler that finds an
+    available person who can finish by the requirement date. The <b>Production Schedule</b> (a per-person Gantt) is
+    the picture of who's making what, when — and when someone's out, you can <b>cover the absence</b> in a couple of
+    clicks. Around it sit the supporting modules: <b>Inventory</b>, <b>Cycle Count</b>, <b>Reagent Orders</b>, and
+    <b>Quality Trends</b>.
+  </p>
+
+  <!-- ROLES -->
+  <h2 class="sec">Your role today</h2>
+  <div class="mods">
+    <div class="mod"><div class="mn"><span class="role approver">Approver</span> / <span class="role admin">Admin</span></div>
+      <div class="md">Reviews and firms planned orders, schedules and re-balances work, covers absences.</div></div>
+    <div class="mod"><div class="mn"><span class="role operator">Operator</span></div>
+      <div class="md">Reads the Production Schedule to see what's on their calendar and when.</div></div>
+  </div>
+  <div class="callout blue" style="margin-top:12px;">
+    <b>Firming needs an approved WI.</b> Firming a planned order builds a production order from the item's
+    <b>default formula</b> — the approved Work Instruction for that reagent. No approved WI, nothing to firm against.
+  </div>
+
+  <!-- WALKTHROUGH -->
+  <h2 class="sec">Walkthrough</h2>
+
+  <div class="task">
+    <div class="task-head">
+      <div class="task-num">1</div>
+      <h3>Review the planned orders</h3>
+      <div class="task-roles"><span class="role approver">Approver</span><span class="role admin">Admin</span></div>
+    </div>
+    <ol>
+      <li>Open <span class="ui">Planned Production Orders</span> — these arrive from <b>D365</b>. Toggle the <span class="ui">Unprocessed</span> / <span class="ui">Firmed</span> tabs.</li>
+      <li>Each row shows the <b>number</b>, item, quantity, order/delivery dates, and the D365 <b>pegging</b> — expand a row for the detail.</li>
+      <li>Watch the <b>urgency chip</b> off the requirement date — <i>Overdue</i>, <i>Due today</i>, <i>Due in Nd</i> — that's the de-facto priority.</li>
+    </ol>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <div class="task-num">2</div>
+      <h3>Firm a planned order</h3>
+      <div class="task-roles"><span class="role approver">Approver</span><span class="role admin">Admin</span></div>
+    </div>
+    <p style="margin:6px 0 0;color:var(--ink-soft);">Firming turns demand into a real production order. Two ways, depending on whether you want to schedule now:</p>
+    <div class="choose">
+      <div class="opt"><div class="on">🔨 Firm</div><div class="od">Creates the production order and drops it into <b>Unscheduled Orders</b> to place later (Task 3).</div></div>
+      <div class="opt"><div class="on">✨ Firm &amp; Schedule</div><div class="od">Firms <i>and</i> auto-schedules it to an available person who can finish by the requirement date — one click, done.</div></div>
+    </div>
+    <ul>
+      <li>Do one at a time from a row, or tick several and use <span class="ui">Firm selected (N)</span> / <span class="ui">Firm &amp; Schedule (N)</span> at the top.</li>
+    </ul>
+    <div class="callout">The result banner tells you how many firmed, how many got scheduled, and how many are waiting in Unscheduled Orders.</div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <div class="task-num">3</div>
+      <h3>Schedule the unscheduled work</h3>
+      <div class="task-roles"><span class="role admin">Admin</span></div>
+    </div>
+    <p style="margin:6px 0 0;color:var(--ink-soft);">Open <span class="ui">Unscheduled Orders</span> — production orders that don't have a slot yet (lot, WI, assignee, duration).</p>
+    <div class="choose">
+      <div class="opt"><div class="on">✨ Auto-schedule</div><div class="od"><span class="ui">Auto-schedule all</span> (or selected) assigns each order to an available person who can finish by its required date, in the next open slot.</div></div>
+      <div class="opt"><div class="on">🗓 Schedule by hand</div><div class="od">Pick a start date &amp; time on a row to place it yourself.</div></div>
+    </div>
+    <div class="callout">When the list clears, you'll see <b>"All caught up"</b> — every order has a home on the calendar.</div>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <div class="task-num">4</div>
+      <h3>Read the Production Schedule</h3>
+      <div class="task-roles"><span class="role approver">Approver</span><span class="role operator">Operator</span></div>
+    </div>
+    <ul>
+      <li>Open <span class="ui">Production Schedule</span> — a <b>Gantt timeline</b> with a row per person, each order shown as a block over its scheduled window.</li>
+      <li>Use the toolbar to change the view: <span class="ui">1 / 3 / 7 / 14 / 30-day</span> presets, <span class="ui">Today</span>, and prev/next to move the window.</li>
+      <li>Each block's <b>colour dot</b> shows the order's status; the block's length comes straight from the Work Instruction's <b>scheduled time</b>.</li>
+    </ul>
+  </div>
+
+  <div class="task">
+    <div class="task-head">
+      <div class="task-num">5</div>
+      <h3>Cover an absence</h3>
+      <div class="task-roles"><span class="role approver">Approver</span><span class="role admin">Admin</span></div>
+    </div>
+    <p style="margin:6px 0 0;color:var(--ink-soft);">Someone called in sick? On the schedule, open <span class="ui">Cover an absence</span>, pick the person and the dates they're out, then choose:</p>
+    <div class="choose">
+      <div class="opt"><div class="on">↪ Reassign</div><div class="od">Moves each of their <b>pending</b> orders to another available person who can still finish by its required date.</div></div>
+      <div class="opt"><div class="on">✖ Unassign</div><div class="od">Clears the assignee &amp; time — the orders go back to <b>Unscheduled Orders</b> to reschedule.</div></div>
+    </div>
+    <div class="callout amber"><b>Preview first:</b> the panel lists exactly which orders will move before you commit, so there are no surprises.</div>
+  </div>
+
+  <!-- SURROUNDING MODULES -->
+  <h2 class="sec">The surrounding modules</h2>
+  <p style="margin:0 0 4px;color:var(--ink-soft);">These complete the operational picture around planning &amp; production:</p>
+  <div class="mods">
+    <div class="mod"><div class="mn">Inventory</div><div class="md">On-hand quantities of reagents and finished goods.</div></div>
+    <div class="mod"><div class="mn">Cycle Count</div><div class="md">Periodic stock counts to keep on-hand numbers honest.</div></div>
+    <div class="mod"><div class="mn">Reagent Orders</div><div class="md">Ordering and receiving the raw materials production consumes.</div></div>
+    <div class="mod"><div class="mn">Quality Trends</div><div class="md">Dashboards on QC results and production quality over time.</div></div>
+  </div>
+
+  <!-- FAQ -->
+  <h2 class="sec">If you get stuck</h2>
+  <div class="faq">
+    <details open>
+      <summary>What's the difference between "Firm" and "Firm &amp; Schedule"?</summary>
+      <div class="ans"><b>Firm</b> just creates the production order and parks it in <b>Unscheduled Orders</b> for you to place later. <b>Firm &amp; Schedule</b> also auto-assigns it to an available person who can finish by the requirement date — use it when you're happy to let the scheduler place it.</div>
+    </details>
+    <details>
+      <summary>I can't firm a planned order.</summary>
+      <div class="ans">Firming builds the run from the item's <b>default formula</b> — its approved Work Instruction. If the item has no approved WI, there's nothing to firm against. Approve a WI for that item first.</div>
+    </details>
+    <details>
+      <summary>Where do firmed orders go?</summary>
+      <div class="ans">To <b>Unscheduled Orders</b> if you used plain Firm, or straight onto the <b>Production Schedule</b> if you used Firm &amp; Schedule. Either way they're now real production orders you can open and run.</div>
+    </details>
+    <details>
+      <summary>How does the auto-scheduler decide?</summary>
+      <div class="ans">It works earliest-required-date first, and for each order picks an available person who can fit the run (its Work Instruction's scheduled time) into an open slot <b>before the required date</b>. Orders it can't fit in time are flagged as late.</div>
+    </details>
+    <details>
+      <summary>Why is a run so long / short on the Gantt?</summary>
+      <div class="ans">A block's length is the Work Instruction's <b>Scheduled Time (minutes)</b>. If a run looks wrong on the calendar, adjust the scheduled time on the WI — that's what the planner blocks out.</div>
+    </details>
+    <details>
+      <summary>Someone's out — fastest way to handle their work?</summary>
+      <div class="ans">On the Production Schedule use <b>Cover an absence</b>: pick the person and dates, then <b>Reassign</b> (push their pending orders to others who can still hit the dates) or <b>Unassign</b> (send them back to Unscheduled Orders). You'll see a preview of what moves before you confirm.</div>
+    </details>
+  </div>
+
+  <footer>
+    <span>Quick help guide — Planned Production &amp; Scheduling. For the review session; features and labels may evolve.</span>
+    <span>RSM · Lab Reagent Production Platform</span>
+  </footer>
+
+</div>
+</body>
+</html>
