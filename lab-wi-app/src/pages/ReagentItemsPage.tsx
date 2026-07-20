@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -79,6 +79,22 @@ const ITEM_TYPE_BADGE: Record<string, string> = {
   RM: 'bg-amber-100 text-amber-800',
   PKG: 'bg-purple-100 text-purple-800',
 };
+
+// Type-filter pills, the group order, and sort options for the list controls.
+const TYPE_PILLS = [
+  { key: 'all', label: 'All', activeCls: 'bg-gray-800 text-white border-gray-800' },
+  { key: 'FG',  label: 'FG',  activeCls: 'bg-emerald-600 text-white border-emerald-600' },
+  { key: 'RM',  label: 'RM',  activeCls: 'bg-amber-600 text-white border-amber-600' },
+  { key: 'PKG', label: 'PKG', activeCls: 'bg-purple-600 text-white border-purple-600' },
+] as const;
+
+const TYPE_GROUP_ORDER = ['FG', 'RM', 'PKG'] as const;
+
+const SORT_OPTIONS = [
+  { key: 'item_number',  label: 'Item #' },
+  { key: 'product_name', label: 'Product Name' },
+  { key: 'item_type',    label: 'Type' },
+] as const;
 
 const GHS_ALL = Object.keys(GHS_LABELS);
 
@@ -1177,6 +1193,9 @@ export default function ReagentItemsPage() {
 
   const [search, setSearch] = useState('');
   const [showInactive, setShowInactive] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<'all' | 'FG' | 'RM' | 'PKG'>('all');
+  const [sortBy, setSortBy] = useState<'item_number' | 'product_name' | 'item_type'>('item_number');
+  const [groupByType, setGroupByType] = useState(false);
   const [modalItem, setModalItem] = useState<Partial<ReagentItem> | null>(null);
   const [qcItem, setQcItem] = useState<ReagentItem | null>(null);
   const [syncResult, setSyncResult] = useState<{ success: boolean; message?: string; error?: string; synced?: number; debug_query_url?: string } | null>(null);
@@ -1204,7 +1223,8 @@ export default function ReagentItemsPage() {
     },
   });
 
-  const filtered = useMemo(() => {
+  // Base list — search + active only (drives the per-type pill counts).
+  const baseFiltered = useMemo(() => {
     const q = search.toLowerCase().trim();
     return items.filter(item => {
       if (!showInactive && !item.is_active) return false;
@@ -1220,6 +1240,26 @@ export default function ReagentItemsPage() {
       );
     });
   }, [items, search, showInactive]);
+
+  const typeCounts = useMemo(() => {
+    const c: Record<string, number> = { all: baseFiltered.length, FG: 0, RM: 0, PKG: 0 };
+    for (const i of baseFiltered) if ((i.item_type ?? '') in c) c[i.item_type as string]++;
+    return c;
+  }, [baseFiltered]);
+
+  // Final list — apply the type filter, then sort.
+  const filtered = useMemo(() => {
+    const list = typeFilter === 'all' ? baseFiltered : baseFiltered.filter(i => i.item_type === typeFilter);
+    const cmp = (a: ReagentItem, b: ReagentItem) => {
+      if (sortBy === 'product_name') return a.product_name.localeCompare(b.product_name);
+      if (sortBy === 'item_type') {
+        const t = (a.item_type ?? '').localeCompare(b.item_type ?? '');
+        return t !== 0 ? t : a.item_number.localeCompare(b.item_number, undefined, { numeric: true });
+      }
+      return a.item_number.localeCompare(b.item_number, undefined, { numeric: true });
+    };
+    return [...list].sort(cmp);
+  }, [baseFiltered, typeFilter, sortBy]);
 
   const saveMutation = useMutation({
     mutationFn: async (form: Partial<ReagentItem>) => {
@@ -1418,10 +1458,57 @@ export default function ReagentItemsPage() {
             Show inactive
           </label>
         )}
-        {search && (
-          <p className="text-sm text-gray-500">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</p>
-        )}
       </div>
+
+      {/* Type / sort / group controls */}
+      {items.length > 0 && (
+        <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide mr-0.5">Type</span>
+            {TYPE_PILLS.map(t => {
+              const active = typeFilter === t.key;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setTypeFilter(t.key as typeof typeFilter)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors',
+                    active ? t.activeCls : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                  )}
+                >
+                  {t.label}
+                  <span className={cn('rounded-full px-1.5 text-[11px] font-bold', active ? 'bg-white/25' : 'bg-gray-100 text-gray-500')}>
+                    {typeCounts[t.key] ?? 0}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide mr-0.5">Sort</span>
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as typeof sortBy)}
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {SORT_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+            </select>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={groupByType}
+              onChange={e => setGroupByType(e.target.checked)}
+              className="w-4 h-4 rounded accent-blue-600"
+            />
+            Group by type
+          </label>
+
+          <span className="text-sm text-gray-400 ml-auto">{filtered.length} item{filtered.length === 1 ? '' : 's'}</span>
+        </div>
+      )}
 
       {/* Table */}
       {isLoading ? (
@@ -1458,16 +1545,55 @@ export default function ReagentItemsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtered.map(item => (
-                <ReagentRow
-                  key={item.id}
-                  item={item}
-                  isAdmin={isAdmin}
-                  onEdit={setModalItem}
-                  onDelete={handleDelete}
-                  onManageQC={setQcItem}
-                />
-              ))}
+              {groupByType ? (
+                <>
+                  {TYPE_GROUP_ORDER.map(type => {
+                    const rows = filtered.filter(i => i.item_type === type);
+                    if (rows.length === 0) return null;
+                    return (
+                      <Fragment key={type}>
+                        <tr className="bg-gray-50/70 border-t border-gray-100">
+                          <td colSpan={9} className="px-4 py-2">
+                            <span className={cn('px-2 py-0.5 rounded-full text-xs font-semibold', ITEM_TYPE_BADGE[type])}>{type}</span>
+                            <span className="text-xs text-gray-400 ml-2">· {rows.length} item{rows.length === 1 ? '' : 's'}</span>
+                          </td>
+                        </tr>
+                        {rows.map(item => (
+                          <ReagentRow key={item.id} item={item} isAdmin={isAdmin} onEdit={setModalItem} onDelete={handleDelete} onManageQC={setQcItem} />
+                        ))}
+                      </Fragment>
+                    );
+                  })}
+                  {(() => {
+                    const others = filtered.filter(i => !(TYPE_GROUP_ORDER as readonly string[]).includes(i.item_type ?? ''));
+                    if (others.length === 0) return null;
+                    return (
+                      <Fragment key="__other">
+                        <tr className="bg-gray-50/70 border-t border-gray-100">
+                          <td colSpan={9} className="px-4 py-2">
+                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">Other</span>
+                            <span className="text-xs text-gray-400 ml-2">· {others.length} item{others.length === 1 ? '' : 's'}</span>
+                          </td>
+                        </tr>
+                        {others.map(item => (
+                          <ReagentRow key={item.id} item={item} isAdmin={isAdmin} onEdit={setModalItem} onDelete={handleDelete} onManageQC={setQcItem} />
+                        ))}
+                      </Fragment>
+                    );
+                  })()}
+                </>
+              ) : (
+                filtered.map(item => (
+                  <ReagentRow
+                    key={item.id}
+                    item={item}
+                    isAdmin={isAdmin}
+                    onEdit={setModalItem}
+                    onDelete={handleDelete}
+                    onManageQC={setQcItem}
+                  />
+                ))
+              )}
             </tbody>
           </table>
         </div>
