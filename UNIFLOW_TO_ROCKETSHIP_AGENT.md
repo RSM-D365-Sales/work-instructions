@@ -182,20 +182,40 @@ whitespace.
 
 1. If `formPlan` is empty → output **only** a report line: "SKIPPED — no recipe
    (stocked/purchased item)." Emit no SQL.
-2. Extract every distinct `formParts_<type>_<N>` type. If **any** type is not in
-   the Supported Vocabulary table below, **STOP**: output no SQL, and emit a
-   report listing the recipe id and each unsupported type by name. Do **not**
-   partially convert. Known-unsupported types you will see (report them by
-   name): `waitTime`/`beginWaitTime`, `preProductionTable`, `specimenRequest`,
-   `volumeRecalculation`, `sendToProductionB`, `resuspensionVolume`, `flasks`,
-   `passageNumber`, `coulterCounter`, `cellConcentration`, `trypanBlue`,
-   `liquidNitrogenVials`, `absorbance`,
+2. Extract every distinct `formParts_<type>_<N>` type. Check each **input
+   formPart type** against the **Supported formPart types** list below — NOT
+   against the `_step_type` table (that table lists the *output* step types; the
+   formPart→step_type mapping lives in Part 3 and the conversion rules).
+
+   **Supported formPart types — CONVERT these (do not skip a recipe for any of
+   them):** `text`, `attachments`, `materialWeighed` (→ `weigh` / `dispense`),
+   `materialNotWeighed` (→ `gather_reagents`), `materialNoQty`
+   (→ `bring_to_volume` / `gather_reagents`), `pHMeter` (→ `ph_adjust`),
+   `textEditable` (→ `notes`), **`currentTime` (→ `record_time`)**, `separator`,
+   `separatorDay1` / `separatorDay2` / `separatorDay3` / `separatorDay14`
+   (→ `production_break`), `defectRate` (→ `observe`), `osmolarity` (→ `qc_tests`).
+
+   If **any** formPart type is NOT in that supported list, **STOP**: output no
+   SQL, and emit a report listing the recipe id and each unsupported type by
+   name. Do **not** partially convert. Common unsupported types you will see
+   (report them by name): `waitTime`/`beginWaitTime`, `preProductionTable`,
+   `specimenRequest`, `volumeRecalculation`, `sendToProductionB`,
+   `resuspensionVolume`, `flasks`, `passageNumber`, `coulterCounter`,
+   `cellConcentration`, `trypanBlue`, `liquidNitrogenVials`, `absorbance`,
    `currentTemperature`, `tableSampleIDTestResults`, `monolayerConfluence`,
    `monolayerMorphology`, `calculatedValueSingle`, `massVolumeCalculation`, and
-   any other type not in the supported set.
+   any other type not in the supported list.
+
+   > **`currentTime` is SUPPORTED** — it maps to `record_time` (R8a). Never skip
+   > a recipe because of `currentTime` / `getTimeButton`. A8 Agar (A-00020),
+   > whose only former blocker was `currentTime`, now CONVERTS.
 3. Otherwise proceed to conversion.
 
-### Supported Vocabulary — the ONLY valid `_step_type` values
+### Output step types — the ONLY valid `_step_type` values
+
+These are the conversion **targets** (what you emit), not the scope-gate
+checklist — the input formParts in STEP 0 map *into* these. Never emit a
+`_step_type` outside this set.
 
 | `_step_type` | Parameters (exact keys) | Use for |
 |---|---|---|
