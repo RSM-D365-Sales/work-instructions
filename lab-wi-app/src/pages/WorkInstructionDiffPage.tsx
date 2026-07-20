@@ -199,6 +199,7 @@ export default function WorkInstructionDiffPage() {
               <div className="px-4 py-2 bg-amber-50/70 border-b border-amber-100">
                 <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Header changes</p>
               </div>
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <tbody className="divide-y divide-gray-50">
                   {headerChanges.map(c => (
@@ -210,6 +211,7 @@ export default function WorkInstructionDiffPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
 

@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { ProductionOrder, Profile } from '../types';
-import { Plus, ChevronRight, Ban, Trash2, Check } from 'lucide-react';
+import { Plus, ChevronRight, Ban, Trash2, Check, User } from 'lucide-react';
 import { formatDate } from '../lib/utils';
 import { cn } from '../lib/utils';
 import ListFilters, { toOptions, inDateRange } from '../components/ListFilters';
@@ -93,6 +93,8 @@ export default function ProductionOrdersListPage() {
   const [filterItem, setFilterItem] = useState('');
   const [dateFrom, setDateFrom] = useState(() => localDateStr(0));
   const [dateTo, setDateTo] = useState(() => localDateStr(3));
+  // "Show mine" — narrow to orders assigned to the current user.
+  const [showMine, setShowMine] = useState(false);
   const { profile } = useAuth();
   const qc = useQueryClient();
 
@@ -142,6 +144,7 @@ export default function ProductionOrdersListPage() {
   const filtersActive = !!(filterItem || dateFrom || dateTo);
 
   function matchesFilters(o: any): boolean {
+    if (showMine && o.assigned_to !== profile?.id) return false;
     if (hiddenStatuses.has(o.status)) return false;
     if (filterItem && (o.work_instruction?.product_name ?? '') !== filterItem) return false;
     if (!inDateRange(o.required_by, dateFrom, dateTo)) return false;
@@ -183,7 +186,7 @@ export default function ProductionOrdersListPage() {
       rows,
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopedOrders, hiddenStatuses, groupBy, filterItem, dateFrom, dateTo]);
+  }, [scopedOrders, hiddenStatuses, groupBy, filterItem, dateFrom, dateTo, showMine]);
 
   const cancelMutation = useMutation({
     mutationFn: async (orderId: string) => {
@@ -292,13 +295,28 @@ export default function ProductionOrdersListPage() {
           <p className="text-sm text-gray-500 mt-1">Active and historical production runs</p>
         </div>
         {profile?.role !== 'operator' && (
-          <Link
-            to="/production-orders/new"
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
-            <Plus size={16} />
-            New Order
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowMine(v => !v)}
+              title="Show only production orders assigned to me"
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors',
+                showMine
+                  ? 'bg-blue-50 text-blue-700 border-blue-300'
+                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+              )}
+            >
+              <User size={16} />
+              {showMine ? 'Showing mine' : 'Show mine'}
+            </button>
+            <Link
+              to="/production-orders/new"
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              <Plus size={16} />
+              New Order
+            </Link>
+          </div>
         )}
       </div>
 
@@ -372,8 +390,8 @@ export default function ProductionOrdersListPage() {
           {scopedOrders.length === 0 && !isOperator && <Link to="/production-orders/new" className="text-blue-600 text-sm hover:underline">Create the first one</Link>}
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          <table className="w-full min-w-[980px] text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Production Order #</th>

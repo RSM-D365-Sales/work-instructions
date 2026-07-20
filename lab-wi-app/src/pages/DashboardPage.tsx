@@ -549,7 +549,7 @@ function LabDashboard() {
           <p className="text-xs text-gray-400 -mt-3">Sorted by needed-by date.</p>
 
           {/* Orders list */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                 <tr>

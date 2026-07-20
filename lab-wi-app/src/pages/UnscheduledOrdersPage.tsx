@@ -428,6 +428,7 @@ export default function UnscheduledOrdersPage() {
             </div>
           </div>
 
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-gray-500 uppercase">
               <tr className="border-b border-gray-100">
@@ -513,6 +514,7 @@ export default function UnscheduledOrdersPage() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
         );
       })}

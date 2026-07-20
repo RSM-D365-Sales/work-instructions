@@ -560,7 +560,7 @@ export default function ScalesPage() {
           <button onClick={openAdd} className="text-blue-600 text-sm hover:underline">Add the first instrument</button>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">

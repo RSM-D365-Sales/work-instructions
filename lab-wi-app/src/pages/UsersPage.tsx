@@ -198,6 +198,7 @@ export default function UsersPage() {
             </span>
             <span className="text-gray-400">· click a day to cycle</span>
           </div>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
@@ -252,6 +253,7 @@ export default function UsersPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
