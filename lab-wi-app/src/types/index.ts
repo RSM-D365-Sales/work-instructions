@@ -238,6 +238,21 @@ export interface ProductionOrder {
   previous_assignee?: Profile;
 }
 
+/** Session wishlist item — live feedback board captured during demo sessions. */
+export interface WishlistItem {
+  id: string;
+  title: string;
+  detail?: string | null;
+  section: string;
+  category: 'feature' | 'bug' | 'idea' | 'question' | 'like';
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  status: 'new' | 'planned' | 'in_progress' | 'completed' | 'declined';
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  creator?: { full_name: string } | null;
+}
+
 /** D365 product classification: finished good, raw material, packaging. */
 export type ItemType = 'FG' | 'RM' | 'PKG';
 

@@ -5,7 +5,7 @@ import {
   Rocket, LayoutDashboard, BookOpen, ClipboardList,
   PlayCircle, LogOut, ChevronRight, Beaker, Scale, Users, Building2,
   ShoppingCart, CalendarClock, TrendingUp, Boxes, PanelLeftClose, PanelLeftOpen,
-  Factory, CalendarDays, ListChecks, Bell,
+  Factory, CalendarDays, ListChecks, Bell, Lightbulb,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -15,6 +15,7 @@ import DeviationAlert from './DeviationAlert';
 
 const mainNav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'author', 'approver', 'operator', 'lab'] },
+  { to: '/wishlist', label: 'Session Wishlist', icon: Lightbulb, roles: ['admin', 'author', 'approver', 'operator', 'lab'] },
   { to: '/notifications', label: 'Notifications', icon: Bell, roles: ['admin'] },
   { to: '/work-instructions', label: 'Work Instructions', icon: ClipboardList, roles: ['admin', 'author', 'approver', 'operator'] },
   { to: '/production-orders', label: 'Production Orders', icon: PlayCircle, roles: ['admin', 'author', 'approver', 'operator'] },

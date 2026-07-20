@@ -30,6 +30,7 @@ import NotificationsPage from './pages/NotificationsPage';
 import PlannedProductionOrdersPage from './pages/PlannedProductionOrdersPage';
 import ProductionSchedulePage from './pages/ProductionSchedulePage';
 import CycleCountPage from './pages/CycleCountPage';
+import WishlistPage from './pages/WishlistPage';
 import RocketLoader from './components/RocketLoader';
 
 // Charts (recharts) are heavy and only used here — load this route lazily so a
@@ -50,6 +51,7 @@ export default function App() {
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
                 <Route path="/" element={<DashboardPage />} />
+                <Route path="/wishlist" element={<WishlistPage />} />
                 <Route element={<ProtectedRoute allowedRoles={['author', 'approver']} />}>
                   <Route path="/library" element={<StepLibraryPage />} />
                 </Route>
