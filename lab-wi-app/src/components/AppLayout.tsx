@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { cn } from '../lib/utils';
 import DefaultLabSelector from './DefaultLabSelector';
+import DeviationAlert from './DeviationAlert';
 
 const mainNav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'author', 'approver', 'operator', 'lab'] },
@@ -193,6 +194,9 @@ export default function AppLayout() {
       <main className="flex-1 overflow-auto p-6">
         <Outlet />
       </main>
+
+      {/* Real-time supervisor pop-up for possible-deviation flags */}
+      <DeviationAlert />
     </div>
   );
 }

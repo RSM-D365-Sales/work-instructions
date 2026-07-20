@@ -1196,7 +1196,7 @@ function initials(name: string): string {
 }
 
 function PossibleDeviationWidget({
-  params, values, onChange, locked, orderId, orderNumber, technicianName,
+  params, values, onChange, locked, orderId, orderNumber, technicianName, stepNotes,
 }: {
   params: Record<string, unknown>;
   values: Record<string, unknown>;
@@ -1205,6 +1205,7 @@ function PossibleDeviationWidget({
   orderId: string;
   orderNumber: string;
   technicianName: string;
+  stepNotes: string;
 }) {
   const unit = (params.unit as string) ?? 'L';
   const prompt = (params.prompt as string | undefined)?.trim();
@@ -1213,22 +1214,37 @@ function PossibleDeviationWidget({
   const notifiedAt = values.notified_at as string | undefined;
   const [showTeams, setShowTeams] = useState(false);
 
+  // The deviation text defaults to whatever the step authored, but the operator
+  // can edit it so the alert describes the *actual* problem, not the template.
+  const description = (values.description as string | undefined) ?? prompt ?? '';
+
   function notifySupervisor() {
-    onChange({ ...values, notified_supervisor: true, notified_at: new Date().toISOString(), unit });
+    const notes = stepNotes?.trim();
+    onChange({ ...values, notified_supervisor: true, notified_at: new Date().toISOString(), unit, description });
     setShowTeams(true);
-    // E3: persist the notification so it lands in the admin inbox (the Teams
-    // modal above stays as the simulated delivery view of the same message).
+    // E3: persist the notification so it lands in the supervisor inbox (and the
+    // real-time pop-up). The Teams modal is the simulated delivery of the same
+    // message. audience includes approver so it reaches supervisors, not just admins.
     void createNotification({
       type: 'possible_deviation',
       severity: 'critical',
       title: `Production Order ${orderNumber} — technician requests assistance`,
-      body: `${technicianName || 'A technician'} flagged a possible deviation during production${
-        impacted != null ? `. Impacted quantity: ${impacted} ${unit}` : ''
-      }.`,
+      body:
+        `${technicianName || 'A technician'} flagged a possible deviation during production` +
+        (impacted != null ? ` (impacted ${impacted} ${unit})` : '') + '. ' +
+        `Deviation: "${description || '—'}".` +
+        (notes ? ` Notes: ${notes}` : ''),
       channels: ['in_app', 'teams'],
+      audience: ['admin', 'approver'],
       link: `/production-orders/${orderId}`,
       production_order_id: orderId,
-      metadata: { impacted_quantity: impacted ?? null, unit, technician: technicianName || null },
+      metadata: {
+        impacted_quantity: impacted ?? null,
+        unit,
+        description: description || null,
+        notes: notes || null,
+        technician: technicianName || null,
+      },
     });
   }
 
@@ -1239,9 +1255,24 @@ function PossibleDeviationWidget({
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-red-500">Possible Deviation</p>
           <p className="text-sm text-red-800 mt-0.5">
-            {prompt || 'Record the impacted quantity and notify your supervisor if assistance is required.'}
+            Describe what's actually off, record the impacted quantity, and notify your supervisor.
           </p>
         </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Deviation description</label>
+        <textarea
+          rows={2}
+          value={description}
+          onChange={e => onChange({ ...values, description: e.target.value })}
+          disabled={locked}
+          placeholder="e.g. Solution colour is darker than the reference — suspected over-heating"
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 disabled:bg-gray-50"
+        />
+        {prompt && (
+          <p className="text-xs text-gray-400 mt-1">Pre-filled from the step — edit it so the alert matches the real issue.</p>
+        )}
       </div>
 
       <div>
@@ -1292,6 +1323,8 @@ function PossibleDeviationWidget({
           technicianName={technicianName}
           impacted={impacted}
           unit={unit}
+          description={description}
+          notes={stepNotes?.trim() || undefined}
           onClose={() => setShowTeams(false)}
         />
       )}
@@ -1300,12 +1333,14 @@ function PossibleDeviationWidget({
 }
 
 function TeamsBroadcastModal({
-  orderNumber, technicianName, impacted, unit, onClose,
+  orderNumber, technicianName, impacted, unit, description, notes, onClose,
 }: {
   orderNumber: string;
   technicianName: string;
   impacted: number | undefined;
   unit: string;
+  description?: string;
+  notes?: string;
   onClose: () => void;
 }) {
   const now = new Date();
@@ -1344,9 +1379,12 @@ function TeamsBroadcastModal({
                   <AlertTriangle size={15} className="mt-0.5 shrink-0" />
                   Production Order {orderNumber || '—'} — Technician requests assistance
                 </p>
-                <p className="text-sm text-gray-700">A possible deviation has been flagged during production.</p>
+                <p className="text-sm text-gray-700">{description?.trim() || 'A possible deviation has been flagged during production.'}</p>
                 {impacted != null && (
                   <p className="text-sm text-gray-600">Impacted quantity: <strong>{impacted} {unit}</strong></p>
+                )}
+                {notes && (
+                  <p className="text-sm text-gray-600">Notes: <span className="italic">{notes}</span></p>
                 )}
                 <p className="text-xs text-gray-400 pt-0.5">@Production Supervisors — please assist at the bench.</p>
               </div>
@@ -1535,6 +1573,7 @@ function StepCard({ wiStep, poStep, index, isActive, orderId, orderNumber, techn
               orderId={orderId}
               orderNumber={orderNumber}
               technicianName={technicianName}
+              stepNotes={stepNotes}
             />
           )}
           {stepType === 'user_defined' && (
