@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { ReagentOrder, ReagentOrderStatus } from '../types';
-import { ShoppingCart, Plus, Search, CircleAlert, Calendar, Building2, Truck, Paperclip, MessageSquare, AlertTriangle } from 'lucide-react';
+import { ShoppingCart, Plus, Search, CircleAlert, Calendar, Building2, Truck, Paperclip, MessageSquare, AlertTriangle, Repeat } from 'lucide-react';
 import { formatDate, cn } from '../lib/utils';
 import ListFilters, { toOptions, inDateRange } from '../components/ListFilters';
 
@@ -126,7 +126,8 @@ export default function ReagentOrdersListPage() {
           ),
           lab:labs(id, name, warehouse_id),
           creator:profiles!reagent_orders_created_by_fkey(id, full_name, email, role),
-          requester:profiles!reagent_orders_requested_by_fkey(id, full_name, email, role)
+          requester:profiles!reagent_orders_requested_by_fkey(id, full_name, email, role),
+          standing_order:standing_orders(id, standing_order_number)
         `)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -283,6 +284,16 @@ export default function ReagentOrdersListPage() {
                 <MessageSquare size={13} />
               </span>
             )}
+            {o.standing_order && (
+              <button
+                onClick={() => navigate(`/standing-orders/${o.standing_order!.id}`)}
+                title={`From standing order ${o.standing_order.standing_order_number}`}
+                aria-label="From a standing order"
+                className="inline-flex text-blue-600 hover:text-blue-800"
+              >
+                <Repeat size={13} />
+              </button>
+            )}
           </div>
         </td>
         <td className="px-4 py-3">
@@ -393,6 +404,14 @@ export default function ReagentOrdersListPage() {
               Deliver Selected ({selectedDeliverable.length})
             </button>
           )}
+          <button
+            onClick={() => navigate('/standing-orders')}
+            className="flex items-center gap-2 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+            title="Recurring reagent requests"
+          >
+            <Repeat size={16} />
+            Standing Orders
+          </button>
           {profile?.role !== 'operator' && (
             <button
               onClick={() => navigate('/reagent-orders/new')}

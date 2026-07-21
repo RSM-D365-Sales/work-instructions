@@ -25,6 +25,9 @@ import ReagentOrdersListPage from './pages/ReagentOrdersListPage';
 import ReagentOrderNewPage from './pages/ReagentOrderNewPage';
 import ReagentDeliveryPage from './pages/ReagentDeliveryPage';
 import ReagentOrderDetailPage from './pages/ReagentOrderDetailPage';
+import StandingOrdersListPage from './pages/StandingOrdersListPage';
+import StandingOrderNewPage from './pages/StandingOrderNewPage';
+import StandingOrderDetailPage from './pages/StandingOrderDetailPage';
 import UnscheduledOrdersPage from './pages/UnscheduledOrdersPage';
 import NotificationsPage from './pages/NotificationsPage';
 import PlannedProductionOrdersPage from './pages/PlannedProductionOrdersPage';
@@ -87,10 +90,13 @@ export default function App() {
                 <Route element={<ProtectedRoute allowedRoles={['author', 'approver', 'operator', 'lab']} />}>
                   <Route path="/reagent-orders" element={<ReagentOrdersListPage />} />
                   <Route path="/reagent-orders/:id" element={<ReagentOrderDetailPage />} />
+                  <Route path="/standing-orders" element={<StandingOrdersListPage />} />
+                  <Route path="/standing-orders/:id" element={<StandingOrderDetailPage />} />
                   <Route path="/cycle-count" element={<CycleCountPage />} />
                 </Route>
                 <Route element={<ProtectedRoute allowedRoles={['author', 'approver', 'lab']} />}>
                   <Route path="/reagent-orders/new" element={<ReagentOrderNewPage />} />
+                  <Route path="/standing-orders/new" element={<StandingOrderNewPage />} />
                 </Route>
                 <Route element={<ProtectedRoute allowedRoles={['author', 'approver', 'operator']} />}>
                   <Route path="/reagent-orders/deliver" element={<ReagentDeliveryPage />} />

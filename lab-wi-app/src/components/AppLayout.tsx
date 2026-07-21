@@ -5,7 +5,7 @@ import {
   Rocket, LayoutDashboard, BookOpen, ClipboardList,
   PlayCircle, LogOut, ChevronRight, Beaker, Scale, Users, Building2,
   ShoppingCart, CalendarClock, TrendingUp, Boxes, PanelLeftClose, PanelLeftOpen,
-  Factory, CalendarDays, ListChecks, Bell, Lightbulb, Workflow, ArrowLeftRight,
+  Factory, CalendarDays, ListChecks, Bell, Lightbulb, Workflow, ArrowLeftRight, Repeat,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -25,6 +25,7 @@ const mainNav = [
   { to: '/planned-orders', label: 'Planned Production Orders', icon: Factory, roles: ['admin', 'approver'] },
   { to: '/unscheduled-orders', label: 'Unscheduled Orders', icon: CalendarClock, roles: ['admin'] },
   { to: '/reagent-orders', label: 'Reagent Orders', icon: ShoppingCart, roles: ['admin', 'author', 'approver', 'operator', 'lab'] },
+  { to: '/standing-orders', label: 'Standing Orders', icon: Repeat, roles: ['admin', 'author', 'approver', 'operator', 'lab'] },
 ];
 
 const setupNav = [
