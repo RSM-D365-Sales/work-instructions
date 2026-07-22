@@ -34,6 +34,7 @@ import PlannedProductionOrdersPage from './pages/PlannedProductionOrdersPage';
 import ProductionSchedulePage from './pages/ProductionSchedulePage';
 import CycleCountPage from './pages/CycleCountPage';
 import WishlistPage from './pages/WishlistPage';
+import WorkshopScriptPage from './pages/WorkshopScriptPage';
 import MasterPlanningFlowPage from './pages/MasterPlanningFlowPage';
 import IntegrationMapPage from './pages/IntegrationMapPage';
 import RocketLoader from './components/RocketLoader';
@@ -57,6 +58,9 @@ export default function App() {
               <Route element={<AppLayout />}>
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/wishlist" element={<WishlistPage />} />
+                {/* Internal facilitator script. Deliberately unlinked from the nav —
+                    reachable only by sharing the URL with the RSM team. */}
+                <Route path="/workshop-script" element={<WorkshopScriptPage />} />
                 <Route path="/master-planning-flow" element={<MasterPlanningFlowPage />} />
                 <Route path="/integration-map" element={<IntegrationMapPage />} />
                 <Route element={<ProtectedRoute allowedRoles={['author', 'approver']} />}>
