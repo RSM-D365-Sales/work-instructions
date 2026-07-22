@@ -68,6 +68,8 @@ export default function QualityTrendsPage() {
         .from('reagent_items')
         .select('id, item_number, product_name')
         .eq('is_active', true)
+        .eq('item_type', 'FG')   // finished goods only — raw materials and
+                                 // packaging carry no release panel to trend
         .order('item_number');
       if (error) throw error;
       return data as TrendItem[];
