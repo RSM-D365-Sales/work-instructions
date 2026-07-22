@@ -1205,25 +1205,27 @@ function InsertStepDivider({ templates, onInsert }: { templates: StepTemplate[];
       {open && (
         <>
           <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
-          <div className="absolute z-30 top-full left-1/2 -translate-x-1/2 mt-1.5 w-80 bg-white border border-gray-200 rounded-xl shadow-lg p-3">
-            <p className="text-xs font-medium text-gray-500 mb-2">Insert step</p>
-            {/* Group headings stick while the list scrolls, so it stays clear
-                which family the tiles below belong to. */}
-            <div className="space-y-2.5 max-h-72 overflow-y-auto">
+          {/* Wide multi-column menu: the whole library fits without scrolling on
+              a normal screen. CSS columns balance the groups automatically;
+              break-inside-avoid keeps a group from splitting across columns. */}
+          <div className="absolute z-30 top-full left-1/2 -translate-x-1/2 mt-1.5 w-[40rem] max-w-[calc(100vw-3rem)] bg-white border border-gray-200 rounded-xl shadow-lg p-4">
+            <p className="text-xs font-medium text-gray-500 mb-2.5">Insert step</p>
+            <div className="columns-2 sm:columns-3 gap-4 max-h-[28rem] overflow-y-auto">
               {groupTemplates(templates).map(g => (
-                <div key={g.label}>
-                  <p className="sticky top-0 bg-white pb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                <div key={g.label} className="break-inside-avoid mb-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">
                     {g.label}
                   </p>
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-col gap-1">
                     {g.items.map(t => (
                       <button
                         key={t.id}
                         onClick={() => { onInsert(t); setOpen(false); }}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors font-medium text-gray-700"
+                        title={t.name}
+                        className="flex items-center gap-1.5 w-full text-left px-2.5 py-1.5 text-xs bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors font-medium text-gray-700"
                       >
-                        {STEP_ICONS[t.step_type]}
-                        {t.name}
+                        <span className="shrink-0 text-gray-400">{STEP_ICONS[t.step_type]}</span>
+                        <span className="truncate">{t.name}</span>
                       </button>
                     ))}
                   </div>
