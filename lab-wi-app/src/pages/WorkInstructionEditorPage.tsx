@@ -1154,7 +1154,7 @@ function AddStepPanel({ templates, onAdd }: { templates: StepTemplate[]; onAdd: 
       <div className="space-y-3">
         {groupTemplates(templates).map(g => (
           <div key={g.label}>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1.5">
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1.5">
               {g.label}
             </p>
             <div className="flex flex-wrap gap-2">
@@ -1213,7 +1213,7 @@ function InsertStepDivider({ templates, onInsert }: { templates: StepTemplate[];
             <div className="columns-2 sm:columns-3 gap-4 max-h-[28rem] overflow-y-auto">
               {groupTemplates(templates).map(g => (
                 <div key={g.label} className="break-inside-avoid mb-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">
+                  <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">
                     {g.label}
                   </p>
                   <div className="flex flex-col gap-1">
