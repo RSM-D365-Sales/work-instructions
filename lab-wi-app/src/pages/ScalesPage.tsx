@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import type { Scale, ScaleConnectionType, ScaleStatus, ScaleConnConfig, EquipmentType } from '../types';
 import { Scale as ScaleIcon, Plus, Pencil, Trash2, Wifi, WifiOff, Wrench, CheckCircle2, XCircle, Loader2, RefreshCw, TestTube, Beaker, Boxes } from 'lucide-react';
 import { formatDate } from '../lib/utils';
+import EquipmentHealthSummary from '../components/EquipmentHealthSummary';
 
 const EQUIPMENT_TYPE_LABELS: Record<EquipmentType, string> = {
   balance:   'Balance',
@@ -549,6 +550,10 @@ export default function ScalesPage() {
           <Plus size={16} /> Add Equipment
         </button>
       </div>
+
+      {/* QC evidence for calibration decisions, alongside the equipment master:
+          which instruments are drifting or already out of spec. */}
+      <EquipmentHealthSummary />
 
       {/* Table */}
       {isLoading ? (
