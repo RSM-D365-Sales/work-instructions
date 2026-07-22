@@ -111,7 +111,7 @@ export default function ProductionOrdersListPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('production_orders')
-        .select('*, work_instruction:work_instructions(title, product_name, target_molarity), creator:profiles!created_by(full_name), assignee:profiles!assigned_to(full_name, email)')
+        .select('*, work_instruction:work_instructions(title, product_name, target_molarity, scheduled_minutes), creator:profiles!created_by(full_name), assignee:profiles!assigned_to(full_name, email)')
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data as ProductionOrder[];
@@ -245,19 +245,21 @@ export default function ProductionOrdersListPage() {
     };
   }
 
-  /** When the user changes the start, shift end by the same delta so the
-   *  blocked duration stays constant — but only if end was already set. */
+  /** When the user changes the start, keep the end in step:
+   *   • end already set → shift it, preserving the chosen duration
+   *   • end blank       → fill it from the Work Instruction's scheduled
+   *                       duration (fallback 60 min, as elsewhere) */
   function handleStartChange(o: any, newStart: string) {
     const cur = pickerValues(o);
     let newEnd = cur.end;
-    if (cur.start && cur.end) {
+    const newStartMs = new Date(newStart).getTime();
+    if (!isNaN(newStartMs)) {
       const oldStartMs = new Date(cur.start).getTime();
       const oldEndMs   = new Date(cur.end).getTime();
-      const newStartMs = new Date(newStart).getTime();
-      if (!isNaN(oldStartMs) && !isNaN(oldEndMs) && !isNaN(newStartMs)) {
-        const duration = oldEndMs - oldStartMs;
-        newEnd = isoToLocalInput(new Date(newStartMs + duration).toISOString());
-      }
+      const duration = cur.start && cur.end && !isNaN(oldStartMs) && !isNaN(oldEndMs)
+        ? oldEndMs - oldStartMs
+        : (o.work_instruction?.scheduled_minutes ?? 60) * 60_000;
+      newEnd = isoToLocalInput(new Date(newStartMs + duration).toISOString());
     }
     setEdits(prev => ({ ...prev, [o.id]: { start: newStart, end: newEnd } }));
   }

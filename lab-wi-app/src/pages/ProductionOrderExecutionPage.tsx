@@ -1994,7 +1994,7 @@ export default function ProductionOrderExecutionPage() {
         // run 053 yet. `previous_assigned_to` still comes back via `*` once the
         // column exists, and the hand-off UI resolves the name from the users
         // list — so the page loads with or without 053 applied.
-        .select('*, work_instruction:work_instructions(title, product_name, target_molarity, version, reagent_item_id, reagent_item:reagent_items(id, item_number, product_name, unit_of_measure)), assignee:profiles!assigned_to(full_name, email)')
+        .select('*, work_instruction:work_instructions(title, product_name, target_molarity, version, scheduled_minutes, reagent_item_id, reagent_item:reagent_items(id, item_number, product_name, unit_of_measure)), assignee:profiles!assigned_to(full_name, email)')
         .eq('id', id!)
         .single();
       if (error) throw error;
@@ -2523,16 +2523,22 @@ function ScheduleEditor({
     },
   });
 
-  /** Adjust end by the same delta when start shifts, preserving duration. */
+  // Planned run length from the Work Instruction — the same duration the
+  // create-order page and auto-scheduler use (fallback 60).
+  const wiMinutes = order.work_instruction?.scheduled_minutes ?? 60;
+
+  /** Keep the end in step with the start:
+   *  • end already set → shift it, preserving whatever duration was chosen
+   *  • end blank       → fill it from the WI's scheduled duration          */
   function handleStart(newStart: string) {
-    if (start && end) {
+    const newS = new Date(newStart).getTime();
+    if (!isNaN(newS)) {
       const oldS = new Date(start).getTime();
       const oldE = new Date(end).getTime();
-      const newS = new Date(newStart).getTime();
-      if (!isNaN(oldS) && !isNaN(oldE) && !isNaN(newS)) {
-        const dur = oldE - oldS;
-        setEnd(isoToLocal(new Date(newS + dur).toISOString()));
-      }
+      const dur = start && end && !isNaN(oldS) && !isNaN(oldE)
+        ? oldE - oldS
+        : wiMinutes * 60_000;
+      setEnd(isoToLocal(new Date(newS + dur).toISOString()));
     }
     setStart(newStart);
   }
@@ -2556,6 +2562,11 @@ function ScheduleEditor({
         onChange={e => setEnd(e.target.value)}
         className="border border-gray-200 rounded-md px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50 disabled:text-gray-500"
       />
+      {canEdit && (
+        <span className="text-gray-400" title="Planned duration from the Work Instruction">
+          {wiMinutes} min
+        </span>
+      )}
       {canEdit && dirty && (
         <button
           onClick={() => save.mutate()}

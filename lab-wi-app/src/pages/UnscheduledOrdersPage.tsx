@@ -33,7 +33,11 @@ export default function UnscheduledOrdersPage() {
   const qc = useQueryClient();
   const [pickers, setPickers] = useState<Record<string, string>>({});
   const [savedFlash, setSavedFlash] = useState<Record<string, boolean>>({});
-  const [autoResult, setAutoResult] = useState<{ count: number; late: number; reassigned?: number } | null>(null);
+  // `detail` carries the single-row auto-schedule outcome (who / when); `error`
+  // the "nowhere to put it" case. Both render in the same banner.
+  const [autoResult, setAutoResult] = useState<
+    { count: number; late: number; reassigned?: number; detail?: string; error?: string } | null
+  >(null);
   const [filterItem, setFilterItem] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -247,6 +251,56 @@ export default function UnscheduledOrdersPage() {
     autoAssignMutation.mutate();
   }
 
+  // ── Auto-schedule ONE row: same planner, single order ────────────────────
+  // The row leaves the list as soon as it is scheduled, so the outcome (who it
+  // went to, and when) is reported in the banner rather than on the row.
+  const nameById = useMemo(
+    () => new Map(schedRows.map(r => [r.id, r.full_name])),
+    [schedRows]
+  );
+
+  const autoRowMutation = useMutation({
+    mutationFn: async (o: UnscheduledOrderRow) => {
+      const [a] = planWithAssignment(
+        [{
+          id: o.id,
+          durationMinutes: o.work_instruction?.scheduled_minutes ?? 60,
+          requiredBy: o.required_by,
+          createdAt: o.created_at,
+          currentAssignee: o.assigned_to,
+        }],
+        candidateIds, busyByResource, workingDays, { from: new Date() },
+      );
+      if (!a) throw new Error('No available person or slot could be found for this order.');
+      const { error } = await supabase
+        .from('production_orders')
+        .update({
+          scheduled_start: a.start.toISOString(),
+          scheduled_end: a.end.toISOString(),
+          assigned_to: a.assigneeId,
+        })
+        .eq('id', o.id);
+      if (error) throw error;
+      return { lot: o.lot_number, assigneeId: a.assigneeId, start: a.start, late: a.late };
+    },
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['unscheduled-orders'] });
+      qc.invalidateQueries({ queryKey: ['scheduled-busy'] });
+      qc.invalidateQueries({ queryKey: ['gantt-orders'] });
+      qc.invalidateQueries({ queryKey: ['production-orders'] });
+      const who = res.assigneeId ? (nameById.get(res.assigneeId) ?? 'an available person') : 'nobody';
+      const when = res.start.toLocaleString(undefined, {
+        weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+      });
+      setAutoResult({
+        count: 1,
+        late: res.late ? 1 : 0,
+        detail: `Lot ${res.lot} scheduled for ${when}, assigned to ${who}.`,
+      });
+    },
+    onError: (e: Error) => setAutoResult({ count: 0, late: 0, error: e.message }),
+  });
+
   function toggleSelect(id: string) {
     setSelected(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }
@@ -362,14 +416,24 @@ export default function UnscheduledOrdersPage() {
       {autoResult && (
         <div className={cn(
           'flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm',
-          autoResult.late > 0 ? 'bg-amber-50 border-amber-200 text-amber-800'
-                              : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+          autoResult.error   ? 'bg-red-50 border-red-200 text-red-800'
+          : autoResult.late > 0 ? 'bg-amber-50 border-amber-200 text-amber-800'
+                                : 'bg-emerald-50 border-emerald-200 text-emerald-800'
         )}>
-          {autoResult.late > 0 ? <AlertTriangle size={16} /> : <CheckCircle size={16} />}
+          {autoResult.error || autoResult.late > 0 ? <AlertTriangle size={16} /> : <CheckCircle size={16} />}
           <span>
-            Scheduled {autoResult.count} order{autoResult.count === 1 ? '' : 's'} into the next open slots.
-            {autoResult.reassigned ? ` ${autoResult.reassigned} (re)assigned to meet the date.` : ''}
-            {autoResult.late > 0 ? ` ${autoResult.late} finish after their required date — review these.` : ''}
+            {autoResult.error ? autoResult.error : autoResult.detail ? (
+              <>
+                {autoResult.detail}
+                {autoResult.late > 0 ? ' It finishes after its required date — review this one.' : ''}
+              </>
+            ) : (
+              <>
+                Scheduled {autoResult.count} order{autoResult.count === 1 ? '' : 's'} into the next open slots.
+                {autoResult.reassigned ? ` ${autoResult.reassigned} (re)assigned to meet the date.` : ''}
+                {autoResult.late > 0 ? ` ${autoResult.late} finish after their required date — review these.` : ''}
+              </>
+            )}
           </span>
           <button onClick={() => setAutoResult(null)} className="ml-auto text-xs underline opacity-70 hover:opacity-100">
             Dismiss
@@ -494,20 +558,37 @@ export default function UnscheduledOrdersPage() {
                         className="border border-gray-300 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
                       />
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => handleSchedule(o)}
-                        disabled={!picker || scheduleMutation.isPending}
-                        title={picker ? undefined : 'Pick a start date & time first'}
-                        className={cn(
-                          'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
-                          saved
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'
-                        )}
-                      >
-                        {saved ? (<><CheckCircle size={13} /> Scheduled</>) : 'Schedule'}
-                      </button>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleSchedule(o)}
+                          disabled={!picker || scheduleMutation.isPending}
+                          title={picker ? undefined : 'Pick a start date & time first'}
+                          className={cn(
+                            'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                            saved
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'
+                          )}
+                        >
+                          {saved ? (<><CheckCircle size={13} /> Scheduled</>) : 'Schedule'}
+                        </button>
+                        {/* Auto: no start time or assignee needed — the planner
+                            picks both, honouring the required-by date. */}
+                        <button
+                          onClick={() => autoRowMutation.mutate(o)}
+                          disabled={candidateIds.length === 0 || autoRowMutation.isPending}
+                          title={candidateIds.length === 0
+                            ? 'No one has a working pattern set, so nobody can be auto-assigned'
+                            : 'Pick an available person and the next free slot automatically'}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 transition-colors"
+                        >
+                          <Wand2 size={13} />
+                          {autoRowMutation.isPending && autoRowMutation.variables?.id === o.id
+                            ? 'Scheduling…'
+                            : 'Auto-schedule'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
