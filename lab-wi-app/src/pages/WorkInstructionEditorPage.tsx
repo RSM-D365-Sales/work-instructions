@@ -43,6 +43,47 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   custom:           <Settings size={15} />,
 };
 
+// ─── Step type grouping ───────────────────────────────────────────────────────
+// 26 step types in one flat list is a lot to scan for someone authoring their
+// first Work Instruction, so the pickers group them by what the operator is
+// actually doing, in roughly the order a recipe runs: gather → measure →
+// process → hold → record → finish.
+//
+// Order within a group is the order below (not alphabetical) — the common step
+// leads each group. A new step type that isn't listed here still shows up, in a
+// trailing "Other" group; add it to a group to place it properly.
+const STEP_GROUPS: { label: string; types: StepType[] }[] = [
+  { label: 'Gather & Prepare',   types: ['gather_reagents', 'gather_inputs', 'gather_equipment'] },
+  { label: 'Measure & Dispense', types: ['weigh', 'dispense', 'bring_to_volume'] },
+  { label: 'Mix & Process',      types: ['mix', 'agitate', 'transfer', 'ph_adjust'] },
+  { label: 'Heat, Cool & Hold',  types: ['heat', 'cool', 'freeze', 'thaw', 'overnight', 'production_break'] },
+  { label: 'Record & Document',  types: ['observe', 'notes', 'attachment', 'record_time', 'possible_deviation'] },
+  { label: 'Finish & Label',     types: ['print_labels', 'cap', 'package'] },
+  { label: 'Custom',             types: ['user_defined', 'custom'] },
+];
+
+const stepTypeLabel = (type: string) =>
+  type === 'ph_adjust' ? 'pH adjust' : type.replace(/_/g, ' ');
+
+// Templates bucketed into STEP_GROUPS order, empty groups dropped. Several
+// templates can share a step_type (authors add their own), so this groups the
+// library rather than the type list.
+function groupTemplates(templates: StepTemplate[]) {
+  const grouped = STEP_GROUPS.map(g => ({
+    label: g.label,
+    items: templates
+      .filter(t => g.types.includes(t.step_type))
+      .sort((a, b) =>
+        g.types.indexOf(a.step_type) - g.types.indexOf(b.step_type) ||
+        a.name.localeCompare(b.name)),
+  }));
+  const ungrouped = templates.filter(
+    t => !STEP_GROUPS.some(g => g.types.includes(t.step_type))
+  );
+  if (ungrouped.length > 0) grouped.push({ label: 'Other', items: ungrouped });
+  return grouped.filter(g => g.items.length > 0);
+}
+
 // ─── Generic editor for user-defined templates ───────────────────────────────
 // Renders authoring inputs from the parameter schema snapshotted into the step
 // (parameters._param_schema) when it was added from the library.
@@ -1063,15 +1104,21 @@ function StepRow({ step, index, total, canDrag, isDragging, isDropTarget, open, 
                 onChange={e => onChange(step._localId, { step_type: e.target.value as StepType, parameters: {} })}
                 className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
               >
-                {Object.entries(STEP_ICONS)
+                {STEP_GROUPS.map(g => {
                   // user_defined steps get their parameters from a library template,
                   // so the type is only offered when the step already has one
-                  .filter(([type]) => type !== 'user_defined' || step.step_type === 'user_defined')
-                  .map(([type]) => (
-                    <option key={type} value={type}>
-                      {type === 'ph_adjust' ? 'pH adjust' : type.replace('_', ' ')}
-                    </option>
-                  ))}
+                  const types = g.types.filter(
+                    t => t !== 'user_defined' || step.step_type === 'user_defined'
+                  );
+                  if (types.length === 0) return null;
+                  return (
+                    <optgroup key={g.label} label={g.label}>
+                      {types.map(type => (
+                        <option key={type} value={type}>{stepTypeLabel(type)}</option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
               </select>
             </div>
           </div>
@@ -1104,16 +1151,25 @@ function AddStepPanel({ templates, onAdd }: { templates: StepTemplate[]; onAdd: 
   return (
     <div className="border border-dashed border-gray-300 rounded-xl p-4">
       <p className="text-xs font-medium text-gray-500 mb-3">Add from library</p>
-      <div className="flex flex-wrap gap-2">
-        {templates.map(t => (
-          <button
-            key={t.id}
-            onClick={() => onAdd(t)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors font-medium text-gray-700"
-          >
-            {STEP_ICONS[t.step_type]}
-            {t.name}
-          </button>
+      <div className="space-y-3">
+        {groupTemplates(templates).map(g => (
+          <div key={g.label}>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1.5">
+              {g.label}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {g.items.map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => onAdd(t)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors font-medium text-gray-700"
+                >
+                  {STEP_ICONS[t.step_type]}
+                  {t.name}
+                </button>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
     </div>
@@ -1151,16 +1207,27 @@ function InsertStepDivider({ templates, onInsert }: { templates: StepTemplate[];
           <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
           <div className="absolute z-30 top-full left-1/2 -translate-x-1/2 mt-1.5 w-80 bg-white border border-gray-200 rounded-xl shadow-lg p-3">
             <p className="text-xs font-medium text-gray-500 mb-2">Insert step</p>
-            <div className="flex flex-wrap gap-1.5 max-h-56 overflow-y-auto">
-              {templates.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => { onInsert(t); setOpen(false); }}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors font-medium text-gray-700"
-                >
-                  {STEP_ICONS[t.step_type]}
-                  {t.name}
-                </button>
+            {/* Group headings stick while the list scrolls, so it stays clear
+                which family the tiles below belong to. */}
+            <div className="space-y-2.5 max-h-72 overflow-y-auto">
+              {groupTemplates(templates).map(g => (
+                <div key={g.label}>
+                  <p className="sticky top-0 bg-white pb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    {g.label}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {g.items.map(t => (
+                      <button
+                        key={t.id}
+                        onClick={() => { onInsert(t); setOpen(false); }}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors font-medium text-gray-700"
+                      >
+                        {STEP_ICONS[t.step_type]}
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
