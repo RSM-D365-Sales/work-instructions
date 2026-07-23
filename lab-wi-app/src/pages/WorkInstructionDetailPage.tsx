@@ -3,7 +3,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import type { WorkInstruction, WIStep, WIApproval, StepType, ParameterSchema, ReagentItem } from '../types';
+import type { WorkInstruction, WIStep, WIApproval, StepType, ParameterSchema, ReagentItem, WIQCTest } from '../types';
+import { formatSpec } from '../lib/qc';
 import {
   ArrowLeft, Pencil, CheckCircle, XCircle, RotateCcw, PlayCircle, GitBranch, GitCompare,
   FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, Trash2,
@@ -171,6 +172,16 @@ export default function WorkInstructionDetailPage() {
     },
   });
 
+  const { data: wiQcTests = [] } = useQuery<WIQCTest[]>({
+    queryKey: ['wi-qc-tests', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('wi_qc_tests').select('*').eq('work_instruction_id', id!).order('test_order');
+      if (error) throw error;
+      return data as WIQCTest[];
+    },
+  });
+
   const { data: approvals = [] } = useQuery<WIApproval[]>({
     queryKey: ['wi-approvals', id],
     queryFn: async () => {
@@ -309,6 +320,23 @@ export default function WorkInstructionDetailPage() {
         });
         const { error: e2 } = await supabase.from('wi_steps').insert(newSteps);
         if (e2) throw e2;
+      }
+
+      // Carry the QC spec panel forward to the new version.
+      const { data: qcPanel } = await supabase
+        .from('wi_qc_tests').select('*').eq('work_instruction_id', wi!.id).order('test_order');
+      if (qcPanel && qcPanel.length > 0) {
+        const newQc = (qcPanel as WIQCTest[]).map(t => ({
+          work_instruction_id: newWI.id,
+          source_qc_test_id: t.source_qc_test_id ?? null,
+          test_order: t.test_order,
+          name: t.name, unit: t.unit ?? null, result_type: t.result_type,
+          lower_limit: t.lower_limit ?? null, upper_limit: t.upper_limit ?? null, target: t.target ?? null,
+          expected_text: t.expected_text ?? null, method: t.method ?? null, is_active: t.is_active,
+          created_by: profile!.id,
+        }));
+        const { error: e3 } = await supabase.from('wi_qc_tests').insert(newQc);
+        if (e3) throw e3;
       }
 
       return newWI;
@@ -683,6 +711,37 @@ export default function WorkInstructionDetailPage() {
           </ol>
         )}
       </div>
+
+      {/* Quality specifications — captured at the end of the run */}
+      {wiQcTests.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
+            <span className="text-emerald-600">✔</span>
+            <h2 className="text-sm font-semibold text-gray-700">Quality Specifications</h2>
+            <span className="text-xs text-gray-400">{wiQcTests.length} · captured at end of run</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-gray-400 border-b border-gray-100">
+                  <th className="py-2 px-5 font-medium">Test</th>
+                  <th className="py-2 px-3 font-medium">Specification</th>
+                  <th className="py-2 px-3 font-medium">Method</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {wiQcTests.map(t => (
+                  <tr key={t.id}>
+                    <td className="py-2 px-5 font-medium text-gray-800">{t.name}</td>
+                    <td className="py-2 px-3 text-gray-600">{formatSpec(t)}</td>
+                    <td className="py-2 px-3 text-gray-500">{t.method || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Derived Work Instructions (templates only) */}
       {wi.is_template && (

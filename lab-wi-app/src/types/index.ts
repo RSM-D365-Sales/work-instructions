@@ -479,12 +479,35 @@ export interface QCTest {
   created_by?: string | null;
 }
 
+/** A Work-Instruction-level QC test spec. Mirrors QCTest but belongs to a WI
+ *  (defaulted from the item's panel, then editable per WI). */
+export interface WIQCTest {
+  id: string;
+  work_instruction_id: string;
+  source_qc_test_id?: string | null;
+  test_order: number;
+  name: string;
+  unit?: string | null;
+  result_type: QCResultType;
+  lower_limit?: number | null;
+  upper_limit?: number | null;
+  target?: number | null;
+  expected_text?: string | null;
+  method?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by?: string | null;
+}
+
 /** A measured QC value captured against a production order. The spec
  *  limits are snapshotted here so certificates and trends stay stable. */
 export interface QCResult {
   id: string;
   production_order_id: string;
   qc_test_id?: string | null;
+  /** Set instead of qc_test_id when the run was tested against the WI's own panel. */
+  wi_qc_test_id?: string | null;
   test_order: number;
   name: string;
   unit?: string | null;

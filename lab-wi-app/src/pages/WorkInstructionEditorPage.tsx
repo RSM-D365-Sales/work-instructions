@@ -3,17 +3,18 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import type { StepTemplate, WIStep, WorkInstruction, StepType, ParameterSchema, ParameterFieldDef } from '../types';
+import type { StepTemplate, WIStep, WorkInstruction, StepType, ParameterSchema, ParameterFieldDef, QCTest, WIQCTest, QCResultType } from '../types';
 import {
   Plus, Trash2, GripVertical, Save, Send, ChevronDown, ChevronUp, ArrowLeft,
   FlaskConical, Scale as ScaleIcon, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings,
   Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal, Paperclip,
   ChevronsDownUp, ChevronsUpDown, PanelLeftClose, PanelLeftOpen,
   Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Lock, Package, Clock,
-  Calculator, Sigma, Unlock, LayoutTemplate,
+  Calculator, Sigma, Unlock, LayoutTemplate, ClipboardCheck, DownloadCloud,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DILUTION_VARS, type DilutionVar } from '../lib/dilution';
+import { QC_PRESETS, formatSpec } from '../lib/qc';
 
 // ─── Step type icon helper ────────────────────────────────────────────────────
 const STEP_ICONS: Record<StepType, React.ReactNode> = {
@@ -1560,6 +1561,140 @@ function StepNavPanel({
   );
 }
 
+// ─── Quality specifications panel (captured at the end of the run) ───────────
+export type QCRow = Partial<WIQCTest> & { _key: string };
+let qcKeySeq = 0;
+const newQcKey = () => `qc-${qcKeySeq++}`;
+
+function WIQualitySpecs({
+  rows, canEdit, itemTestCount, onUpdate, onRemove, onAddBlank, onAddPreset, onLoadFromItem,
+}: {
+  rows: QCRow[];
+  canEdit: boolean;
+  itemTestCount: number;
+  onUpdate: (key: string, patch: Partial<WIQCTest>) => void;
+  onRemove: (key: string) => void;
+  onAddBlank: () => void;
+  onAddPreset: (name: string) => void;
+  onLoadFromItem: () => void;
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200">
+      <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2 flex-wrap">
+        <ClipboardCheck size={16} className="text-emerald-600" />
+        <h2 className="text-sm font-semibold text-gray-700">Quality Specifications</h2>
+        <span className="text-xs text-gray-400">captured at the end of the run</span>
+        {canEdit && itemTestCount > 0 && (
+          <button
+            onClick={onLoadFromItem}
+            className="ml-auto flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800"
+            title="Replace the panel with the linked item's QC specs"
+          >
+            <DownloadCloud size={13} /> Load {itemTestCount} from item
+          </button>
+        )}
+      </div>
+      <div className="p-4 space-y-3">
+        <p className="text-xs text-gray-500">
+          These default from the reagent item's QC panel but can differ for this Work Instruction. Limits judge
+          pass/fail during production and print on the Certificate of Analysis.
+        </p>
+        {rows.length === 0 ? (
+          <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-200 text-gray-500 text-sm">
+            {itemTestCount > 0
+              ? 'No QC specs yet — load them from the item, or add your own.'
+              : 'No QC specs yet. Add tests below (or link a product with a QC panel to default from).'}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-gray-400 border-b border-gray-100">
+                  <th className="py-2 pr-2 font-medium">Test</th>
+                  <th className="py-2 px-2 font-medium">Type</th>
+                  <th className="py-2 px-2 font-medium">Lower</th>
+                  <th className="py-2 px-2 font-medium">Upper</th>
+                  <th className="py-2 px-2 font-medium">Unit</th>
+                  <th className="py-2 px-2 font-medium">Expected (text)</th>
+                  <th className="py-2 px-2 font-medium">Method</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {rows.map(r => {
+                  const isQual = r.result_type === 'text' || r.result_type === 'passfail';
+                  return (
+                    <tr key={r._key}>
+                      <td className="py-1.5 pr-2">
+                        <input value={r.name ?? ''} disabled={!canEdit}
+                          onChange={e => onUpdate(r._key, { name: e.target.value })} placeholder="e.g. pH"
+                          className="w-32 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50" />
+                      </td>
+                      <td className="py-1.5 px-2">
+                        <select value={r.result_type ?? 'numeric'} disabled={!canEdit}
+                          onChange={e => onUpdate(r._key, { result_type: e.target.value as QCResultType })}
+                          className="border border-gray-200 rounded px-1.5 py-1 text-sm bg-white disabled:bg-gray-50">
+                          <option value="numeric">numeric</option>
+                          <option value="text">text</option>
+                          <option value="passfail">pass/fail</option>
+                        </select>
+                      </td>
+                      <td className="py-1.5 px-2">
+                        <input type="number" step="any" value={r.lower_limit ?? ''} disabled={!canEdit || isQual}
+                          onChange={e => onUpdate(r._key, { lower_limit: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                          className="w-20 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50" />
+                      </td>
+                      <td className="py-1.5 px-2">
+                        <input type="number" step="any" value={r.upper_limit ?? ''} disabled={!canEdit || isQual}
+                          onChange={e => onUpdate(r._key, { upper_limit: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                          className="w-20 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50" />
+                      </td>
+                      <td className="py-1.5 px-2">
+                        <input value={r.unit ?? ''} disabled={!canEdit || isQual}
+                          onChange={e => onUpdate(r._key, { unit: e.target.value })} placeholder="mOsm/kg"
+                          className="w-24 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50" />
+                      </td>
+                      <td className="py-1.5 px-2">
+                        <input value={r.expected_text ?? ''} disabled={!canEdit || !isQual}
+                          onChange={e => onUpdate(r._key, { expected_text: e.target.value })} placeholder="Clear, colorless"
+                          className="w-36 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50" />
+                      </td>
+                      <td className="py-1.5 px-2">
+                        <input value={r.method ?? ''} disabled={!canEdit}
+                          onChange={e => onUpdate(r._key, { method: e.target.value })} placeholder="USP <791>"
+                          className="w-28 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50" />
+                      </td>
+                      <td className="py-1.5 pl-2 text-right">
+                        {canEdit && (
+                          <button onClick={() => onRemove(r._key)} className="text-gray-300 hover:text-red-600"><Trash2 size={14} /></button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {canEdit && (
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button onClick={onAddBlank} className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700">
+              <Plus size={14} /> Add test
+            </button>
+            <select value="" onChange={e => { if (e.target.value) onAddPreset(e.target.value); e.target.value = ''; }}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white text-gray-600">
+              <option value="">+ Add from common tests…</option>
+              {QC_PRESETS.map(p => (
+                <option key={p.name} value={p.name}>{p.name}{p.unit ? ` (${p.unit})` : ''} — {formatSpec(p)}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 type LocalStep = Partial<WIStep> & { _localId: string; step_type: StepType };
 
@@ -1586,6 +1721,10 @@ export default function WorkInstructionEditorPage() {
   const [targetMolarity, setTargetMolarity] = useState('');
   const [scheduledMinutes, setScheduledMinutes] = useState('');
   const [steps, setSteps] = useState<LocalStep[]>([]);
+  // QC spec panel — null until the author touches it; falls back to the saved
+  // panel (existing WI) or an item default (see auto-seed effect below).
+  const [qcRows, setQcRows] = useState<QCRow[] | null>(null);
+  const qcAutoSeededRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -1676,6 +1815,64 @@ export default function WorkInstructionEditorPage() {
   const isChild = !!templateId;
   const canToggleTemplate = !!canEdit && !isChild &&
     (isNew || wiData?.status === 'draft' || wiData?.status === 'rejected');
+
+  // ── QC spec panel ──────────────────────────────────────────────────────────
+  // The WI's own saved QC panel (existing WIs).
+  const { data: wiQcData } = useQuery<WIQCTest[]>({
+    queryKey: ['wi-qc-tests', id],
+    enabled: !isNew,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('wi_qc_tests').select('*').eq('work_instruction_id', id!).order('test_order');
+      if (error) throw error;
+      return data as WIQCTest[];
+    },
+  });
+  // The linked item's QC panel — the source these default from.
+  const { data: itemQcTests = [] } = useQuery<QCTest[]>({
+    queryKey: ['item-qc-tests', reagentItemId],
+    enabled: !!reagentItemId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('qc_tests').select('*').eq('reagent_item_id', reagentItemId!).eq('is_active', true).order('test_order');
+      if (error) throw error;
+      return data as QCTest[];
+    },
+  });
+
+  const specFromItem = (t: QCTest): QCRow => ({
+    _key: newQcKey(), source_qc_test_id: t.id, name: t.name, unit: t.unit,
+    result_type: t.result_type, lower_limit: t.lower_limit, upper_limit: t.upper_limit,
+    target: t.target, expected_text: t.expected_text, method: t.method, is_active: true,
+  });
+
+  // Displayed rows: author edits (qcRows) → saved WI panel → empty.
+  const qcDisplayRows: QCRow[] = qcRows ?? (wiQcData ?? []).map(t => ({ ...t, _key: t.id }));
+
+  // Default from the item once, when the WI has no panel of its own yet.
+  useEffect(() => {
+    if (qcAutoSeededRef.current || qcRows !== null || !canEdit) return;
+    if ((wiQcData ?? []).length > 0) { qcAutoSeededRef.current = true; return; }
+    if (!reagentItemId || itemQcTests.length === 0) return;
+    setQcRows(itemQcTests.map(specFromItem));
+    qcAutoSeededRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wiQcData, itemQcTests, reagentItemId, canEdit, qcRows]);
+
+  const qcUpdate = (key: string, patch: Partial<WIQCTest>) =>
+    setQcRows(qcDisplayRows.map(r => r._key === key ? { ...r, ...patch } : r));
+  const qcRemove = (key: string) => setQcRows(qcDisplayRows.filter(r => r._key !== key));
+  const qcAddBlank = () => setQcRows([...qcDisplayRows, { _key: newQcKey(), name: '', unit: '', result_type: 'numeric', is_active: true }]);
+  const qcAddPreset = (name: string) => {
+    const p = QC_PRESETS.find(x => x.name === name);
+    if (!p) return;
+    setQcRows([...qcDisplayRows, {
+      _key: newQcKey(), name: p.name, unit: p.unit, result_type: p.result_type,
+      lower_limit: p.lower_limit ?? null, upper_limit: p.upper_limit ?? null,
+      expected_text: p.expected_text ?? null, method: p.method ?? null, is_active: true,
+    }]);
+  };
+  const qcLoadFromItem = () => setQcRows(itemQcTests.map(specFromItem));
 
   // Scroll-spy: highlight in the nav pane whichever step card is crossing the
   // upper part of the viewport. Re-observes only when steps are added/removed
@@ -1893,6 +2090,45 @@ export default function WorkInstructionEditorPage() {
         if (error) throw error;
       }
 
+      // Save the QC spec panel: update kept rows, insert new, delete removed —
+      // preserving ids so historical qc_results keep their link.
+      if (isNew || wiQcData !== undefined) {
+        const current = (qcRows ?? (wiQcData ?? []).map(t => ({ ...t, _key: t.id })))
+          .filter(r => (r.name ?? '').toString().trim());
+        const existingQc = wiQcData ?? [];
+        const keptIds = new Set(current.filter(r => r.id).map(r => r.id as string));
+        const toDelete = existingQc.filter(t => !keptIds.has(t.id)).map(t => t.id);
+        if (toDelete.length) {
+          const { error } = await supabase.from('wi_qc_tests').delete().in('id', toDelete);
+          if (error) throw error;
+        }
+        for (let i = 0; i < current.length; i++) {
+          const r = current[i];
+          const isQual = r.result_type === 'text' || r.result_type === 'passfail';
+          const qcPayload = {
+            work_instruction_id: wiId!,
+            source_qc_test_id: r.source_qc_test_id ?? null,
+            test_order: i,
+            name: (r.name ?? '').toString().trim(),
+            unit: r.unit?.toString().trim() || null,
+            result_type: r.result_type ?? 'numeric',
+            lower_limit: isQual ? null : (r.lower_limit ?? null),
+            upper_limit: isQual ? null : (r.upper_limit ?? null),
+            target: isQual ? null : (r.target ?? null),
+            expected_text: isQual ? (r.expected_text?.toString().trim() || null) : null,
+            method: r.method?.toString().trim() || null,
+            is_active: r.is_active ?? true,
+          };
+          if (r.id) {
+            const { error } = await supabase.from('wi_qc_tests').update(qcPayload).eq('id', r.id);
+            if (error) throw error;
+          } else {
+            const { error } = await supabase.from('wi_qc_tests').insert({ ...qcPayload, created_by: profile!.id });
+            if (error) throw error;
+          }
+        }
+      }
+
       if (submitForReview && !isNew) {
         await supabase.from('wi_approvals').insert({
           work_instruction_id: wiId!,
@@ -1907,6 +2143,7 @@ export default function WorkInstructionEditorPage() {
     onSuccess: (wiId) => {
       qc.invalidateQueries({ queryKey: ['work-instructions'] });
       qc.invalidateQueries({ queryKey: ['work-instruction', wiId] });
+      qc.invalidateQueries({ queryKey: ['wi-qc-tests', wiId] });
       navigate(`/work-instructions/${wiId}`);
     },
   });
@@ -2255,6 +2492,20 @@ export default function WorkInstructionEditorPage() {
           <AddStepPanel templates={templates} onAdd={addStepFromTemplate} />
         )}
       </div>
+
+      {/* Quality specifications — captured at the end of the run */}
+      {!isTemplate && (
+        <WIQualitySpecs
+          rows={qcDisplayRows}
+          canEdit={!!canEdit}
+          itemTestCount={itemQcTests.length}
+          onUpdate={qcUpdate}
+          onRemove={qcRemove}
+          onAddBlank={qcAddBlank}
+          onAddPreset={qcAddPreset}
+          onLoadFromItem={qcLoadFromItem}
+        />
+      )}
 
       {canEdit && (
         <div className="flex justify-end gap-2 pb-8">

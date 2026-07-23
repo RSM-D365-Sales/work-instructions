@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import type { ProductionOrder, WIStep, POStep, StepType, Scale, Profile, QCTest, QCResult, POStatus, ParameterSchema, ParameterFieldDef } from '../types';
+import type { ProductionOrder, WIStep, POStep, StepType, Scale, Profile, QCTest, WIQCTest, QCResult, POStatus, ParameterSchema, ParameterFieldDef } from '../types';
 import { calculateTolerance, cn, roundSmart } from '../lib/utils';
 import { DILUTION_VARS, dilutionVar, solveDilution, type DilutionVar, type DilutionValues } from '../lib/dilution';
 import { evaluateQC, formatSpec } from '../lib/qc';
@@ -1938,10 +1938,11 @@ function StepCard({ wiStep, poStep, index, isActive, orderId, orderNumber, techn
 interface QCInput { num: string; text: string; pass: '' | 'Pass' | 'Fail'; instrument: string; comment: string }
 
 function QualityControlCard({
-  productionOrderId, reagentItemId, locked, onCertificate, onResultsSaved,
+  productionOrderId, workInstructionId, reagentItemId, locked, onCertificate, onResultsSaved,
 }: {
   productionOrderId: string;
-  reagentItemId: string;
+  workInstructionId?: string;
+  reagentItemId?: string;
   locked: boolean;
   onCertificate: () => void;
   /** Fired after QC results are saved, so the parent can advance the order out of "Awaiting QC". */
@@ -1963,19 +1964,32 @@ function QualityControlCard({
     },
   });
 
-  const { data: tests = [], isLoading: testsLoading } = useQuery<QCTest[]>({
-    queryKey: ['qc-tests', reagentItemId],
+  // The WI's own QC panel takes precedence; the item's panel is the fallback.
+  const { data: wiTests = [], isLoading: wiTestsLoading } = useQuery<WIQCTest[]>({
+    queryKey: ['wi-qc-tests', workInstructionId],
+    enabled: !!workInstructionId,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('qc_tests')
-        .select('*')
-        .eq('reagent_item_id', reagentItemId)
-        .eq('is_active', true)
-        .order('test_order');
+        .from('wi_qc_tests').select('*').eq('work_instruction_id', workInstructionId!).eq('is_active', true).order('test_order');
+      if (error) throw error;
+      return data as WIQCTest[];
+    },
+  });
+  const { data: itemTests = [], isLoading: itemTestsLoading } = useQuery<QCTest[]>({
+    queryKey: ['qc-tests', reagentItemId],
+    enabled: !!reagentItemId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('qc_tests').select('*').eq('reagent_item_id', reagentItemId!).eq('is_active', true).order('test_order');
       if (error) throw error;
       return data as QCTest[];
     },
   });
+
+  const usingWiPanel = wiTests.length > 0;
+  const tests: (QCTest | WIQCTest)[] = usingWiPanel ? wiTests : itemTests;
+  const idCol: 'wi_qc_test_id' | 'qc_test_id' = usingWiPanel ? 'wi_qc_test_id' : 'qc_test_id';
+  const testsLoading = wiTestsLoading || itemTestsLoading;
 
   const { data: results = [], isLoading: resultsLoading } = useQuery<QCResult[]>({
     queryKey: ['qc-results', productionOrderId],
@@ -1996,7 +2010,7 @@ function QualityControlCard({
     if (testsLoading || resultsLoading) return;
     const seed: Record<string, QCInput> = {};
     for (const t of tests) {
-      const r = results.find(x => x.qc_test_id === t.id);
+      const r = results.find(x => (x[idCol] ?? null) === t.id);
       let pass: '' | 'Pass' | 'Fail' = '';
       if (t.result_type === 'passfail' && r) {
         pass = r.result_text === 'Fail' || r.passed === false ? 'Fail'
@@ -2012,13 +2026,13 @@ function QualityControlCard({
     }
     setInputs(seed);
     seededFor.current = productionOrderId;
-  }, [tests, results, testsLoading, resultsLoading, productionOrderId]);
+  }, [tests, results, testsLoading, resultsLoading, productionOrderId, idCol]);
 
   function setField(testId: string, patch: Partial<QCInput>) {
     setInputs(prev => ({ ...prev, [testId]: { ...(prev[testId] ?? { num: '', text: '', pass: '', instrument: '', comment: '' }), ...patch } }));
   }
 
-  const liveStatus = (t: QCTest): boolean | null => {
+  const liveStatus = (t: QCTest | WIQCTest): boolean | null => {
     const inp = inputs[t.id];
     if (!inp) return null;
     const num = inp.num === '' ? null : parseFloat(inp.num);
@@ -2041,7 +2055,8 @@ function QualityControlCard({
         );
         const payload = {
           production_order_id: productionOrderId,
-          qc_test_id: t.id,
+          qc_test_id: idCol === 'qc_test_id' ? t.id : null,
+          wi_qc_test_id: idCol === 'wi_qc_test_id' ? t.id : null,
           test_order: i,
           name: t.name,
           unit: t.unit ?? null,
@@ -2061,7 +2076,7 @@ function QualityControlCard({
           tested_by: hasValue ? profile!.id : null,
           tested_at: hasValue ? new Date().toISOString() : null,
         };
-        const existing = results.find(r => r.qc_test_id === t.id);
+        const existing = results.find(r => (r[idCol] ?? null) === t.id);
         if (existing) {
           const { error } = await supabase.from('qc_results').update(payload).eq('id', existing.id);
           if (error) throw error;
@@ -2086,7 +2101,7 @@ function QualityControlCard({
           <h2 className="font-semibold">Quality Control</h2>
         </div>
         <p className="text-sm text-gray-400 mt-2">
-          No QC specifications are defined for this product. Add them on the Reagent Items page to capture release testing here.
+          No QC specifications are defined for this run. Add them to the Work Instruction (Quality Specifications) or the Reagent Item to capture release testing here.
         </p>
       </div>
     );
@@ -2370,21 +2385,31 @@ export default function ProductionOrderExecutionPage() {
     if (steps.length === 0 || !steps.every(s => s.status === 'completed' || s.status === 'skipped')) {
       return null; // production not finished yet
     }
+    // Effective QC panel: the WI's own specs take precedence over the item's.
+    const workInstructionId = (order as any)?.work_instruction_id as string | undefined;
     const reagentItemId = (order?.work_instruction as any)?.reagent_item_id as string | undefined;
-    if (reagentItemId) {
-      const { data: qcTests } = await supabase
+    let panelIds: string[] = [];
+    let panelIdCol: 'wi_qc_test_id' | 'qc_test_id' = 'qc_test_id';
+    if (workInstructionId) {
+      const { data: wiQc } = await supabase
+        .from('wi_qc_tests').select('id').eq('work_instruction_id', workInstructionId).eq('is_active', true);
+      if (wiQc && wiQc.length > 0) { panelIds = wiQc.map(t => t.id); panelIdCol = 'wi_qc_test_id'; }
+    }
+    if (panelIds.length === 0 && reagentItemId) {
+      const { data: itemQc } = await supabase
         .from('qc_tests').select('id').eq('reagent_item_id', reagentItemId).eq('is_active', true);
-      if (qcTests && qcTests.length > 0) {
-        const { data: qcRes } = await supabase
-          .from('qc_results').select('qc_test_id, result_numeric, result_text')
-          .eq('production_order_id', id!);
-        const savedIds = new Set(
-          (qcRes ?? [])
-            .filter(r => r.result_numeric != null || (r.result_text ?? '') !== '')
-            .map(r => r.qc_test_id),
-        );
-        if (!qcTests.every(t => savedIds.has(t.id))) return 'awaiting_qc';
-      }
+      if (itemQc && itemQc.length > 0) { panelIds = itemQc.map(t => t.id); panelIdCol = 'qc_test_id'; }
+    }
+    if (panelIds.length > 0) {
+      const { data: qcRes } = await supabase
+        .from('qc_results').select('qc_test_id, wi_qc_test_id, result_numeric, result_text')
+        .eq('production_order_id', id!);
+      const savedIds = new Set(
+        (qcRes ?? [])
+          .filter(r => r.result_numeric != null || (r.result_text ?? '') !== '')
+          .map(r => (r as Record<string, unknown>)[panelIdCol] as string),
+      );
+      if (!panelIds.every(tid => savedIds.has(tid))) return 'awaiting_qc';
     }
     return 'completed';
   }
@@ -2726,11 +2751,12 @@ export default function ProductionOrderExecutionPage() {
         </div>
       )}
 
-      {/* Quality Control capture */}
-      {isStarted && wi?.reagent_item_id && (
+      {/* Quality Control capture — the last part of the run */}
+      {isStarted && (order as any)?.work_instruction_id && (
         <QualityControlCard
           productionOrderId={id!}
-          reagentItemId={wi.reagent_item_id}
+          workInstructionId={(order as any).work_instruction_id}
+          reagentItemId={wi?.reagent_item_id}
           locked={order?.status === 'cancelled'}
           onCertificate={() => navigate(`/production-orders/${id}/certificate`)}
           onResultsSaved={() => reconcileDoneStatus.mutate()}
