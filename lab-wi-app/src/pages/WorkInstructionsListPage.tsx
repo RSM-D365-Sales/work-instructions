@@ -4,8 +4,8 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { WorkInstruction } from '../types';
-import { Plus, ChevronRight, Trash2, CalendarDays } from 'lucide-react';
-import { formatDate, wiLineageKey } from '../lib/utils';
+import { Plus, ChevronRight, Trash2, CalendarDays, LayoutTemplate, AlertTriangle, ClipboardList } from 'lucide-react';
+import { formatDate, wiLineageKey, cn } from '../lib/utils';
 import ListFilters, { toOptions, inDateRange } from '../components/ListFilters';
 
 const STATUS_STYLES: Record<string, string> = {
@@ -22,6 +22,7 @@ export default function WorkInstructionsListPage() {
   const [filterItem, setFilterItem] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [view, setView] = useState<'wi' | 'template'>('wi');
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -72,14 +73,21 @@ export default function WorkInstructionsListPage() {
     );
   }, [wis]);
 
-  const itemOptions = useMemo(() => toOptions(latestWis.map(w => w.product_name)), [latestWis]);
+  const wiCount = useMemo(() => latestWis.filter(w => !w.is_template).length, [latestWis]);
+  const templateCount = useMemo(() => latestWis.filter(w => w.is_template).length, [latestWis]);
+
+  const itemOptions = useMemo(
+    () => toOptions(latestWis.filter(w => !w.is_template).map(w => w.product_name ?? '')),
+    [latestWis]
+  );
   const filtersActive = !!(filterItem || dateFrom || dateTo);
   const filteredWis = useMemo(
     () => latestWis.filter(w =>
+      (view === 'template' ? !!w.is_template : !w.is_template) &&
       (!filterItem || (w.product_name ?? '') === filterItem) &&
       inDateRange(w.updated_at, dateFrom, dateTo)
     ),
-    [latestWis, filterItem, dateFrom, dateTo]
+    [latestWis, view, filterItem, dateFrom, dateTo]
   );
 
   return (
@@ -110,6 +118,25 @@ export default function WorkInstructionsListPage() {
       </div>
 
       {!isLoading && wis.length > 0 && (
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5 w-fit">
+          {([['wi', 'Work Instructions', <ClipboardList size={14} key="i" />, wiCount],
+             ['template', 'Templates', <LayoutTemplate size={14} key="t" />, templateCount]] as const).map(([v, label, icon, count]) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                view === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              )}
+            >
+              {icon} {label}
+              <span className={cn('text-xs rounded-full px-1.5', view === v ? 'bg-gray-100 text-gray-500' : 'text-gray-400')}>{count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!isLoading && wis.length > 0 && (
         <ListFilters
           itemOptions={itemOptions}
           item={filterItem}
@@ -137,7 +164,13 @@ export default function WorkInstructionsListPage() {
         </div>
       ) : filteredWis.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
-          <p className="text-gray-500">No work instructions match the current filters.</p>
+          {view === 'template' && templateCount === 0 ? (
+            <p className="text-gray-500">
+              No templates yet — create one with <strong>New WI</strong> and tick “This is a Template”.
+            </p>
+          ) : (
+            <p className="text-gray-500">No {view === 'template' ? 'templates' : 'work instructions'} match the current filters.</p>
+          )}
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
@@ -157,16 +190,40 @@ export default function WorkInstructionsListPage() {
             <tbody className="divide-y divide-gray-50">
               {filteredWis.map(wi => (
                 <tr key={wi.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-gray-900">{wi.title}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">
+                    <div className="flex items-center gap-2">
+                      <span>{wi.title}</span>
+                      {wi.template_id && (
+                        <span title="Generated from a template" className="text-indigo-400 shrink-0">
+                          <LayoutTemplate size={13} />
+                        </span>
+                      )}
+                      {wi.template_needs_review && (
+                        <span title="A locked step changed on the template after this WI was approved" className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5 shrink-0">
+                          <AlertTriangle size={10} /> review
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
-                    {(wi as any).reagent?.item_number
-                      ? <span className="font-mono text-xs text-gray-700">{(wi as any).reagent.item_number}</span>
-                      : <span className="text-xs text-amber-600" title="Not linked to an item-master record — D365 production orders for this product won't match.">unlinked</span>}
+                    {wi.is_template
+                      ? <span className="text-xs text-gray-300">—</span>
+                      : (wi as any).reagent?.item_number
+                        ? <span className="font-mono text-xs text-gray-700">{(wi as any).reagent.item_number}</span>
+                        : <span className="text-xs text-amber-600" title="Not linked to an item-master record — D365 production orders for this product won't match.">unlinked</span>}
                   </td>
                   <td className="px-4 py-3 text-gray-600">
-                    {wi.product_name}
-                    {wi.target_molarity != null && (
-                      <span className="text-xs text-gray-400 ml-1">({wi.target_molarity} M)</span>
+                    {wi.is_template ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600">
+                        <LayoutTemplate size={12} /> Template
+                      </span>
+                    ) : (
+                      <>
+                        {wi.product_name}
+                        {wi.target_molarity != null && (
+                          <span className="text-xs text-gray-400 ml-1">({wi.target_molarity} M)</span>
+                        )}
+                      </>
                     )}
                   </td>
                   <td className="px-4 py-3 text-gray-600">v{wi.version}</td>

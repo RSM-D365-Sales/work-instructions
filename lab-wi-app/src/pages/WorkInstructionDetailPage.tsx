@@ -10,7 +10,7 @@ import {
   Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, ChevronRight, SlidersHorizontal, Paperclip,
   Copy, X, Search,
   Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Lock, Package, Clock,
-  Calculator, Sigma,
+  Calculator, Sigma, LayoutTemplate, RefreshCw, FilePlus,
 } from 'lucide-react';
 import { formatDate, cn, wiLineageKey } from '../lib/utils';
 import StepNavPanel, { type StepNavItem } from '../components/StepNavPanel';
@@ -142,6 +142,8 @@ export default function WorkInstructionDetailPage() {
   const [newVersionLoading, setNewVersionLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [copyModalOpen, setCopyModalOpen] = useState(false);
+  const [newFromTemplateOpen, setNewFromTemplateOpen] = useState(false);
+  const [propagateOpen, setPropagateOpen] = useState(false);
 
   const { data: wi, isLoading } = useQuery<WorkInstruction>({
     queryKey: ['work-instruction-detail', id],
@@ -200,8 +202,66 @@ export default function WorkInstructionDetailPage() {
     },
   });
 
+  // Every version id in this template's lineage — children generated from an
+  // earlier template version still reference that older id, so propagation and
+  // the derived-list must span the whole lineage.
+  const templateLineageIds = versions.length ? versions.map(v => v.id) : (id ? [id] : []);
+
+  // Work Instructions generated from any version of this template.
+  const { data: derivedWis = [] } = useQuery<WorkInstruction[]>({
+    queryKey: ['wi-derived', id, templateLineageIds.join(',')],
+    enabled: !!wi?.is_template && templateLineageIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('work_instructions')
+        .select('*, creator:profiles!created_by(full_name), reagent:reagent_items!reagent_item_id(item_number)')
+        .in('template_id', templateLineageIds)
+        .order('updated_at', { ascending: false });
+      if (error) throw error;
+      return data as WorkInstruction[];
+    },
+  });
+
+  // The template this WI was generated from (only queried for children).
+  const { data: parentTemplate } = useQuery<Pick<WorkInstruction, 'id' | 'title' | 'version'> | null>({
+    queryKey: ['wi-parent-template', wi?.template_id],
+    enabled: !!wi?.template_id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('work_instructions').select('id, title, version').eq('id', wi!.template_id!).single();
+      return data as Pick<WorkInstruction, 'id' | 'title' | 'version'> | null;
+    },
+  });
+
   const newVersionMutation = useMutation({
     mutationFn: async () => {
+      // If this is a child that the template flagged (a locked step changed
+      // after approval), pull the template's current locked steps into the new
+      // version so re-versioning actually applies the update.
+      let templateLocked: Map<string, { name: string; description: string | null; parameters: unknown }> | null = null;
+      let syncedTemplate: { id: string; version: number } | null = null;
+      if (wi!.template_id && wi!.template_needs_review && parentTemplate) {
+        const { data: tplVers } = await supabase
+          .from('work_instructions')
+          .select('id, version, status, wi_steps(source_step_id, id, name, description, parameters, locked)')
+          .eq('is_template', true)
+          .eq('title', parentTemplate.title)
+          .order('version', { ascending: false });
+        // Prefer the latest approved template version; fall back to the newest.
+        const latest = (tplVers ?? []).find(t => t.status === 'approved') ?? (tplVers ?? [])[0];
+        if (latest) {
+          syncedTemplate = { id: latest.id, version: latest.version };
+          templateLocked = new Map();
+          for (const ts of (latest.wi_steps ?? []) as WIStep[]) {
+            if (ts.locked) {
+              templateLocked.set(ts.source_step_id ?? ts.id, {
+                name: ts.name, description: ts.description ?? null, parameters: ts.parameters,
+              });
+            }
+          }
+        }
+      }
+
       // Insert next version as a new draft
       const { data: newWI, error: e1 } = await supabase
         .from('work_instructions')
@@ -210,6 +270,13 @@ export default function WorkInstructionDetailPage() {
           description: wi!.description ?? null,
           product_name: wi!.product_name,
           reagent_item_id: wi!.reagent_item_id ?? null,
+          // Carry template identity forward so a new version of a template
+          // stays a template (and a child stays a child).
+          is_template: wi!.is_template ?? false,
+          // Re-point a freshly-synced child at the template version it now matches.
+          template_id: syncedTemplate?.id ?? wi!.template_id ?? null,
+          template_version: syncedTemplate?.version ?? wi!.template_version ?? null,
+          template_needs_review: false,
           target_molarity: wi!.target_molarity ?? null,
           scheduled_minutes: wi!.scheduled_minutes ?? null,
           version: wi!.version + 1,
@@ -220,19 +287,26 @@ export default function WorkInstructionDetailPage() {
         .single();
       if (e1) throw e1;
 
-      // Copy all steps from the current WI to the new one
+      // Copy all steps from the current WI to the new one, overlaying the
+      // template's current content onto locked steps when we're pulling a
+      // flagged update.
       if (steps.length > 0) {
-        const newSteps = steps.map(s => ({
-          work_instruction_id: newWI.id,
-          step_template_id: s.step_template_id ?? null,
-          // Carry the lineage token so the version diff matches steps across
-          // versions (renames diff as "modified", not removed + added).
-          source_step_id: s.source_step_id ?? s.id,
-          step_order: s.step_order,
-          name: s.name,
-          description: s.description ?? null,
-          parameters: s.parameters,
-        }));
+        const newSteps = steps.map(s => {
+          const token = s.source_step_id ?? s.id;
+          const overlay = templateLocked?.get(token);
+          return {
+            work_instruction_id: newWI.id,
+            step_template_id: s.step_template_id ?? null,
+            // Carry the lineage token so the version diff matches steps across
+            // versions (renames diff as "modified", not removed + added).
+            source_step_id: token,
+            step_order: s.step_order,
+            name: overlay?.name ?? s.name,
+            description: overlay ? overlay.description : (s.description ?? null),
+            locked: s.locked ?? false,
+            parameters: overlay?.parameters ?? s.parameters,
+          };
+        });
         const { error: e2 } = await supabase.from('wi_steps').insert(newSteps);
         if (e2) throw e2;
       }
@@ -365,10 +439,17 @@ export default function WorkInstructionDetailPage() {
             <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_STYLES[wi.status]}`}>
               {wi.status.replace('_', ' ')}
             </span>
+            {wi.is_template && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700">
+                <LayoutTemplate size={12} /> Template
+              </span>
+            )}
             <span className="text-xs text-gray-400">v{wi.version}</span>
           </div>
           <p className="text-sm text-gray-500 mt-1">
-            {wi.product_name}
+            {wi.is_template
+              ? <span className="italic text-gray-400">Reusable template — not linked to a product</span>
+              : wi.product_name}
             {wi.target_molarity != null && <span className="ml-1">— {wi.target_molarity} M</span>}
             {wi.scheduled_minutes != null && <span className="ml-1">— {wi.scheduled_minutes} min scheduled</span>}
           </p>
@@ -401,7 +482,7 @@ export default function WorkInstructionDetailPage() {
               <GitBranch size={14} /> New Version
             </button>
           )}
-          {isAuthor && (
+          {isAuthor && !wi.is_template && (
             <button
               onClick={() => setCopyModalOpen(true)}
               title="Start a work instruction for another item using this one as the template"
@@ -410,7 +491,25 @@ export default function WorkInstructionDetailPage() {
               <Copy size={14} /> Copy to New Item
             </button>
           )}
-          {canStartProduction && (
+          {isAuthor && wi.is_template && wi.status === 'approved' && (
+            <button
+              onClick={() => setNewFromTemplateOpen(true)}
+              title="Generate a new Work Instruction from this template"
+              className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
+            >
+              <FilePlus size={14} /> New from Template
+            </button>
+          )}
+          {isAuthor && wi.is_template && derivedWis.length > 0 && (
+            <button
+              onClick={() => setPropagateOpen(true)}
+              title="Push the template's current locked steps to derived Work Instructions"
+              className="flex items-center gap-2 px-3 py-2 border border-indigo-300 text-indigo-700 rounded-lg text-sm hover:bg-indigo-50"
+            >
+              <RefreshCw size={14} /> Sync locked steps
+            </button>
+          )}
+          {canStartProduction && !wi.is_template && (
             <Link
               to={`/production-orders/new?wi=${wi.id}`}
               className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
@@ -429,9 +528,50 @@ export default function WorkInstructionDetailPage() {
         </div>
       </div>
 
+      {/* Generated-from-template banner (child WI) */}
+      {wi.template_id && (
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900 flex items-center gap-2">
+          <LayoutTemplate size={16} className="shrink-0 text-indigo-500" />
+          <span>
+            Generated from template{' '}
+            <Link to={`/work-instructions/${wi.template_id}`} className="font-semibold underline hover:text-indigo-700">
+              {parentTemplate?.title ?? 'template'}
+            </Link>
+            {wi.template_version != null && <span className="text-indigo-500"> (v{wi.template_version})</span>}.
+            Locked steps come from the template.
+          </span>
+        </div>
+      )}
+
+      {/* Template changed a locked step after this WI was approved */}
+      {wi.template_needs_review && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-start gap-2">
+          <AlertTriangle size={16} className="shrink-0 text-amber-500 mt-0.5" />
+          <span>
+            A <strong>locked step changed on the template</strong> after this approved WI was created. Create a
+            new version to pull in the update, then re-approve. {canCreateNewVersion && 'Use “New Version” above.'}
+          </span>
+        </div>
+      )}
+
       {/* Copy-to-new-item modal */}
       {copyModalOpen && (
         <CopyToNewItemModal wi={wi} steps={steps} onClose={() => setCopyModalOpen(false)} />
+      )}
+
+      {/* New-from-template modal */}
+      {newFromTemplateOpen && (
+        <NewFromTemplateModal template={wi} steps={steps} onClose={() => setNewFromTemplateOpen(false)} />
+      )}
+
+      {/* Propagate locked-step changes modal */}
+      {propagateOpen && (
+        <PropagateTemplateModal
+          template={wi}
+          templateSteps={steps}
+          derived={derivedWis}
+          onClose={() => setPropagateOpen(false)}
+        />
       )}
 
       {/* Delete confirmation modal */}
@@ -526,6 +666,11 @@ export default function WorkInstructionDetailPage() {
                     <div className="flex items-center gap-2">
                       <span className="text-gray-500">{STEP_ICONS[stepType]}</span>
                       <span className="font-medium text-gray-900 text-sm">{step.name}</span>
+                      {step.locked && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5">
+                          <Lock size={10} /> Locked
+                        </span>
+                      )}
                     </div>
                     {step.description && <p className="text-xs text-gray-500 mt-0.5">{step.description}</p>}
                     {summary && (
@@ -538,6 +683,56 @@ export default function WorkInstructionDetailPage() {
           </ol>
         )}
       </div>
+
+      {/* Derived Work Instructions (templates only) */}
+      {wi.is_template && (
+        <div className="bg-white rounded-xl border border-gray-200">
+          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
+            <LayoutTemplate size={15} className="text-indigo-500" />
+            <h2 className="text-sm font-semibold text-gray-700">Derived Work Instructions</h2>
+            <span className="text-xs text-gray-400">{derivedWis.length}</span>
+            {isAuthor && wi.status === 'approved' && (
+              <button
+                onClick={() => setNewFromTemplateOpen(true)}
+                className="ml-auto flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800"
+              >
+                <FilePlus size={13} /> New from Template
+              </button>
+            )}
+          </div>
+          {derivedWis.length === 0 ? (
+            <p className="text-center py-6 text-sm text-gray-400">
+              {wi.status === 'approved'
+                ? 'No Work Instructions generated from this template yet.'
+                : 'Approve this template to start generating Work Instructions from it.'}
+            </p>
+          ) : (
+            <ul className="divide-y divide-gray-50">
+              {derivedWis.map(d => (
+                <li key={d.id}>
+                  <Link to={`/work-instructions/${d.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50">
+                    <span className="font-medium text-gray-900 text-sm flex-1 truncate">{d.title}</span>
+                    {(d as any).reagent?.item_number && (
+                      <span className="font-mono text-xs text-gray-500">{(d as any).reagent.item_number}</span>
+                    )}
+                    <span className="text-gray-500 text-sm truncate max-w-[10rem]">{d.product_name}</span>
+                    <span className="text-xs text-gray-400">v{d.version}</span>
+                    {d.template_needs_review && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5">
+                        <AlertTriangle size={10} /> review
+                      </span>
+                    )}
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[d.status]}`}>
+                      {d.status.replace('_', ' ')}
+                    </span>
+                    <ChevronRight size={16} className="text-gray-300" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* You can't approve your own submission */}
       {isApprover && wi.status === 'pending_review' && isOwnSubmission && (
@@ -856,6 +1051,366 @@ function CopyToNewItemModal({ wi, steps, onClose }: { wi: WorkInstruction; steps
           <p className="text-xs text-gray-400">
             Creates a draft (v1) owned by you and opens it in the editor so you can adjust quantities, targets, and steps.
           </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── New-from-template modal ──────────────────────────────────────────────────
+// Generates a child WI from a template: copies every step (carrying its lineage
+// token AND locked flag) and records template_id / template_version so locked-
+// step changes can later be propagated. The child picks its own product.
+function NewFromTemplateModal({ template, steps, onClose }: { template: WorkInstruction; steps: WIStep[]; onClose: () => void }) {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const { profile } = useAuth();
+  const [search, setSearch] = useState('');
+  const [targetItemId, setTargetItemId] = useState('');
+  const [title, setTitle] = useState('');
+  const [productName, setProductName] = useState('');
+  const [titleTouched, setTitleTouched] = useState(false);
+
+  const lockedCount = steps.filter(s => s.locked).length;
+
+  const { data: reagents = [] } = useQuery<ReagentItem[]>({
+    queryKey: ['reagent-items-active'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('reagent_items').select('*').eq('is_active', true).order('product_name');
+      if (error) throw error;
+      return data as ReagentItem[];
+    },
+  });
+
+  const targetItem = reagents.find(r => r.id === targetItemId);
+  const q = search.trim().toLowerCase();
+  const matches = reagents
+    .filter(r => !q || r.product_name.toLowerCase().includes(q) || r.item_number.toLowerCase().includes(q))
+    .sort((a, b) => (a.item_type === 'FG' ? 0 : 1) - (b.item_type === 'FG' ? 0 : 1))
+    .slice(0, 30);
+
+  function pickItem(r: ReagentItem) {
+    setTargetItemId(r.id);
+    setProductName(r.product_name);
+    if (!titleTouched) setTitle(r.product_name);
+  }
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const cleanTitle = title.trim();
+      const cleanProduct = productName.trim();
+      if (!cleanTitle) throw new Error('Give the new work instruction a title.');
+      if (!cleanProduct) throw new Error('Pick a target item or enter a product name.');
+
+      // Block a title/product that would merge into an existing version lineage.
+      const targetKey = wiLineageKey({ reagent_item_id: targetItemId || null, product_name: cleanProduct, title: cleanTitle });
+      const { data: sameTitle, error: e0 } = await supabase
+        .from('work_instructions').select('id, title, product_name, reagent_item_id').eq('title', cleanTitle);
+      if (e0) throw e0;
+      if ((sameTitle ?? []).some(w => wiLineageKey(w) === targetKey)) {
+        throw new Error('A work instruction with this title already exists for the target item — change the title.');
+      }
+
+      const { data: newWI, error: e1 } = await supabase
+        .from('work_instructions')
+        .insert({
+          title: cleanTitle,
+          description: template.description ?? null,
+          product_name: cleanProduct,
+          reagent_item_id: targetItemId || null,
+          is_template: false,
+          template_id: template.id,
+          template_version: template.version,
+          scheduled_minutes: template.scheduled_minutes ?? null,
+          version: 1,
+          status: 'draft',
+          created_by: profile!.id,
+        })
+        .select().single();
+      if (e1) throw e1;
+
+      if (steps.length > 0) {
+        const newSteps = steps.map(s => ({
+          work_instruction_id: newWI.id,
+          step_template_id: s.step_template_id ?? null,
+          // Carry the lineage token so a locked-step change on the template can
+          // find this child step later.
+          source_step_id: s.source_step_id ?? s.id,
+          step_order: s.step_order,
+          name: s.name,
+          description: s.description ?? null,
+          locked: s.locked ?? false,
+          parameters: s.parameters,
+        }));
+        const { error: e2 } = await supabase.from('wi_steps').insert(newSteps);
+        if (e2) throw e2;
+      }
+      return newWI;
+    },
+    onSuccess: (newWI) => {
+      qc.invalidateQueries({ queryKey: ['work-instructions'] });
+      qc.invalidateQueries({ queryKey: ['wi-derived', template.id] });
+      navigate(`/work-instructions/${newWI.id}/edit`);
+    },
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100">
+            <FilePlus size={17} className="text-indigo-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-semibold text-gray-900">New from Template</h2>
+            <p className="text-xs text-gray-500 truncate">
+              {template.title} (v{template.version}) · {steps.length} step{steps.length === 1 ? '' : 's'} ({lockedCount} locked) will be copied
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Product / item *</label>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search by product name or item number…"
+                className="w-full border border-gray-300 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="mt-2 border border-gray-200 rounded-lg max-h-44 overflow-y-auto divide-y divide-gray-50">
+              {matches.length === 0 ? (
+                <p className="px-3 py-3 text-sm text-gray-400">No matching items.</p>
+              ) : matches.map(r => (
+                <button
+                  key={r.id}
+                  onClick={() => pickItem(r)}
+                  className={cn(
+                    'w-full flex items-baseline gap-2 px-3 py-2 text-left text-sm transition-colors',
+                    r.id === targetItemId ? 'bg-blue-50 text-blue-800' : 'hover:bg-gray-50 text-gray-800'
+                  )}
+                >
+                  <span className="font-medium truncate">{r.product_name}</span>
+                  <span className="text-xs text-gray-400 font-mono shrink-0">{r.item_number}</span>
+                  {r.item_type === 'FG' && <span className="ml-auto text-[10px] font-semibold text-emerald-600 shrink-0">FG</span>}
+                </button>
+              ))}
+            </div>
+            {targetItem && (
+              <p className="text-xs text-gray-500 mt-1.5">
+                Selected: <span className="font-medium text-gray-700">{targetItem.product_name}</span> · {targetItem.item_number}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">New title *</label>
+            <input
+              value={title}
+              onChange={e => { setTitle(e.target.value); setTitleTouched(true); }}
+              placeholder="e.g. 1.0 M EDTA Solution, pH 8.0"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Product name *</label>
+            <input
+              value={productName}
+              onChange={e => setProductName(e.target.value)}
+              placeholder="Filled from the target item, or type your own"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {createMutation.isError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {(createMutation.error as Error).message}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+              Cancel
+            </button>
+            <button
+              onClick={() => createMutation.mutate()}
+              disabled={createMutation.isPending || !title.trim() || !productName.trim()}
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+            >
+              <FilePlus size={14} />
+              {createMutation.isPending ? 'Creating…' : 'Create Work Instruction'}
+            </button>
+          </div>
+          <p className="text-xs text-gray-400">
+            Locked steps are read-only on the new WI; you fill in the unlocked steps (reagents, pH, …), then submit for approval.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Propagate locked-step changes modal ──────────────────────────────────────
+// Pushes the template's CURRENT locked steps to its derived WIs. Draft/rejected
+// children are updated in place (matched by lineage token); approved / in-review
+// children are flagged (template_needs_review) rather than mutated.
+function PropagateTemplateModal({
+  template, templateSteps, derived, onClose,
+}: {
+  template: WorkInstruction;
+  templateSteps: WIStep[];
+  derived: WorkInstruction[];
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const { profile } = useAuth();
+  const [note, setNote] = useState('');
+
+  const lockedSteps = templateSteps.filter(s => s.locked);
+  const draftLike = derived.filter(d => d.status === 'draft' || d.status === 'rejected');
+  const flagged = derived.filter(d => d.status !== 'draft' && d.status !== 'rejected');
+
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const changeNote = note.trim();
+      if (!changeNote) throw new Error('Describe the change before pushing it.');
+      const nowIso = new Date().toISOString();
+
+      // 1) Update locked steps on draft/rejected children in place.
+      const draftIds = draftLike.map(d => d.id);
+      if (draftIds.length > 0 && lockedSteps.length > 0) {
+        const { data: childSteps, error: eSteps } = await supabase
+          .from('wi_steps')
+          .select('id, work_instruction_id, source_step_id')
+          .in('work_instruction_id', draftIds);
+        if (eSteps) throw eSteps;
+
+        const byWi = new Map<string, { id: string; source_step_id: string | null }[]>();
+        for (const cs of (childSteps ?? []) as { id: string; work_instruction_id: string; source_step_id: string | null }[]) {
+          const arr = byWi.get(cs.work_instruction_id) ?? [];
+          arr.push({ id: cs.id, source_step_id: cs.source_step_id });
+          byWi.set(cs.work_instruction_id, arr);
+        }
+
+        for (const child of draftLike) {
+          const csList = byWi.get(child.id) ?? [];
+          for (const ts of lockedSteps) {
+            const token = ts.source_step_id ?? ts.id;
+            const cs = csList.find(c => (c.source_step_id ?? c.id) === token);
+            if (!cs) continue;
+            const { error } = await supabase.from('wi_steps').update({
+              name: ts.name,
+              description: ts.description ?? null,
+              parameters: ts.parameters,
+              locked: true,
+            }).eq('id', cs.id);
+            if (error) throw error;
+          }
+        }
+      }
+      // Mark the updated children as synced to this template version.
+      if (draftIds.length > 0) {
+        const { error } = await supabase.from('work_instructions')
+          .update({ template_version: template.version, updated_at: nowIso }).in('id', draftIds);
+        if (error) throw error;
+      }
+
+      // 2) Flag approved / in-review children for a deliberate re-version.
+      const flaggedIds = flagged.map(d => d.id);
+      if (flaggedIds.length > 0) {
+        const { error } = await supabase.from('work_instructions')
+          .update({ template_needs_review: true, updated_at: nowIso }).in('id', flaggedIds);
+        if (error) throw error;
+      }
+
+      // 3) Audit log.
+      const { error: eLog } = await supabase.from('wi_template_syncs').insert({
+        template_id: template.id,
+        change_note: changeNote,
+        applied_count: draftLike.length,
+        flagged_count: flagged.length,
+        created_by: profile!.id,
+      });
+      if (eLog) throw eLog;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['wi-derived', template.id] });
+      qc.invalidateQueries({ queryKey: ['work-instructions'] });
+      onClose();
+    },
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100">
+            <RefreshCw size={17} className="text-indigo-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-semibold text-gray-900">Sync locked steps to derived WIs</h2>
+            <p className="text-xs text-gray-500 truncate">{template.title} (v{template.version})</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {lockedSteps.length === 0 ? (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+              This template has no locked steps, so there is nothing to propagate. Lock a step in the editor first.
+            </div>
+          ) : (
+            <div className="rounded-lg border border-gray-200 divide-y divide-gray-50 text-sm">
+              <div className="flex items-center gap-2 px-3 py-2">
+                <Lock size={14} className="text-amber-600" />
+                <span className="text-gray-700">{lockedSteps.length} locked step{lockedSteps.length === 1 ? '' : 's'} will be pushed</span>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2">
+                <RefreshCw size={14} className="text-green-600" />
+                <span className="text-gray-700"><strong>{draftLike.length}</strong> draft / rejected WI{draftLike.length === 1 ? '' : 's'} updated in place</span>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2">
+                <AlertTriangle size={14} className="text-amber-500" />
+                <span className="text-gray-700"><strong>{flagged.length}</strong> approved / in-review WI{flagged.length === 1 ? '' : 's'} flagged for review</span>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Change note *</label>
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              rows={3}
+              placeholder="What changed on the locked step(s), and why — recorded on the sync history."
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {syncMutation.isError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {(syncMutation.error as Error).message}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+              Cancel
+            </button>
+            <button
+              onClick={() => syncMutation.mutate()}
+              disabled={syncMutation.isPending || !note.trim() || lockedSteps.length === 0}
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+            >
+              <RefreshCw size={14} />
+              {syncMutation.isPending ? 'Syncing…' : 'Push to derived WIs'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -212,9 +212,18 @@ export interface WorkInstruction {
   id: string;
   title: string;
   description?: string;
-  product_name: string;
+  /** Null for templates (is_template); required for real WIs. */
+  product_name: string | null;
   reagent_item_id?: string;
   target_molarity?: number;
+  /** True for a reusable template — not linked to a product, still approved. */
+  is_template?: boolean;
+  /** For a child WI: the template it was generated from. */
+  template_id?: string | null;
+  /** For a child WI: the template version its locked steps are synced to. */
+  template_version?: number | null;
+  /** Set on an approved child when the template changed a locked step post-approval. */
+  template_needs_review?: boolean;
   /** Expected duration of one production run, in minutes. Used to
    *  pre-fill scheduled_end on a new production order and to block
    *  time on the dashboard gantt. */
@@ -242,8 +251,22 @@ export interface WIStep {
   name: string;
   description?: string;
   parameters: WIStepParameters;
+  /** On a template: fixed on children. On a child: read-only (inherited). */
+  locked?: boolean;
   created_at: string;
   template?: StepTemplate;
+}
+
+/** Audit record of a template locked-step change propagated to derived WIs. */
+export interface TemplateSync {
+  id: string;
+  template_id: string;
+  change_note: string;
+  applied_count: number;   // draft/rejected children updated in place
+  flagged_count: number;   // approved children flagged for review
+  created_by?: string | null;
+  created_at: string;
+  creator?: Pick<Profile, 'id' | 'full_name'> | null;
 }
 
 export type ApprovalAction = 'submitted' | 'approved' | 'rejected' | 'revision_requested';

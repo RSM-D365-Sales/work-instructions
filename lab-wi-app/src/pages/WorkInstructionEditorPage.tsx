@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -10,7 +10,7 @@ import {
   Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal, Paperclip,
   ChevronsDownUp, ChevronsUpDown, PanelLeftClose, PanelLeftOpen,
   Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Lock, Package, Clock,
-  Calculator, Sigma,
+  Calculator, Sigma, Unlock, LayoutTemplate,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DILUTION_VARS, type DilutionVar } from '../lib/dilution';
@@ -1165,6 +1165,10 @@ interface StepRowProps {
   isDropTarget: boolean;
   open: boolean;
   highlight: boolean;
+  /** This WI is a template — show the per-step lock toggle. */
+  isTemplate: boolean;
+  /** This is a locked step on a child WI — read-only, inherited from the template. */
+  lockedReadonly: boolean;
   gatheredInputs: { material_name: string; quantity: number; unit: string; lot_controlled?: boolean }[];
   reagentItems: { id: string; item_number: string; product_name: string; unit_of_measure: string; lot_controlled: boolean }[];
   onToggle: (localId: string) => void;
@@ -1176,16 +1180,17 @@ interface StepRowProps {
   onDragEnd: () => void;
 }
 
-function StepRow({ step, index, total, canDrag, isDragging, isDropTarget, open, highlight, gatheredInputs, reagentItems, onToggle, onMove, onRemove, onChange, onDragStart, onDragEnter, onDragEnd }: StepRowProps) {
+function StepRow({ step, index, total, canDrag, isDragging, isDropTarget, open, highlight, isTemplate, lockedReadonly, gatheredInputs, reagentItems, onToggle, onMove, onRemove, onChange, onDragStart, onDragEnter, onDragEnd }: StepRowProps) {
   const fromGripRef = useRef(false);
+  const dragOk = canDrag && !lockedReadonly;
 
   return (
     <div
       id={`wi-step-${step._localId}`}
       data-step-id={step._localId}
-      draggable={canDrag}
+      draggable={dragOk}
       onDragStart={e => {
-        if (!fromGripRef.current) { e.preventDefault(); return; }
+        if (!fromGripRef.current || !dragOk) { e.preventDefault(); return; }
         e.dataTransfer.effectAllowed = 'move';
         onDragStart();
       }}
@@ -1193,14 +1198,15 @@ function StepRow({ step, index, total, canDrag, isDragging, isDropTarget, open, 
       onDragOver={e => e.preventDefault()}
       onDragEnd={() => { fromGripRef.current = false; onDragEnd(); }}
       className={cn(
-        'border rounded-xl bg-white overflow-hidden transition-all scroll-mt-4',
-        isDragging ? 'opacity-40' : isDropTarget ? 'border-blue-400 border-2' : 'border-gray-200',
+        'border rounded-xl overflow-hidden transition-all scroll-mt-4',
+        lockedReadonly ? 'bg-amber-50/40' : 'bg-white',
+        isDragging ? 'opacity-40' : isDropTarget ? 'border-blue-400 border-2' : lockedReadonly ? 'border-amber-200' : 'border-gray-200',
         highlight && 'ring-2 ring-blue-300'
       )}
     >
       <div className="flex items-center gap-2 px-4 py-3">
         <div
-          className={cn('shrink-0 p-0.5 touch-none', canDrag ? 'cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600' : 'text-gray-200 pointer-events-none')}
+          className={cn('shrink-0 p-0.5 touch-none', dragOk ? 'cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600' : 'text-gray-200 pointer-events-none')}
           onPointerDown={() => { fromGripRef.current = true; }}
           onPointerUp={() => { fromGripRef.current = false; }}
         >
@@ -1215,35 +1221,72 @@ function StepRow({ step, index, total, canDrag, isDragging, isDropTarget, open, 
           <span className="flex-1 font-medium text-gray-800 text-sm truncate">
             {step.name || <span className="text-gray-400 italic">Untitled Step</span>}
           </span>
+          {step.locked && (
+            <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5">
+              <Lock size={10} /> Locked
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={e => { e.stopPropagation(); onMove(index, -1); }}
-            disabled={index === 0}
-            className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
-          >
-            <ChevronUp size={14} />
-          </button>
-          <button
-            onClick={e => { e.stopPropagation(); onMove(index, 1); }}
-            disabled={index === total - 1}
-            className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
-          >
-            <ChevronDown size={14} />
-          </button>
-          <button
-            onClick={e => { e.stopPropagation(); onRemove(step._localId); }}
-            className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500"
-          >
-            <Trash2 size={14} />
-          </button>
+          {isTemplate && (
+            <button
+              onClick={e => { e.stopPropagation(); onChange(step._localId, { locked: !step.locked }); }}
+              title={step.locked ? 'Locked — derived WIs cannot change this step. Click to unlock.' : 'Unlocked — derived WIs can edit this step. Click to lock.'}
+              className={cn('p-1 rounded', step.locked ? 'text-amber-600 hover:bg-amber-100' : 'text-gray-300 hover:bg-gray-100 hover:text-gray-500')}
+            >
+              {step.locked ? <Lock size={14} /> : <Unlock size={14} />}
+            </button>
+          )}
+          {!lockedReadonly && (
+            <>
+              <button
+                onClick={e => { e.stopPropagation(); onMove(index, -1); }}
+                disabled={index === 0}
+                className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
+              >
+                <ChevronUp size={14} />
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); onMove(index, 1); }}
+                disabled={index === total - 1}
+                className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
+              >
+                <ChevronDown size={14} />
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); onRemove(step._localId); }}
+                className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500"
+              >
+                <Trash2 size={14} />
+              </button>
+            </>
+          )}
           <button onClick={() => onToggle(step._localId)} className="p-1 text-gray-400">
             {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
         </div>
       </div>
 
-      {open && (
+      {open && lockedReadonly && (
+        <div className="px-4 pb-4 space-y-2 border-t border-amber-100 pt-3">
+          <p className="flex items-center gap-1.5 text-xs text-amber-700">
+            <Lock size={12} /> Locked by the template — fixed on this WI. Change it on the template and push the update.
+          </p>
+          {step.description && <p className="text-sm text-gray-600">{step.description}</p>}
+          <div className="bg-white/70 border border-amber-100 rounded-lg p-3 text-xs text-gray-600 space-y-0.5">
+            {Object.entries(step.parameters ?? {})
+              .filter(([k]) => !k.startsWith('_'))
+              .map(([k, v]) => (
+                <div key={k}>
+                  <span className="font-medium text-gray-500">{k.replace(/_/g, ' ')}:</span>{' '}
+                  {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {open && !lockedReadonly && (
         <div className="px-4 pb-4 space-y-3 border-t border-gray-100 pt-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -1504,6 +1547,10 @@ export default function WorkInstructionEditorPage() {
   const [productName, setProductName] = useState('');
   const [reagentItemId, setReagentItemId] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState('');
+  const [isTemplate, setIsTemplate] = useState(false);
+  // Child lineage — set when this WI was generated from a template (read-only).
+  const [templateId, setTemplateId] = useState<string | null>(null);
+  const [templateVersion, setTemplateVersion] = useState<number | null>(null);
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const productInputRef = useRef<HTMLInputElement>(null);
   const [targetMolarity, setTargetMolarity] = useState('');
@@ -1545,14 +1592,28 @@ export default function WorkInstructionEditorPage() {
     headerLoadedRef.current = true;
     setTitle(wiData.title);
     setDescription(wiData.description ?? '');
-    setProductName(wiData.product_name);
-    setProductSearch(wiData.product_name);
+    setProductName(wiData.product_name ?? '');
+    setProductSearch(wiData.product_name ?? '');
     setReagentItemId(wiData.reagent_item_id ?? null);
+    setIsTemplate(wiData.is_template ?? false);
+    setTemplateId(wiData.template_id ?? null);
+    setTemplateVersion(wiData.template_version ?? null);
     setTargetMolarity(wiData.target_molarity?.toString() ?? '');
     setScheduledMinutes(wiData.scheduled_minutes != null ? String(wiData.scheduled_minutes) : '');
     const sorted = [...(wiData.wi_steps ?? [])].sort((a: any, b: any) => a.step_order - b.step_order);
     setSteps(sorted.map((s: WIStep) => ({ ...s, _localId: s.id, step_type: (s.parameters as any)?._step_type ?? 'custom' as StepType })));
   }, [wiData]);
+
+  // For a child WI, look up its template so the banner can name/link it.
+  const { data: parentTemplate } = useQuery({
+    queryKey: ['wi-template-parent', templateId],
+    enabled: !!templateId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('work_instructions').select('id, title, version').eq('id', templateId!).single();
+      return data as { id: string; title: string; version: number } | null;
+    },
+  });
 
   const { data: templates = [] } = useQuery({
     queryKey: ['step-templates'],
@@ -1579,6 +1640,12 @@ export default function WorkInstructionEditorPage() {
 
   // The reagent item this WI is currently linked to (drives the item-number display).
   const linkedItem = reagentItems.find(r => r.id === reagentItemId) ?? null;
+
+  // Template flags. A WI generated from a template is a "child"; only real
+  // drafts (not children, not approved) can be toggled into/out of a template.
+  const isChild = !!templateId;
+  const canToggleTemplate = !!canEdit && !isChild &&
+    (isNew || wiData?.status === 'draft' || wiData?.status === 'rejected');
 
   // Scroll-spy: highlight in the nav pane whichever step card is crossing the
   // upper part of the viewport. Re-observes only when steps are added/removed
@@ -1739,7 +1806,8 @@ export default function WorkInstructionEditorPage() {
 
   const submitMutation = useMutation({
     mutationFn: async (submitForReview: boolean) => {
-      if (!title.trim() || !productName.trim()) throw new Error('Title and product name are required');
+      if (!title.trim()) throw new Error('Title is required');
+      if (!isTemplate && !productName.trim()) throw new Error('Product name is required (or mark this a Template)');
 
       // If linked, keep the name in sync with the item master — covers the case
       // where the user typed an item number and saved before it normalized to the name.
@@ -1752,8 +1820,12 @@ export default function WorkInstructionEditorPage() {
       const payload = {
         title: title.trim(),
         description: description.trim() || null,
-        product_name: finalProductName,
-        reagent_item_id: reagentItemId ?? null,
+        // Templates carry no product link.
+        product_name: isTemplate ? null : finalProductName,
+        reagent_item_id: isTemplate ? null : (reagentItemId ?? null),
+        is_template: isTemplate,
+        template_id: templateId,
+        template_version: templateVersion,
         target_molarity: targetMolarity ? parseFloat(targetMolarity) : null,
         scheduled_minutes: scheduledMinutes ? Math.max(1, Math.round(parseFloat(scheduledMinutes))) : null,
         status: isNew ? 'draft' : (submitForReview ? 'pending_review' : (wiData?.status ?? 'draft')),
@@ -1784,6 +1856,7 @@ export default function WorkInstructionEditorPage() {
           step_order: i + 1,
           name: s.name || 'Unnamed Step',
           description: s.description || null,
+          locked: s.locked ?? false,
           parameters: { ...s.parameters, _step_type: s.step_type },
         }));
         const { error } = await supabase.from('wi_steps').insert(stepsPayload);
@@ -1883,6 +1956,28 @@ export default function WorkInstructionEditorPage() {
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>
       )}
 
+      {/* Generated-from-template banner (child WI) */}
+      {isChild && (
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900 flex items-center gap-2">
+          <LayoutTemplate size={16} className="shrink-0 text-indigo-500" />
+          <span>
+            Generated from template{' '}
+            <Link to={`/work-instructions/${templateId}`} className="font-semibold underline hover:text-indigo-700">
+              {parentTemplate?.title ?? 'template'}
+            </Link>
+            {templateVersion != null && <span className="text-indigo-500"> (v{templateVersion})</span>}. Locked steps are read-only here.
+          </span>
+        </div>
+      )}
+
+      {/* Template banner */}
+      {isTemplate && (
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900 flex items-center gap-2">
+          <LayoutTemplate size={16} className="shrink-0 text-indigo-500" />
+          <span>This is a <strong>template</strong> — no product link. Mark steps <Lock size={12} className="inline -mt-0.5 text-amber-600" /> locked to fix them on every derived Work Instruction.</span>
+        </div>
+      )}
+
       {/* Header fields */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
         <h2 className="text-sm font-semibold text-gray-700">Work Instruction Details</h2>
@@ -1897,6 +1992,29 @@ export default function WorkInstructionEditorPage() {
               placeholder="e.g. Prepare 1M Sodium Hydroxide Solution"
             />
           </div>
+
+          {/* Template toggle — only on real drafts (not children, not approved) */}
+          {(canToggleTemplate || isTemplate) && (
+            <div className="col-span-2">
+              <label className={cn('inline-flex items-center gap-2 text-sm font-medium', canToggleTemplate ? 'text-gray-700 cursor-pointer' : 'text-gray-400')}>
+                <input
+                  type="checkbox"
+                  checked={isTemplate}
+                  disabled={!canToggleTemplate}
+                  onChange={e => {
+                    const on = e.target.checked;
+                    setIsTemplate(on);
+                    if (on) { setReagentItemId(null); setProductName(''); setProductSearch(''); }
+                  }}
+                  className="w-4 h-4 rounded accent-indigo-600"
+                />
+                <LayoutTemplate size={15} className="text-indigo-500" />
+                This is a Template (reusable, not linked to a product)
+              </label>
+            </div>
+          )}
+
+          {!isTemplate && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Product *</label>
             {canEdit ? (
@@ -1977,6 +2095,7 @@ export default function WorkInstructionEditorPage() {
               </p>
             )}
           </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Target Molarity (M)</label>
             <input
@@ -2074,6 +2193,8 @@ export default function WorkInstructionEditorPage() {
                 index={i}
                 total={steps.length}
                 canDrag={!!canEdit}
+                isTemplate={isTemplate}
+                lockedReadonly={isChild && !!s.locked}
                 isDragging={draggingId === s._localId}
                 isDropTarget={dragOverIndex === i && draggingId !== null && draggingId !== s._localId}
                 open={!collapsedIds.has(s._localId)}
