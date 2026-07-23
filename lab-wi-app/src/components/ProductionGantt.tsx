@@ -121,8 +121,13 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
   };
   const setAnchor = (a: Date) =>
     props.onAnchorChange ? props.onAnchorChange(a) : setOwnAnchor(a);
-  // Live drag preview ({orderId, dx px}) while an admin drags a bar.
-  const [dragPreview, setDragPreview] = useState<{ orderId: string; dx: number } | null>(null);
+  // Live drag preview while an admin drags a bar: horizontal offset (dx) for the
+  // reschedule preview + the bar's own owner, so we can tell when it's dragged
+  // onto a *different* person's lane.
+  const [dragPreview, setDragPreview] = useState<{ orderId: string; dx: number; sourceOwner: string } | null>(null);
+  // The person's lane the pointer is currently over (drop-to-reassign target).
+  const [dropTargetOwner, setDropTargetOwner] = useState<string | null>(null);
+  const dropTargetOwnerRef = useRef<string | null>(null);   // authoritative value read on pointer-up
   // Hover card state — the bar under the pointer plus the cursor position.
   const [hover, setHover] = useState<{ bar: GanttBar; x: number; y: number } | null>(null);
   const suppressClick = useRef(false);
@@ -228,12 +233,20 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
 
   const isAdmin = profile?.role === 'admin';
 
-  /* ----- Editing: reschedule (drag) + auto-schedule ----- */
+  /* ----- Editing: reschedule + reassign (drag) + auto-schedule ----- */
+  // A horizontal drag reschedules (scheduled_start/end); a vertical drag onto a
+  // different person's lane reassigns (assigned_to). A diagonal drag does both.
+  // `assignedTo` undefined means "leave the owner unchanged"; null unassigns.
   const rescheduleMutation = useMutation({
-    mutationFn: async (a: { id: string; startIso: string; endIso: string }) => {
+    mutationFn: async (a: { id: string; startIso: string; endIso: string; assignedTo?: string | null }) => {
+      const update: { scheduled_start: string; scheduled_end: string; assigned_to?: string | null } = {
+        scheduled_start: a.startIso,
+        scheduled_end: a.endIso,
+      };
+      if (a.assignedTo !== undefined) update.assigned_to = a.assignedTo;
       const { error } = await supabase
         .from('production_orders')
-        .update({ scheduled_start: a.startIso, scheduled_end: a.endIso })
+        .update(update)
         .eq('id', a.id);
       if (error) throw error;
     },
@@ -285,7 +298,8 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
     return isAdmin && (o.status === 'pending' || o.status === 'in_progress');
   }
 
-  // Pointer-drag a bar horizontally to reschedule it (admins only).
+  // Pointer-drag a bar to reschedule (horizontal) and/or reassign (drop onto a
+  // different person's lane). Admins only.
   function onBarPointerDown(e: React.PointerEvent<HTMLDivElement>, bar: GanttBar) {
     if (!canEditBar(bar.order)) return;
     e.preventDefault();
@@ -293,29 +307,47 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
     const lane = (e.currentTarget.offsetParent as HTMLElement | null);
     const laneWidth = lane?.getBoundingClientRect().width ?? 1;
     const startX = e.clientX;
+    const startY = e.clientY;
     const originStart = bar.start.getTime();
     const originEnd = bar.end.getTime();
+    const sourceOwner = (bar.order.assignee ?? bar.order.creator)?.id ?? 'unassigned';
     let moved = false;
+
+    // Which person's lane is under the pointer right now (or null).
+    const laneOwnerAt = (x: number, y: number): string | null => {
+      const el = document.elementFromPoint(x, y) as HTMLElement | null;
+      return el?.closest<HTMLElement>('[data-owner-id]')?.getAttribute('data-owner-id') ?? null;
+    };
 
     const move = (ev: PointerEvent) => {
       const dx = ev.clientX - startX;
-      if (Math.abs(dx) > 3) moved = true;
-      setDragPreview({ orderId: bar.order.id, dx });
+      const dy = ev.clientY - startY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+      setDragPreview({ orderId: bar.order.id, dx, sourceOwner });
+      const target = laneOwnerAt(ev.clientX, ev.clientY);
+      dropTargetOwnerRef.current = target;
+      setDropTargetOwner(target);
     };
     const up = (ev: PointerEvent) => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      const target = dropTargetOwnerRef.current;
       setDragPreview(null);
+      setDropTargetOwner(null);
+      dropTargetOwnerRef.current = null;
       if (!moved) return;
       suppressClick.current = true;            // swallow the click that follows a drag
       const dx = ev.clientX - startX;
       const deltaMs = (dx / laneWidth) * totalSpanMs;
       const newStart = snap15(originStart + deltaMs);
       const duration = originEnd - originStart;
+      // Reassign only when dropped onto a *different* person's lane.
+      const reassign = !!target && target !== sourceOwner;
       rescheduleMutation.mutate({
         id: bar.order.id,
         startIso: new Date(newStart).toISOString(),
         endIso: new Date(newStart + duration).toISOString(),
+        assignedTo: reassign ? (target === 'unassigned' ? null : target) : undefined,
       });
     };
     window.addEventListener('pointermove', move);
@@ -425,7 +457,7 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
         </span>
         {isAdmin && (
           <span className="inline-flex items-center gap-1 text-xs text-gray-400">
-            <GripHorizontal size={13} /> Drag a bar to reschedule
+            <GripHorizontal size={13} /> Drag a bar sideways to reschedule · up/down to reassign
           </span>
         )}
         <span className="ml-auto text-xs text-gray-500">
@@ -474,20 +506,33 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
               No production orders in this range.
             </div>
           )}
-          {rows.map(row => (
+          {rows.map(row => {
+            // Highlight this lane when a bar from a *different* owner is being
+            // dragged over it — the drop-to-reassign target.
+            const isDropTarget = !!dragPreview && dropTargetOwner === row.ownerId && dragPreview.sourceOwner !== row.ownerId;
+            return (
             <div
               key={row.ownerId}
-              className="grid border-b border-gray-50 last:border-b-0"
+              data-owner-id={row.ownerId}
+              className={cn(
+                'grid border-b border-gray-50 last:border-b-0 transition-colors',
+                isDropTarget && 'bg-indigo-50 ring-1 ring-inset ring-indigo-300'
+              )}
               style={{ gridTemplateColumns: `220px repeat(${columnCount}, minmax(0,1fr))` }}
             >
               {/* Owner label */}
               <div className="px-3 py-3 flex items-center gap-2 border-r border-gray-100">
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xs font-semibold flex items-center justify-center shrink-0">
+                <div className={cn(
+                  'w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xs font-semibold flex items-center justify-center shrink-0',
+                  isDropTarget && 'ring-2 ring-indigo-400 ring-offset-1'
+                )}>
                   {initials(row.ownerName)}
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{row.ownerName}</p>
-                  <p className="text-[11px] text-gray-500 capitalize">{row.ownerRole}</p>
+                  {isDropTarget
+                    ? <p className="text-[11px] font-medium text-indigo-600">Drop to reassign</p>
+                    : <p className="text-[11px] text-gray-500 capitalize">{row.ownerRole}</p>}
                 </div>
               </div>
 
@@ -604,7 +649,8 @@ export default function ProductionGantt(props: ProductionGanttProps = {}) {
                 })}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
