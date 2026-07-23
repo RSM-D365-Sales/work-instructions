@@ -771,6 +771,30 @@ function StepParamEditor({
       const solveFor = (params.solve_for as DilutionVar) ?? 'V1';
       const concUnit = (params.conc_unit as string) ?? '%';
       const volUnit = (params.vol_unit as string) ?? 'L';
+      const hasGathered = gatheredInputs.length > 0;
+      // Pick a reagent from an earlier Gather Reagents / Gather Inputs step, or
+      // free-type when none have been gathered yet.
+      const reagentPicker = (key: string, placeholder: string) => hasGathered ? (
+        <select
+          value={(params[key] as string) ?? ''}
+          onChange={e => set(key, e.target.value)}
+          className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+        >
+          <option value="">— Select a gathered reagent —</option>
+          {gatheredInputs.map((inp, i) => (
+            <option key={i} value={inp.material_name}>
+              {inp.material_name}{inp.quantity ? ` (${inp.quantity} ${inp.unit})` : ''}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          value={(params[key] as string) ?? ''}
+          onChange={e => set(key, e.target.value)}
+          className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+          placeholder={placeholder}
+        />
+      );
       return (
         <div className="space-y-3">
           <div className="bg-white border border-gray-200 rounded px-3 py-2 text-xs text-gray-600">
@@ -832,14 +856,20 @@ function StepParamEditor({
               })}
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Diluent (optional)</label>
-            <input
-              value={(params.diluent_name as string) ?? ''}
-              onChange={e => set('diluent_name', e.target.value)}
-              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-              placeholder="e.g. CLRW water, 0% solution"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Input reagent <span className="text-gray-400">(C1 · V1 stock)</span></label>
+              {reagentPicker('input_name', 'e.g. 100% Methanol')}
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Dilution liquid <span className="text-gray-400">(diluent)</span></label>
+              {reagentPicker('diluent_name', 'e.g. CLRW water')}
+            </div>
+            {!hasGathered && (
+              <p className="col-span-2 text-xs text-amber-600">
+                Add a <strong>Gather Reagents</strong> step before this one to choose the input and dilution liquid from a list.
+              </p>
+            )}
           </div>
         </div>
       );
@@ -1741,7 +1771,7 @@ export default function WorkInstructionEditorPage() {
       case 'attachment': return { prompt: '', required: true };
       case 'weigh': return { material_name: '', target_weight: 0, unit: 'g', tolerance_pct: 2 };
       case 'dispense': return { material_name: '', target_volume: 0, unit: 'mL', tolerance_pct: 2, lot_controlled: false };
-      case 'dilution': return { solve_for: 'V1', conc_unit: '%', vol_unit: 'L', diluent_name: '' };
+      case 'dilution': return { solve_for: 'V1', conc_unit: '%', vol_unit: 'L', input_name: '', diluent_name: '' };
       case 'replicate_measurement': return { measurement_name: '', replicate_count: 3, mode: 'simple', unit: '', num_unit: 'cells', den_unit: 'mL' };
       case 'mix': return { duration_minutes: 10, speed: 'medium' };
       case 'agitate': return { method: 'Stir', duration_minutes: 5, speed: 'medium' };

@@ -60,7 +60,7 @@ function stepSummary(step: WIStep): string {
     case 'dispense':
       return `Dispense ${p.material_name ? `${p.material_name} — ` : ''}${p.target_volume} ${p.unit} ± ${p.tolerance_pct}%`;
     case 'dilution':
-      return `Dilution (C1·V1 = C2·V2) — solve for ${p.solve_for ?? 'V1'}${p.diluent_name ? ` with ${p.diluent_name}` : ''}`;
+      return `Dilution (C1·V1 = C2·V2) — solve for ${p.solve_for ?? 'V1'}${p.input_name ? ` · ${p.input_name}` : ''}${p.diluent_name ? ` with ${p.diluent_name}` : ''}`;
     case 'replicate_measurement': {
       const unitLabel = (p.mode === 'ratio')
         ? `${(p.num_unit as string) || 'x'}/${(p.den_unit as string) || 'y'}`

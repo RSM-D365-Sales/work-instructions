@@ -384,6 +384,7 @@ function DilutionStepWidget({
   const target = dilutionVar(solveFor);
   const concUnit = (params.conc_unit as string) ?? '%';
   const volUnit = (params.vol_unit as string) ?? 'L';
+  const inputName = (params.input_name as string)?.trim();
   const diluentName = (params.diluent_name as string)?.trim();
   const unitFor = (kind: 'conc' | 'vol') => (kind === 'conc' ? concUnit : volUnit);
   const fmt = (n: number) => roundSmart(n).toLocaleString();
@@ -448,6 +449,13 @@ function DilutionStepWidget({
           <Calculator size={14} /> Dilution — solving for <strong>{target.code}</strong> ({target.label})
         </p>
         <p className="text-sm text-blue-700 mt-1 font-mono">C1 · V1 = C2 · V2</p>
+        {(inputName || diluentName) && (
+          <p className="text-xs text-blue-700 mt-1">
+            {inputName && <>Input: <strong>{inputName}</strong></>}
+            {inputName && diluentName && ' · '}
+            {diluentName && <>Dilution liquid: <strong>{diluentName}</strong></>}
+          </p>
+        )}
         <p className="text-xs text-blue-600 mt-1">Enter the three known values; {target.code} is calculated.</p>
       </div>
 
@@ -474,6 +482,7 @@ function DilutionStepWidget({
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 space-y-1">
           <p className="text-sm font-semibold text-green-900">
             {target.code} = {fmt(snap.result)} {unitFor(target.kind)}
+            {target.code === 'V1' && inputName ? <> of <strong>{inputName}</strong></> : null}
             <span className="font-normal text-green-700"> — {target.label}</span>
           </p>
           {snap.diluent != null && (
