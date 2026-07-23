@@ -10,8 +10,10 @@ import {
   Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal, Paperclip,
   ChevronsDownUp, ChevronsUpDown, PanelLeftClose, PanelLeftOpen,
   Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Lock, Package, Clock,
+  Calculator, Sigma,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { DILUTION_VARS, type DilutionVar } from '../lib/dilution';
 
 // ─── Step type icon helper ────────────────────────────────────────────────────
 const STEP_ICONS: Record<StepType, React.ReactNode> = {
@@ -20,6 +22,8 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   gather_reagents:  <Beaker size={15} />,
   weigh:            <ScaleIcon size={15} />,
   dispense:         <Droplet size={15} />,
+  dilution:         <Calculator size={15} />,
+  replicate_measurement: <Sigma size={15} />,
   mix:              <Timer size={15} />,
   agitate:          <Waves size={15} />,
   transfer:         <ArrowRightLeft size={15} />,
@@ -54,10 +58,10 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
 // trailing "Other" group; add it to a group to place it properly.
 const STEP_GROUPS: { label: string; types: StepType[] }[] = [
   { label: 'Gather & Prepare',   types: ['gather_reagents', 'gather_inputs', 'gather_equipment'] },
-  { label: 'Measure & Dispense', types: ['weigh', 'dispense', 'bring_to_volume'] },
+  { label: 'Measure & Dispense', types: ['weigh', 'dispense', 'dilution', 'bring_to_volume'] },
   { label: 'Mix & Process',      types: ['mix', 'agitate', 'transfer', 'ph_adjust'] },
   { label: 'Heat, Cool & Hold',  types: ['heat', 'cool', 'freeze', 'thaw', 'overnight', 'production_break'] },
-  { label: 'Record & Document',  types: ['observe', 'notes', 'attachment', 'record_time', 'possible_deviation'] },
+  { label: 'Record & Document',  types: ['observe', 'replicate_measurement', 'notes', 'attachment', 'record_time', 'possible_deviation'] },
   { label: 'Finish & Label',     types: ['print_labels', 'cap', 'package'] },
   { label: 'Custom',             types: ['user_defined', 'custom'] },
 ];
@@ -759,6 +763,160 @@ function StepParamEditor({
             />
             Lot / batch controlled (operator records lot number at run time)
           </label>
+        </div>
+      );
+    }
+
+    case 'dilution': {
+      const solveFor = (params.solve_for as DilutionVar) ?? 'V1';
+      const concUnit = (params.conc_unit as string) ?? '%';
+      const volUnit = (params.vol_unit as string) ?? 'L';
+      return (
+        <div className="space-y-3">
+          <div className="bg-white border border-gray-200 rounded px-3 py-2 text-xs text-gray-600">
+            <span className="font-mono font-semibold text-gray-800">C1 · V1 = C2 · V2</span>
+            {' '}— the operator enters the three known values at run time; the fourth is calculated.
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Solve For</label>
+              <select
+                value={solveFor}
+                onChange={e => set('solve_for', e.target.value)}
+                className="w-full border border-gray-200 rounded px-2 py-1 text-xs"
+              >
+                {DILUTION_VARS.map(v => (
+                  <option key={v.code} value={v.code}>{v.code} — {v.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Concentration Unit</label>
+              <input
+                value={concUnit}
+                onChange={e => set('conc_unit', e.target.value)}
+                className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                placeholder="e.g. %, M, mg/mL, X"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Volume Unit</label>
+              <input
+                value={volUnit}
+                onChange={e => set('vol_unit', e.target.value)}
+                className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                placeholder="e.g. L, mL, µL"
+              />
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-600 mb-1">Preset known values (optional)</p>
+            <div className="grid grid-cols-2 gap-3">
+              {DILUTION_VARS.map(v => {
+                const isTarget = v.code === solveFor;
+                return (
+                  <div key={v.key}>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      {v.code} — {v.label} <span className="text-gray-400">({v.kind === 'conc' ? concUnit : volUnit})</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={isTarget ? '' : ((params[v.key] as number) ?? '')}
+                      onChange={e => set(v.key, e.target.value === '' ? null : parseFloat(e.target.value))}
+                      disabled={isTarget}
+                      className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-100 disabled:text-gray-400"
+                      placeholder={isTarget ? 'Calculated at run time' : 'Optional default'}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Diluent (optional)</label>
+            <input
+              value={(params.diluent_name as string) ?? ''}
+              onChange={e => set('diluent_name', e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="e.g. CLRW water, 0% solution"
+            />
+          </div>
+        </div>
+      );
+    }
+
+    case 'replicate_measurement': {
+      const mode = (params.mode as string) ?? 'simple';
+      return (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Measurement</label>
+              <input
+                value={(params.measurement_name as string) ?? ''}
+                onChange={e => set('measurement_name', e.target.value)}
+                className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                placeholder="e.g. Cell count, Absorbance, Osmolality"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Number of Replicates</label>
+              <input
+                type="number"
+                min={1}
+                value={(params.replicate_count as number) ?? 3}
+                onChange={e => set('replicate_count', Math.max(1, parseInt(e.target.value) || 1))}
+                className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Value Type</label>
+              <select
+                value={mode}
+                onChange={e => set('mode', e.target.value)}
+                className="w-full border border-gray-200 rounded px-2 py-1 text-xs"
+              >
+                <option value="simple">Simple value</option>
+                <option value="ratio">Ratio (numerator / denominator)</option>
+              </select>
+            </div>
+          </div>
+          {mode === 'ratio' ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Numerator Unit</label>
+                <input
+                  value={(params.num_unit as string) ?? ''}
+                  onChange={e => set('num_unit', e.target.value)}
+                  className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  placeholder="e.g. cells"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Denominator Unit</label>
+                <input
+                  value={(params.den_unit as string) ?? ''}
+                  onChange={e => set('den_unit', e.target.value)}
+                  className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  placeholder="e.g. mL"
+                />
+              </div>
+              <p className="col-span-2 text-xs text-gray-400">
+                Each replicate captures a numerator and denominator; the step averages the resulting
+                {' '}{((params.num_unit as string) || 'x')} / {((params.den_unit as string) || 'y')} ratios.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Unit (optional)</label>
+              <input
+                value={(params.unit as string) ?? ''}
+                onChange={e => set('unit', e.target.value)}
+                className="w-40 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                placeholder="e.g. OD, g/L"
+              />
+            </div>
+          )}
         </div>
       );
     }
@@ -1516,6 +1674,8 @@ export default function WorkInstructionEditorPage() {
       case 'attachment': return { prompt: '', required: true };
       case 'weigh': return { material_name: '', target_weight: 0, unit: 'g', tolerance_pct: 2 };
       case 'dispense': return { material_name: '', target_volume: 0, unit: 'mL', tolerance_pct: 2, lot_controlled: false };
+      case 'dilution': return { solve_for: 'V1', conc_unit: '%', vol_unit: 'L', diluent_name: '' };
+      case 'replicate_measurement': return { measurement_name: '', replicate_count: 3, mode: 'simple', unit: '', num_unit: 'cells', den_unit: 'mL' };
       case 'mix': return { duration_minutes: 10, speed: 'medium' };
       case 'agitate': return { method: 'Stir', duration_minutes: 5, speed: 'medium' };
       case 'bring_to_volume': return { material_name: '', target_volume: 0, unit: 'mL', diluent: '' };

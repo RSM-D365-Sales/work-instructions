@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { StepTemplate, StepType } from '../types';
-import { Plus, Pencil, Trash2, FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, ChevronDown, ChevronUp, Lock, Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal, Paperclip, Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Package, Clock } from 'lucide-react';
+import { Plus, Pencil, Trash2, FlaskConical, Scale, Timer, ArrowRightLeft, Thermometer, Snowflake, TestTube, Eye, Settings, ChevronDown, ChevronUp, Lock, Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, SlidersHorizontal, Paperclip, Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Package, Clock, Calculator, Sigma } from 'lucide-react';
 import type { ParameterSchema, ParameterFieldDef } from '../types';
 
 const STEP_TYPE_META: Record<StepType, { label: string; icon: React.ReactNode; color: string }> = {
@@ -12,6 +12,8 @@ const STEP_TYPE_META: Record<StepType, { label: string; icon: React.ReactNode; c
   gather_reagents:  { label: 'Gather Reagents',        icon: <Beaker size={16} />,        color: 'bg-indigo-100 text-indigo-700' },
   weigh:            { label: 'Weigh',                  icon: <Scale size={16} />,         color: 'bg-blue-100 text-blue-700' },
   dispense:         { label: 'Dispense',               icon: <Droplet size={16} />,       color: 'bg-blue-100 text-blue-700' },
+  dilution:         { label: 'Dilution Calculation',   icon: <Calculator size={16} />,    color: 'bg-blue-100 text-blue-700' },
+  replicate_measurement: { label: 'Replicate Measurement', icon: <Sigma size={16} />,    color: 'bg-purple-100 text-purple-700' },
   mix:              { label: 'Mix',                    icon: <Timer size={16} />,         color: 'bg-cyan-100 text-cyan-700' },
   agitate:          { label: 'Stir / Vortex / Invert', icon: <Waves size={16} />,         color: 'bg-cyan-100 text-cyan-700' },
   transfer:         { label: 'Transfer',               icon: <ArrowRightLeft size={16} />, color: 'bg-orange-100 text-orange-700' },

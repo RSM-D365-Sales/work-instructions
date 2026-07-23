@@ -161,6 +161,8 @@ export type StepType =
   | 'gather_reagents'   // catalog-linked reagent list
   | 'weigh'             // measure a solid mass to a target within tolerance
   | 'dispense'          // measure a liquid volume to a target within tolerance (weigh for liquids)
+  | 'dilution'          // C1·V1 = C2·V2 dilution calculator; solve for the chosen unknown
+  | 'replicate_measurement' // average N replicate readings (simple value or numerator/denominator ratio)
   | 'mix'               // timed mixing on a stir plate
   | 'agitate'           // stir / vortex / invert (distinct from timed mix)
   | 'transfer'          // move material between vessels (pour/aliquot/decant/elute/filter)

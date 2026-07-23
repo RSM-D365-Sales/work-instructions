@@ -10,6 +10,7 @@ import {
   Wrench, Beaker, Printer, StickyNote, Milestone, AlertTriangle, ChevronRight, SlidersHorizontal, Paperclip,
   Copy, X, Search,
   Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Lock, Package, Clock,
+  Calculator, Sigma,
 } from 'lucide-react';
 import { formatDate, cn, wiLineageKey } from '../lib/utils';
 import StepNavPanel, { type StepNavItem } from '../components/StepNavPanel';
@@ -20,6 +21,8 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   gather_reagents:  <Beaker size={15} />,
   weigh:            <Scale size={15} />,
   dispense:         <Droplet size={15} />,
+  dilution:         <Calculator size={15} />,
+  replicate_measurement: <Sigma size={15} />,
   mix:              <Timer size={15} />,
   agitate:          <Waves size={15} />,
   transfer:         <ArrowRightLeft size={15} />,
@@ -56,6 +59,14 @@ function stepSummary(step: WIStep): string {
       return `Target: ${p.target_weight} ${p.unit} ± ${p.tolerance_pct}%`;
     case 'dispense':
       return `Dispense ${p.material_name ? `${p.material_name} — ` : ''}${p.target_volume} ${p.unit} ± ${p.tolerance_pct}%`;
+    case 'dilution':
+      return `Dilution (C1·V1 = C2·V2) — solve for ${p.solve_for ?? 'V1'}${p.diluent_name ? ` with ${p.diluent_name}` : ''}`;
+    case 'replicate_measurement': {
+      const unitLabel = (p.mode === 'ratio')
+        ? `${(p.num_unit as string) || 'x'}/${(p.den_unit as string) || 'y'}`
+        : ((p.unit as string) || '');
+      return `Average of ${p.replicate_count ?? 3} readings${p.measurement_name ? ` of ${p.measurement_name}` : ''}${unitLabel ? ` (${unitLabel})` : ''}`;
+    }
     case 'mix':
       return `Mix for ${p.duration_minutes} min at ${p.speed} speed`;
     case 'agitate':

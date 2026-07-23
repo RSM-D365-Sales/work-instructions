@@ -4,7 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { ProductionOrder, WIStep, POStep, StepType, Scale, Profile, QCTest, QCResult, POStatus, ParameterSchema, ParameterFieldDef } from '../types';
-import { calculateTolerance, cn } from '../lib/utils';
+import { calculateTolerance, cn, roundSmart } from '../lib/utils';
+import { DILUTION_VARS, dilutionVar, solveDilution, type DilutionVar, type DilutionValues } from '../lib/dilution';
 import { evaluateQC, formatSpec } from '../lib/qc';
 import { createNotification } from '../lib/notifications';
 import OrderMaterialsSummary from '../components/OrderMaterialsSummary';
@@ -17,6 +18,7 @@ import {
   ClipboardCheck, FileText, XCircle, Send, ScanLine, MessageSquare, X, SlidersHorizontal,
   Paperclip, ExternalLink,
   Droplet, Waves, ThermometerSnowflake, ThermometerSun, Moon, FlaskRound, Lock, Package, Clock,
+  Calculator, Sigma,
 } from 'lucide-react';
 
 const STEP_ICONS: Record<StepType, React.ReactNode> = {
@@ -25,6 +27,8 @@ const STEP_ICONS: Record<StepType, React.ReactNode> = {
   gather_reagents:  <Beaker size={16} />,
   weigh:            <ScaleIcon size={16} />,
   dispense:         <Droplet size={16} />,
+  dilution:         <Calculator size={16} />,
+  replicate_measurement: <Sigma size={16} />,
   mix:              <Timer size={16} />,
   agitate:          <Waves size={16} />,
   transfer:         <ArrowRightLeft size={16} />,
@@ -360,6 +364,258 @@ function DispenseStepWidget({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// Dilution calculator — solves C1·V1 = C2·V2 for the variable the author chose.
+// The operator enters the three knowns (some may be pre-filled by the author);
+// the unknown, and the diluent volume to add when solving for a volume, are
+// computed live and recorded on the step result.
+function DilutionStepWidget({
+  params, values, onChange, locked,
+}: {
+  params: Record<string, unknown>;
+  values: Record<string, unknown>;
+  onChange: (v: Record<string, unknown>) => void;
+  locked: boolean;
+}) {
+  const solveFor = ((params.solve_for as DilutionVar) ?? 'V1');
+  const target = dilutionVar(solveFor);
+  const concUnit = (params.conc_unit as string) ?? '%';
+  const volUnit = (params.vol_unit as string) ?? 'L';
+  const diluentName = (params.diluent_name as string)?.trim();
+  const unitFor = (kind: 'conc' | 'vol') => (kind === 'conc' ? concUnit : volUnit);
+  const fmt = (n: number) => roundSmart(n).toLocaleString();
+
+  // effective known value: operator entry falls back to the author's preset.
+  function computeFrom(vals: Record<string, unknown>) {
+    const kv = (k: string): number | undefined => {
+      const v = vals[k];
+      if (v != null && v !== '') return v as number;
+      const p = params[k];
+      return p != null && p !== '' ? (p as number) : undefined;
+    };
+    const knowns: DilutionValues = { c1: kv('c1'), v1: kv('v1'), c2: kv('c2'), v2: kv('v2') };
+    knowns[target.key] = undefined; // the target is an output, never a solver input
+    const result = solveDilution(solveFor, knowns);
+    const v1f = solveFor === 'V1' ? result : knowns.v1 ?? null;
+    const v2f = solveFor === 'V2' ? result : knowns.v2 ?? null;
+    const diluent =
+      (solveFor === 'V1' || solveFor === 'V2') && result != null && v1f != null && v2f != null
+        ? v2f - v1f
+        : null;
+    return { knowns, result, diluent };
+  }
+
+  const snap = computeFrom(values);
+
+  // Persist the computed snapshot once on mount when the author's presets
+  // already make the step solvable (so the record is complete even if the
+  // operator never edits a field). Guarded, empty deps → runs at most once.
+  useEffect(() => {
+    if (locked) return;
+    const s = computeFrom(values);
+    if (s.result != null && values.result == null) {
+      onChange({
+        ...values,
+        solve_for: solveFor, conc_unit: concUnit, vol_unit: volUnit,
+        result: s.result, result_var: solveFor,
+        diluent_volume: s.diluent ?? undefined,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function setKnown(key: string, raw: string) {
+    const num = raw === '' ? null : parseFloat(raw);
+    const next = { ...values, [key]: num != null && isFinite(num) ? num : null };
+    const s = computeFrom(next);
+    onChange({
+      ...next,
+      solve_for: solveFor, conc_unit: concUnit, vol_unit: volUnit,
+      result: s.result ?? undefined, result_var: solveFor,
+      diluent_volume: s.diluent ?? undefined,
+    });
+  }
+
+  const knownVars = DILUTION_VARS.filter(v => v.code !== solveFor);
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+        <p className="text-sm font-medium text-blue-900 flex items-center gap-2">
+          <Calculator size={14} /> Dilution — solving for <strong>{target.code}</strong> ({target.label})
+        </p>
+        <p className="text-sm text-blue-700 mt-1 font-mono">C1 · V1 = C2 · V2</p>
+        <p className="text-xs text-blue-600 mt-1">Enter the three known values; {target.code} is calculated.</p>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        {knownVars.map(v => (
+          <div key={v.key}>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {v.code} <span className="text-gray-400 font-normal">· {v.label} ({unitFor(v.kind)})</span>
+            </label>
+            <input
+              type="number"
+              step="any"
+              value={(values[v.key] as number) ?? (params[v.key] as number) ?? ''}
+              onChange={e => setKnown(v.key, e.target.value)}
+              disabled={locked}
+              placeholder={`Enter ${v.code}`}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+            />
+          </div>
+        ))}
+      </div>
+
+      {snap.result != null ? (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 space-y-1">
+          <p className="text-sm font-semibold text-green-900">
+            {target.code} = {fmt(snap.result)} {unitFor(target.kind)}
+            <span className="font-normal text-green-700"> — {target.label}</span>
+          </p>
+          {snap.diluent != null && (
+            <p className="text-sm text-green-800">
+              Add <strong>{fmt(snap.diluent)} {volUnit}</strong>
+              {diluentName ? <> of <strong>{diluentName}</strong></> : ' of diluent'}
+              {' '}<span className="text-green-600">(V2 − V1)</span>
+            </p>
+          )}
+        </div>
+      ) : (
+        <p className="text-xs text-amber-600">Enter all three known values to calculate {target.code}.</p>
+      )}
+    </div>
+  );
+}
+
+// Replicate measurement — the operator takes N readings and the step records
+// their average. A reading is either a simple value or a numerator/denominator
+// ratio (e.g. cells / mL).
+function ReplicateMeasurementStepWidget({
+  params, values, onChange, locked,
+}: {
+  params: Record<string, unknown>;
+  values: Record<string, unknown>;
+  onChange: (v: Record<string, unknown>) => void;
+  locked: boolean;
+}) {
+  const count = Math.max(1, (params.replicate_count as number) ?? 3);
+  const mode = (params.mode as string) ?? 'simple';
+  const name = (params.measurement_name as string)?.trim() || 'the value';
+  const unit = (params.unit as string)?.trim() ?? '';
+  const numUnit = (params.num_unit as string)?.trim() || 'x';
+  const denUnit = (params.den_unit as string)?.trim() || 'y';
+  const fmt = (n: number) => roundSmart(n).toLocaleString();
+
+  if (mode === 'ratio') {
+    const stored = (values.replicates as { num: number | null; den: number | null }[]) ?? [];
+    const rows = Array.from({ length: count }, (_, i) => stored[i] ?? { num: null, den: null });
+    const ratios = rows.map(r =>
+      r.num != null && isFinite(r.num) && r.den != null && isFinite(r.den) && r.den !== 0 ? r.num / r.den : null,
+    );
+    const valid = ratios.filter((r): r is number => r != null);
+    const average = valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null;
+
+    function setCell(i: number, field: 'num' | 'den', raw: string) {
+      const num = raw === '' ? null : parseFloat(raw);
+      const nextRows = rows.map((r, idx) => (idx === i ? { ...r, [field]: num != null && isFinite(num) ? num : null } : r));
+      const nextRatios = nextRows.map(r =>
+        r.num != null && isFinite(r.num) && r.den != null && isFinite(r.den) && r.den !== 0 ? r.num / r.den : null,
+      );
+      const v = nextRatios.filter((r): r is number => r != null);
+      const avg = v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+      onChange({
+        ...values, mode: 'ratio', count, num_unit: numUnit, den_unit: denUnit,
+        replicates: nextRows, ratios: nextRatios,
+        average: avg != null ? roundSmart(avg) : undefined,
+      });
+    }
+
+    return (
+      <div className="space-y-3">
+        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+          <p className="text-sm font-medium text-blue-900 flex items-center gap-2">
+            <Sigma size={14} /> Record {count} replicate{count > 1 ? 's' : ''} of {name}
+          </p>
+          <p className="text-xs text-blue-600 mt-1">Enter each reading as {numUnit} / {denUnit}; the step averages the ratios.</p>
+        </div>
+        <div className="space-y-2">
+          {rows.map((r, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="w-16 text-xs text-gray-500 shrink-0">Rep {i + 1}</span>
+              <input
+                type="number" step="any" value={r.num ?? ''} onChange={e => setCell(i, 'num', e.target.value)} disabled={locked}
+                placeholder={numUnit}
+                className="w-32 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+              />
+              <span className="text-gray-400">/</span>
+              <input
+                type="number" step="any" value={r.den ?? ''} onChange={e => setCell(i, 'den', e.target.value)} disabled={locked}
+                placeholder={denUnit}
+                className="w-32 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+              />
+              {ratios[i] != null && (
+                <span className="text-xs text-gray-500">= {fmt(ratios[i]!)} {numUnit}/{denUnit}</span>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className={cn('rounded-xl p-3 text-sm font-medium', average != null ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-gray-50 border border-gray-100 text-gray-500')}>
+          {average != null
+            ? <>Average of {valid.length}/{count}: <strong>{fmt(average)} {numUnit}/{denUnit}</strong></>
+            : <>Enter all {count} replicates to compute the average.</>}
+        </div>
+      </div>
+    );
+  }
+
+  // simple mode
+  const stored = (values.replicates as (number | null)[]) ?? [];
+  const rows = Array.from({ length: count }, (_, i) => stored[i] ?? null);
+  const valid = rows.filter((r): r is number => r != null && isFinite(r));
+  const average = valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null;
+
+  function setCell(i: number, raw: string) {
+    const num = raw === '' ? null : parseFloat(raw);
+    const nextRows = rows.map((r, idx) => (idx === i ? (num != null && isFinite(num) ? num : null) : r));
+    const v = nextRows.filter((r): r is number => r != null && isFinite(r));
+    const avg = v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+    onChange({
+      ...values, mode: 'simple', count, unit,
+      replicates: nextRows,
+      average: avg != null ? roundSmart(avg) : undefined,
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+        <p className="text-sm font-medium text-blue-900 flex items-center gap-2">
+          <Sigma size={14} /> Record {count} replicate{count > 1 ? 's' : ''} of {name}{unit ? ` (${unit})` : ''}
+        </p>
+        <p className="text-xs text-blue-600 mt-1">The step records the average of your readings.</p>
+      </div>
+      <div className="space-y-2">
+        {rows.map((r, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <span className="w-16 text-xs text-gray-500 shrink-0">Rep {i + 1}</span>
+            <input
+              type="number" step="any" value={r ?? ''} onChange={e => setCell(i, e.target.value)} disabled={locked}
+              placeholder={unit || 'Reading'}
+              className="w-40 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+            />
+            {unit && r != null && <span className="text-xs text-gray-400">{unit}</span>}
+          </div>
+        ))}
+      </div>
+      <div className={cn('rounded-xl p-3 text-sm font-medium', average != null ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-gray-50 border border-gray-100 text-gray-500')}>
+        {average != null
+          ? <>Average of {valid.length}/{count}: <strong>{fmt(average)}{unit ? ` ${unit}` : ''}</strong></>
+          : <>Enter all {count} replicates to compute the average.</>}
+      </div>
     </div>
   );
 }
@@ -1478,6 +1734,35 @@ function StepCard({ wiStep, poStep, index, isActive, orderId, orderNumber, techn
       const meterOk = !!(values.meter_id as string | undefined);
       return meterOk && (values.measured_ph != null) && (values.in_tolerance === true);
     }
+    if (stepType === 'dilution') {
+      // Solvable from the three knowns (operator entries, else author presets).
+      const solveFor = (params.solve_for as DilutionVar) ?? 'V1';
+      const kv = (k: string): number | undefined => {
+        const v = values[k];
+        if (v != null && v !== '') return v as number;
+        const p = params[k];
+        return p != null && p !== '' ? (p as number) : undefined;
+      };
+      const knowns: DilutionValues = { c1: kv('c1'), v1: kv('v1'), c2: kv('c2'), v2: kv('v2') };
+      knowns[dilutionVar(solveFor).key] = undefined;
+      return solveDilution(solveFor, knowns) != null;
+    }
+    if (stepType === 'replicate_measurement') {
+      const count = Math.max(1, (params.replicate_count as number) ?? 3);
+      const mode = (params.mode as string) ?? 'simple';
+      const reps = (values.replicates as unknown[]) ?? [];
+      if (reps.length < count) return false;
+      if (mode === 'ratio') {
+        return Array.from({ length: count }).every((_, i) => {
+          const r = reps[i] as { num?: number; den?: number } | undefined;
+          return !!r && r.num != null && isFinite(r.num) && r.den != null && isFinite(r.den) && r.den !== 0;
+        });
+      }
+      return Array.from({ length: count }).every((_, i) => {
+        const r = reps[i] as number | null;
+        return r != null && isFinite(r);
+      });
+    }
     return true;
   }
 
@@ -1523,6 +1808,12 @@ function StepCard({ wiStep, poStep, index, isActive, orderId, orderNumber, techn
           )}
           {stepType === 'dispense' && (
             <DispenseStepWidget params={params} values={values} onChange={setValues} locked={locked} />
+          )}
+          {stepType === 'dilution' && (
+            <DilutionStepWidget params={params} values={values} onChange={setValues} locked={locked} />
+          )}
+          {stepType === 'replicate_measurement' && (
+            <ReplicateMeasurementStepWidget params={params} values={values} onChange={setValues} locked={locked} />
           )}
           {stepType === 'mix' && (
             <MixStepWidget params={params} values={values} onChange={setValues} locked={locked} />
